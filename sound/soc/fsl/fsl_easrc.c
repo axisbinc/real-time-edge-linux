@@ -1250,7 +1250,8 @@ static int fsl_easrc_request_context(int channels, struct fsl_asrc_pair *ctx)
 
 	spin_lock_irqsave(&easrc->lock, lock_flags);
 
-	for (i = ASRC_PAIR_A; i < EASRC_CTX_MAX_NUM; i++) {
+	/* skip the first pair is reserved for the DSP core */
+	for (i = ASRC_PAIR_B; i < EASRC_CTX_MAX_NUM; i++) {
 		if (easrc->pair[i])
 			continue;
 
@@ -2054,7 +2055,8 @@ static __maybe_unused int fsl_easrc_runtime_resume(struct device *dev)
 		goto disable_mem_clk;
 	}
 
-	for (i = ASRC_PAIR_A; i < EASRC_CTX_MAX_NUM; i++) {
+	/* skip the first pair is reserved for the DSP core */
+	for (i = ASRC_PAIR_B; i < EASRC_CTX_MAX_NUM; i++) {
 		ctx = easrc->pair[i];
 		if (!ctx)
 			continue;
