@@ -582,6 +582,8 @@
 };
 
 &iomuxc {
+
+/*
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_hog>;
 
@@ -593,6 +595,7 @@
 			MX8MP_IOMUXC_HDMI_CEC__HDMIMIX_HDMI_CEC				0x40000010
 		>;
 	};
+*/
 
 	pinctrl_pwm1: pwm1grp {
 		fsl,pins = <
