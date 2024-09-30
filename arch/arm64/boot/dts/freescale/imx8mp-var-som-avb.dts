@@ -2,7 +2,13 @@
 
 #include "imx8mp-var-som-symphony.dts"
 
-/* AVB HW timer*/
+/* Enable easrc */
+&easrc {
+	fsl,asrc-rate  = <48000>;
+	status = "okay";
+};
+
+/* AVB HW timer */
 &gpt1 {
 	compatible = "fsl,avb-gpt";
 	timer-channel = <1>; /* Use output compare channel 1*/
