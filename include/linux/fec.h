@@ -12,6 +12,7 @@
 #define __LINUX_FEC_H__
 
 #include <linux/phy.h>
+#include <net/xdp.h>
 
 struct fec_platform_data {
 	phy_interface_t phy;
@@ -103,6 +104,8 @@ struct avb_ops {
 	void * (*tx_cleanup_dequeue)(void *);
 
 	int (*tx_ts)(void *, struct avb_desc *);
+
+	int (*rx_avb)(void *, struct xdp_buff *, uint64_t ts64);
 
 	struct module *owner;
 };
