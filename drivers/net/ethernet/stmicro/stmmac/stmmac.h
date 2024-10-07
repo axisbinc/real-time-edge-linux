@@ -23,6 +23,7 @@
 #include <linux/reset.h>
 #include <net/page_pool.h>
 #include <uapi/linux/bpf.h>
+#include <linux/fec.h>
 
 struct stmmac_resources {
 	void __iomem *addr;
@@ -200,6 +201,71 @@ struct stmmac_dma_conf {
 	unsigned int dma_tx_size;
 };
 
+struct stmmac_enet_priv_txrx_info {
+	int	offset;
+	struct	page *page;
+	struct  sk_buff *skb;
+};
+
+enum {
+	STMMAC_RX_XDP_REDIRECT = 0,
+	STMMAC_RX_XDP_PASS,
+	STMMAC_RX_XDP_DROP,
+	STMMAC_RX_XDP_TX,
+	STMMAC_RX_XDP_TX_ERRORS,
+	STMMAC_TX_XDP_XMIT,
+	STMMAC_TX_XDP_XMIT_ERRORS,
+
+	/* The following must be the last one */
+	STMMAC_XDP_STATS_TOTAL,
+};
+
+/*
+ *	Define the buffer descriptor structure.
+ *
+ *	Evidently, ARM SoCs have the FEC block generated in a
+ *	little endian mode so adjust endianness accordingly.
+ */
+#if defined(CONFIG_ARM) || defined(CONFIG_ARM64)
+#define fec32_to_cpu le32_to_cpu
+#define fec16_to_cpu le16_to_cpu
+#define cpu_to_fec32 cpu_to_le32
+#define cpu_to_fec16 cpu_to_le16
+#define __fec32 __le32
+#define __fec16 __le16
+struct stmmac_bufdesc {
+	__fec16 cbd_datlen;	/* Data length */
+	__fec16 cbd_sc;		/* Control and status info */
+	__fec32 cbd_bufaddr;	/* Buffer address */
+};
+#endif
+
+struct stmmac_bufdesc_prop {
+	int qid;
+	/* Address of Rx and Tx buffers */
+	struct stmmac_bufdesc	*base;
+	struct stmmac_bufdesc	*last;
+	struct stmmac_bufdesc	*cur;
+	void __iomem	*reg_desc_active;
+	dma_addr_t	dma;
+	unsigned short ring_size;
+	unsigned char dsize;
+	unsigned char dsize_log2;
+};
+
+struct stmmac_enet_priv_rx_q {
+	struct stmmac_bufdesc_prop bd;
+	struct stmmac_enet_priv_txrx_info rx_skb_info[FEC_RX_RING_SIZE];
+
+	/* page_pool */
+	struct page_pool *page_pool;
+	struct xdp_rxq_info xdp_rxq;
+	u32 stats[STMMAC_XDP_STATS_TOTAL];
+
+	/* rx queue number, in the range 0-7 */
+	u8 id;
+};
+
 struct stmmac_priv {
 	/* Frequently used values are kept adjacent for cache effect */
 	u32 tx_coal_frames[MTL_MAX_TX_QUEUES];
@@ -223,6 +289,15 @@ struct stmmac_priv {
 	struct mac_device_info *hw;
 	int (*hwif_quirks)(struct stmmac_priv *priv);
 	struct mutex lock;
+
+#ifdef CONFIG_AVB_SUPPORT
+	const struct avb_ops *avb;
+	void *avb_data;
+	unsigned int avb_enabled;
+	//__ETHTOOL_DECLARE_LINK_MODE_MASK(phy_advertising);
+	unsigned int num_tx_queues;
+	unsigned int num_rx_queues;
+#endif
 
 	struct stmmac_dma_conf dma_conf;
 
