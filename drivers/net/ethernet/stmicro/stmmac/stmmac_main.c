@@ -573,7 +573,28 @@ static void stmmac_get_tx_hwtstamp(struct stmmac_priv *priv,
 	}
 }
 
-/* stmmac_get_rx_hwtstamp - get HW RX timestamps
+static inline
+u64 stmmac_get_rx_hwtstamp(struct stmmac_priv *priv, struct dma_desc *p,
+				   struct dma_desc *np)
+{
+	struct dma_desc *desc = p;
+	u64 ns = 0;
+
+	/* For GMAC4, the valid timestamp is from CTX next desc. */
+	if (priv->plat->has_gmac4 || priv->plat->has_xgmac)
+		desc = np;
+
+	if (stmmac_get_rx_timestamp_status(priv, p, np, priv->adv_ts)) {
+		stmmac_get_timestamp(priv, desc, priv->adv_ts, &ns);
+
+		ns -= priv->plat->cdc_error_adj;
+		netdev_dbg(priv->dev, "get valid RX hw timestamp %llu\n", ns);
+    }
+    return ns;
+}
+
+
+/* stmmac_fill_rx_hwtstamp - fill HW RX timestamps in the skb
  * @priv: driver private structure
  * @p : descriptor pointer
  * @np : next descriptor pointer
@@ -582,26 +603,18 @@ static void stmmac_get_tx_hwtstamp(struct stmmac_priv *priv,
  * This function will read received packet's timestamp from the descriptor
  * and pass it to stack. It also perform some sanity checks.
  */
-static void stmmac_get_rx_hwtstamp(struct stmmac_priv *priv, struct dma_desc *p,
+static void stmmac_fill_rx_hwtstamp(struct stmmac_priv *priv, struct dma_desc *p,
 				   struct dma_desc *np, struct sk_buff *skb)
 {
 	struct skb_shared_hwtstamps *shhwtstamp = NULL;
-	struct dma_desc *desc = p;
-	u64 ns = 0;
+	u64 ns;
 
 	if (!priv->hwts_rx_en)
 		return;
-	/* For GMAC4, the valid timestamp is from CTX next desc. */
-	if (priv->plat->has_gmac4 || priv->plat->has_xgmac)
-		desc = np;
 
+	ns = stmmac_get_rx_hwtstamp(priv, p, np);
 	/* Check if timestamp is available */
-	if (stmmac_get_rx_timestamp_status(priv, p, np, priv->adv_ts)) {
-		stmmac_get_timestamp(priv, desc, priv->adv_ts, &ns);
-
-		ns -= priv->plat->cdc_error_adj;
-
-		netdev_dbg(priv->dev, "get valid RX hw timestamp %llu\n", ns);
+	if (ns != 0) {
 		shhwtstamp = skb_hwtstamps(skb);
 		memset(shhwtstamp, 0, sizeof(struct skb_shared_hwtstamps));
 		shhwtstamp->hwtstamp = ns_to_ktime(ns);
@@ -4950,7 +4963,7 @@ static void stmmac_dispatch_skb_zc(struct stmmac_priv *priv, u32 queue,
 		return;
 	}
 
-	stmmac_get_rx_hwtstamp(priv, p, np, skb);
+	stmmac_fill_rx_hwtstamp(priv, p, np, skb);
 	stmmac_rx_vlan(priv->dev, skb);
 	skb->protocol = eth_type_trans(skb, priv->dev);
 
@@ -5155,8 +5168,18 @@ read_again:
 		buf->xdp->data_end = buf->xdp->data + buf1_len;
 		xsk_buff_dma_sync_for_cpu(buf->xdp, rx_q->xsk_pool);
 
-		prog = READ_ONCE(priv->xdp_prog);
-		res = __stmmac_xdp_run_prog(priv, prog, buf->xdp);
+		res = STMMAC_XDP_PASS;
+#ifdef CONFIG_AVB_SUPPORT
+		if (stmmac_avb_enabled && priv->avb_enabled &&
+				priv->avb->rx_avb(priv->avb_data, buf->xdp,
+						stmmac_get_rx_hwtstamp(priv, p, np)) == XDP_DROP) {
+			res = STMMAC_XDP_CONSUMED;
+		}
+#endif
+		if (res != STMMAC_XDP_CONSUMED) {
+			prog = READ_ONCE(priv->xdp_prog);
+			res = __stmmac_xdp_run_prog(priv, prog, buf->xdp);
+		}
 
 		switch (res) {
 		case STMMAC_XDP_PASS:
@@ -5346,7 +5369,16 @@ read_again:
 
 			pre_len = xdp.data_end - xdp.data_hard_start -
 				  buf->page_offset;
-			skb = stmmac_xdp_run_prog(priv, &xdp);
+    #ifdef CONFIG_AVB_SUPPORT
+			if (stmmac_avb_enabled && priv->avb_enabled &&
+					priv->avb->rx_avb(priv->avb_data, buf->xdp,
+							stmmac_get_rx_hwtstamp(priv, p, np)) == XDP_DROP) {
+				skb = ERR_PTR(-STMMAC_XDP_CONSUMED);
+			}
+    #endif
+			if (!skb) {
+				skb = stmmac_xdp_run_prog(priv, &xdp);
+			}
 			/* Due xdp_adjust_tail: DMA sync for_device
 			 * cover max len CPU touch
 			 */
@@ -5436,7 +5468,7 @@ drain_data:
 
 		/* Got entire packet into SKB. Finish it. */
 
-		stmmac_get_rx_hwtstamp(priv, p, np, skb);
+		stmmac_fill_rx_hwtstamp(priv, p, np, skb);
 		stmmac_rx_vlan(priv->dev, skb);
 		skb->protocol = eth_type_trans(skb, priv->dev);
 
