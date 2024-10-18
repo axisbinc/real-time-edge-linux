@@ -145,3 +145,26 @@
 &ethphy1 {
 	eee-broken-100tx;
 };
+
+&eqos {
+    mtl_tx_setup: tx-queues-config {
+        snps,tx-queues-to-use = <4>; // Reduced to 4
+        /delete-node/ queue4;
+
+        queue3 {
+            snps,dcb-algorithm;
+            snps,priority = <0xF8>; // Bitmask for priorities 4, 5, 6, and 7
+        };
+    };
+
+    mtl_rx_setup: rx-queues-config {
+        snps,rx-queues-to-use = <4>; // Reduced to 4
+        /delete-node/ queue4;
+
+        queue3 {
+            snps,dcb-algorithm;
+            snps,priority = <0xF8>; // Bitmask for priorities 4, 5, 6, and 7
+            snps,map-to-dma-channel = <3>;
+        };
+    };
+};

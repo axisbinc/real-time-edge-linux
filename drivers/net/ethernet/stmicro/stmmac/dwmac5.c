@@ -354,6 +354,7 @@ static int dwmac5_rxp_update_single_entry(void __iomem *ioaddr,
 {
 	int ret, i;
 
+    pr_info("dwmac5_rxp_update_single_entry... pos: %d\n", pos);
 	for (i = 0; i < (sizeof(entry->val) / sizeof(u32)); i++) {
 		int real_pos = pos * (sizeof(entry->val) / sizeof(u32)) + i;
 		u32 val;
@@ -365,6 +366,7 @@ static int dwmac5_rxp_update_single_entry(void __iomem *ioaddr,
 			return ret;
 
 		/* Write data */
+        pr_info("data: 0x%x\n", *((u32 *)&entry->val + i));
 		val = *((u32 *)&entry->val + i);
 		writel(val, ioaddr + MTL_RXP_IACC_DATA);
 
@@ -438,6 +440,7 @@ int dwmac5_rxp_config(void __iomem *ioaddr, struct stmmac_tc_entry *entries,
 	u32 curr_prio = 0;
 	u32 old_val, val;
 
+    pr_info("dwmac5_rxp_config... %d entries\n", count);
 	/* Force disable RX */
 	old_val = readl(ioaddr + GMAC_CONFIG);
 	val = old_val & ~GMAC_CONFIG_RE;
