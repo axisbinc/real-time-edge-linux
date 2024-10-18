@@ -297,6 +297,7 @@ struct stmmac_priv {
 	//__ETHTOOL_DECLARE_LINK_MODE_MASK(phy_advertising);
 	unsigned int num_tx_queues;
 	unsigned int num_rx_queues;
+    struct stmmac_dma_conf dma_avb_conf;
 #endif
 
 	struct stmmac_dma_conf dma_conf;
@@ -456,26 +457,11 @@ struct timespec64 stmmac_calc_tas_basetime(ktime_t old_base_time,
 					   ktime_t current_time,
 					   u64 cycle_time);
 
-#if IS_ENABLED(CONFIG_STMMAC_SELFTESTS)
 void stmmac_selftest_run(struct net_device *dev,
 			 struct ethtool_test *etest, u64 *buf);
 void stmmac_selftest_get_strings(struct stmmac_priv *priv, u8 *data);
 int stmmac_selftest_get_count(struct stmmac_priv *priv);
-#else
-static inline void stmmac_selftest_run(struct net_device *dev,
-				       struct ethtool_test *etest, u64 *buf)
-{
-	/* Not enabled */
-}
-static inline void stmmac_selftest_get_strings(struct stmmac_priv *priv,
-					       u8 *data)
-{
-	/* Not enabled */
-}
-static inline int stmmac_selftest_get_count(struct stmmac_priv *priv)
-{
-	return -EOPNOTSUPP;
-}
-#endif /* CONFIG_STMMAC_SELFTESTS */
+int stmmac_test_mac_loopback_src_addr(struct stmmac_priv *priv,
+        unsigned char addr[ETH_ALEN], u16 h_proto);
 
 #endif /* __STMMAC_H__ */
