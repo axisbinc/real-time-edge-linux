@@ -151,6 +151,9 @@ static struct dentry *stmmac_fs_dir;
 // and dsiable `echo N > /sys/kernel/debug/stmmaceth/avb_enabled`
 static bool stmmac_avb_enabled = false;
 #endif
+#ifdef CONFIG_AVB_SUPPORT
+struct stmmac_avb_dma_conf* stmmac_avb_init_dma_desc(struct stmmac_priv *priv);
+#endif
 
 #define STMMAC_COAL_TIMER(x) (ns_to_ktime((x) * NSEC_PER_USEC))
 
@@ -590,8 +593,8 @@ u64 stmmac_get_rx_hwtstamp(struct stmmac_priv *priv, struct dma_desc *p,
 
 		ns -= priv->plat->cdc_error_adj;
 		netdev_dbg(priv->dev, "get valid RX hw timestamp %llu\n", ns);
-    }
-    return ns;
+	}
+	return ns;
 }
 
 
@@ -3858,7 +3861,7 @@ static int __stmmac_open(struct net_device *dev,
 
 #ifdef CONFIG_AVB_SUPPORT
 	if (stmmac_avb_enabled && priv->avb_enabled) {
-        stmmac_init_avb_desc(priv);
+        stmmac_avb_init_dma_desc(priv);
 		priv->avb->open(priv->avb_data, priv, priv->speed);
     }
 #endif
@@ -7998,65 +8001,95 @@ EXPORT_SYMBOL_GPL(stmmac_resume);
 
 #ifdef CONFIG_AVB_SUPPORT
 
-void stmmac_setup_avb_desc(struct stmmac_priv *priv)
+static int stmmac_avb_alloc_rx_desc(struct stmmac_priv *priv,
+        				   struct stmmac_avb_dma_conf *dma_conf)
 {
-	struct stmmac_dma_conf *dma_conf;
-	int chan, bfsize, ret;
+	struct stmmac_avb_rx_queue *rx_q = &dma_conf->rx_queue;
+
+	rx_q->priv_data = priv;
+
+	rx_q->dma_rx = dma_alloc_coherent(priv->device,
+					  dma_conf->dma_rx_size * sizeof(struct dma_desc),
+					  &rx_q->dma_rx_phy,
+					  GFP_KERNEL);
+	if (!rx_q->dma_rx) {
+		netdev_err(priv->dev, "Failed to alloc rx_desc\n");
+		return -ENOMEM;
+	}
+
+	/* Allocate rx buffers */
+	for (int i = 0; i < dma_conf->dma_rx_size; i++) {
+		struct dma_desc *desc = &rx_q->dma_rx[i];
+		struct avb_rx_desc *avb_desc;
+		void *buffer;
+
+		buffer = priv->avb->alloc(priv->avb_data);
+		if (!buffer) {
+			netdev_err(priv->dev, "Failed to alloc rx buffer\n");
+			goto err_alloc;
+		}
+
+		avb_desc = (struct avb_rx_desc *)buffer;
+		avb_desc->common.len = 0;
+		avb_desc->queue_id = 0;
+
+		stmmac_set_desc_addr(priv, desc, avb_desc->dma_addr);
+	}
+
+	return 0;
+
+ err_alloc:
+	/* todo:
+	fec_enet_free_buffers(ndev); */
+	return -ENOMEM;
+}
+
+static void stmmac_avb_free_dma_desc(struct stmmac_priv *priv,
+		struct stmmac_avb_dma_conf *dma_conf)
+{
+	struct stmmac_avb_rx_queue *rx_q = &dma_conf->rx_queue;
+
+	if (rx_q->dma_rx) {
+		/* todo: free the dma buffers */
+		dma_free_coherent(priv->device,
+						  dma_conf->dma_rx_size * sizeof(struct dma_desc),
+						  rx_q->dma_rx,
+						  rx_q->dma_rx_phy);
+		rx_q->dma_rx = NULL;
+	}
+}
+
+struct stmmac_avb_dma_conf* stmmac_avb_init_dma_desc(struct stmmac_priv *priv)
+{
+	struct stmmac_avb_dma_conf *dma_conf;
+	int chan, ret;
 
 	pr_info("%s\n", __func__);
 	dma_conf = kzalloc(sizeof(*dma_conf), GFP_KERNEL);
 	if (!dma_conf) {
 		netdev_err(priv->dev, "%s: DMA conf allocation failed\n",
 			   __func__);
-		return ERR_PTR(-ENOMEM);
+		return ERR_PTR(ENOMEM);
 	}
 
-	bfsize = stmmac_set_16kib_bfsize(priv, mtu);
-	if (bfsize < 0)
-		bfsize = 0;
+	dma_conf->dma_buf_sz = DEFAULT_BUFSIZE;
+	dma_conf->dma_tx_size = DMA_DEFAULT_TX_SIZE;
+	dma_conf->dma_rx_size = DMA_DEFAULT_RX_SIZE;
 
-	if (bfsize < BUF_SIZE_16KiB)
-		bfsize = stmmac_set_bfsize(mtu, 0);
+	/* Time based shaper available on the tx-q*/
+	dma_conf->tx_queue.tbs = STMMAC_TBS_AVAIL;
 
-	dma_conf->dma_buf_sz = bfsize;
-	/* Chose the tx/rx size from the already defined one in the
-	 * priv struct. (if defined)
-	 */
-	dma_conf->dma_tx_size = priv->dma_conf.dma_tx_size;
-	dma_conf->dma_rx_size = priv->dma_conf.dma_rx_size;
-
-	if (!dma_conf->dma_tx_size)
-		dma_conf->dma_tx_size = DMA_DEFAULT_TX_SIZE;
-	if (!dma_conf->dma_rx_size)
-		dma_conf->dma_rx_size = DMA_DEFAULT_RX_SIZE;
-
-	/* Earlier check for TBS */
-	for (chan = 0; chan < priv->plat->tx_queues_to_use; chan++) {
-		struct stmmac_tx_queue *tx_q = &dma_conf->tx_queue[chan];
-		int tbs_en = priv->plat->tx_queues_cfg[chan].tbs_en;
-
-		/* Setup per-TXQ tbs flag before TX descriptor alloc */
-		tx_q->tbs |= tbs_en ? STMMAC_TBS_AVAIL : 0;
-	}
-
-	ret = alloc_dma_desc_resources(priv, dma_conf);
+	ret = stmmac_avb_alloc_rx_desc(priv, dma_conf);
 	if (ret < 0) {
 		netdev_err(priv->dev, "%s: DMA descriptors allocation failed\n",
 			   __func__);
 		goto alloc_error;
 	}
 
-	ret = init_dma_desc_rings(priv->dev, dma_conf, GFP_KERNEL);
-	if (ret < 0) {
-		netdev_err(priv->dev, "%s: DMA descriptors initialization failed\n",
-			   __func__);
-		goto init_error;
-	}
-
 	return dma_conf;
 
 init_error:
-	free_dma_desc_resources(priv, dma_conf);
+	stmmac_avb_free_dma_desc(priv, dma_conf);
 alloc_error:
 	kfree(dma_conf);
 	return ERR_PTR(ret);
@@ -8064,7 +8097,7 @@ alloc_error:
 
 int fec_enet_set_idle_slope(void *data, unsigned int queue_id, u32 idle_slope)
 {
-    return 0;
+	return 0;
 }
 EXPORT_SYMBOL(fec_enet_set_idle_slope);
 
@@ -8079,15 +8112,15 @@ int fec_enet_rx_poll_avb(void *data)
 
 		ch->priv_data = priv;
 		ch->index = queue;
-        stmmac_napi_poll_rx(&ch->rx_napi, 0);
+		stmmac_napi_poll_rx(&ch->rx_napi, 0);
 	}
-    return 0;
+	return 0;
 }
 EXPORT_SYMBOL(fec_enet_rx_poll_avb);
 
 int fec_enet_start_xmit_avb(void *data, struct avb_tx_desc *desc)
 {
-    return 0;
+	return 0;
 }
 EXPORT_SYMBOL(fec_enet_start_xmit_avb);
 
@@ -8098,7 +8131,7 @@ EXPORT_SYMBOL(fec_enet_finish_xmit_avb);
 
 int fec_enet_tx_avb(void *data)
 {
-    return 0;
+	return 0;
 }
 EXPORT_SYMBOL(fec_enet_tx_avb);
 #endif
@@ -8156,9 +8189,9 @@ static int __init stmmac_init(void)
 	/* Create debugfs main directory if it doesn't exist yet */
 	if (!stmmac_fs_dir)
 		stmmac_fs_dir = debugfs_create_dir(STMMAC_RESOURCE_NAME, NULL);
-    
-    /* created the avb_enabled boolean in the debugfs directory */
-    debugfs_create_bool("avb_enabled", 0644, stmmac_fs_dir, &stmmac_avb_enabled);
+	
+	/* created the avb_enabled boolean in the debugfs directory */
+	debugfs_create_bool("avb_enabled", 0644, stmmac_fs_dir, &stmmac_avb_enabled);
 	register_netdevice_notifier(&stmmac_notifier);
 #endif
 
