@@ -201,6 +201,38 @@ struct stmmac_dma_conf {
 	unsigned int dma_tx_size;
 };
 
+#ifdef CONFIG_AVB_SUPPORT
+
+struct stmmac_avb_rx_queue {
+	u32 rx_count_frames;
+	struct stmmac_priv *priv_data;
+	struct dma_desc *dma_rx ____cacheline_aligned_in_smp;
+	unsigned int cur_rx;
+	unsigned int dirty_rx;
+	unsigned int buf_alloc_num;
+	u32 rx_zeroc_thresh;
+	dma_addr_t dma_rx_phy;
+	u32 rx_tail_addr;
+	unsigned int state_saved;
+	struct {
+		struct sk_buff *skb;
+		unsigned int len;
+		unsigned int error;
+	} state;
+};
+struct stmmac_avb_dma_conf {
+	unsigned int dma_buf_sz;
+
+	/* RX Queue */
+	struct stmmac_avb_rx_queue rx_queue;
+	unsigned int dma_rx_size;
+
+	/* TX Queue */
+	struct stmmac_tx_queue tx_queue;
+	unsigned int dma_tx_size;
+};
+#endif
+
 struct stmmac_enet_priv_txrx_info {
 	int	offset;
 	struct	page *page;
@@ -295,9 +327,7 @@ struct stmmac_priv {
 	void *avb_data;
 	unsigned int avb_enabled;
 	//__ETHTOOL_DECLARE_LINK_MODE_MASK(phy_advertising);
-	unsigned int num_tx_queues;
-	unsigned int num_rx_queues;
-    struct stmmac_dma_conf dma_avb_conf;
+    struct stmmac_avb_dma_conf dma_avb_conf;
 #endif
 
 	struct stmmac_dma_conf dma_conf;
