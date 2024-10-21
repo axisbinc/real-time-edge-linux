@@ -52,6 +52,7 @@
 #include "hwif.h"
 #ifdef CONFIG_AVB_SUPPORT
 #include <linux/fec.h>
+#include "stmmac_frp.h"
 #endif
 
 /* As long as the interface is active, we keep the timestamping counter enabled
@@ -6103,7 +6104,7 @@ static int stmmac_setup_tc(struct net_device *ndev, enum tc_setup_type type,
 	}
 }
 
-static int stmmac_add_rxp(struct stmmac_priv *priv, u16 eth_type)
+static int stmmac_add_rxp_tc(struct stmmac_priv *priv, u16 eth_type)
 {
     struct tc_cls_u32_offload cls_u32 = { };
     struct tc_u32_sel *sel;
@@ -6165,12 +6166,15 @@ static int stmmac_add_rxp(struct stmmac_priv *priv, u16 eth_type)
     if (ret)
         goto cleanup;
 
+// todo: revisit - suppressed VLAN case due ot the knode hardcoded handle re-use
+#if 0
     /* Add filter rule for VLAN Ethertype (VLAN adds 4 bytes, Ethertype at offset 16) */
     sel->keys[0].off = 16;
     pr_info("Adding AVB filter stmmac_tc_setup_cls_u32() with vlan\n");
     ret = stmmac_tc_setup_cls_u32(priv, priv, &cls_u32);
     if (ret)
         goto cleanup;
+#endif
 
 cleanup:
 	kfree(gact);
@@ -6183,7 +6187,7 @@ cleanup_sel:
 	return ret;
 }
 
-static int stmmac_del_rxp(struct stmmac_priv *priv, u16 eth_type)
+static int stmmac_del_rxp_tc(struct stmmac_priv *priv, u16 eth_type)
 {
     struct tc_cls_u32_offload cls_u32 = { };
     struct tc_u32_sel *sel;
@@ -6212,13 +6216,50 @@ static int stmmac_del_rxp(struct stmmac_priv *priv, u16 eth_type)
     if (ret)
         goto cleanup;
 
+// todo: revisit - suppressed VLAN case due ot the knode handle re-use
+#if 0
     /* Delete filter rule for VLAN Ethertype (offset 16) */
     sel->keys[0].off = 16;
     ret = stmmac_tc_setup_cls_u32(priv, priv, &cls_u32);
+#endif
 
 cleanup:
     kfree(sel);
     return ret;
+}
+
+static int stmmac_add_rxp(struct stmmac_priv *priv, u16 eth_type)
+{
+    union frp_instruction instr = { };
+    int ret;
+    uint32_t config = 0;
+
+    stmmac_frp_set_ethertype_match(&instr, eth_type, 4);
+
+    dwmac5_disable_rx(priv->hw->pcsr, &config);
+    dwmac5_rxp_disable(priv->hw->pcsr);
+
+    ret = dwmac5_frp_update_single_entry(priv->hw->pcsr, &instr, 0);
+    stmmac_frp_accept_all(&instr);
+    ret |= dwmac5_frp_update_single_entry(priv->hw->pcsr, &instr, 1);
+    dwmac5_frp_update_num_entries(priv->hw->pcsr, 2);
+
+    dwmac5_rxp_enable(priv->hw->pcsr);
+    dwmac5_restore_rx(priv->hw->pcsr, config);
+
+    return ret;
+}
+
+static int stmmac_del_rxp(struct stmmac_priv *priv, u16 eth_type)
+{
+    uint32_t config = 0;
+    dwmac5_disable_rx(priv->hw->pcsr, &config);
+
+    dwmac5_rxp_disable(priv->hw->pcsr);
+    dwmac5_frp_update_num_entries(priv->hw->pcsr, 0);
+    //dwmac5_rxp_enable(priv->hw->pcsr);
+    dwmac5_restore_rx(priv->hw->pcsr, config);
+    return 0;
 }
 
 static u16 stmmac_select_queue(struct net_device *dev, struct sk_buff *skb,
@@ -6569,6 +6610,10 @@ static ssize_t stmmac_avb_filter_write(struct file *file, const char __user *buf
         return -EFAULT;
 
     switch (input) {
+        case 'D':
+            pr_info("Dump FRP stats...\n");
+            dwmac5_frp_dump_stats(priv->hw->pcsr);
+            break;
         case 'Y':
             pr_info("Adding AVB filter...\n");
             if (stmmac_add_rxp(priv, 0x88F7))  // Example for PTP Ethertype
@@ -6577,6 +6622,16 @@ static ssize_t stmmac_avb_filter_write(struct file *file, const char __user *buf
         case 'N':
             pr_info("Deleting AVB filter...\n");
             if (stmmac_del_rxp(priv, 0x88F7))  // Example for PTP Ethertype
+                pr_err("Failed to delete AVB filter\n");
+            break;
+        case '1':
+            pr_info("Adding AVB filter in TC...\n");
+            if (stmmac_add_rxp_tc(priv, 0x88F7))  // Example for PTP Ethertype
+                pr_err("Failed to add AVB filter\n");
+            break;
+        case '2':
+            pr_info("Deleting AVB filter in TC...\n");
+            if (stmmac_del_rxp_tc(priv, 0x88F7))  // Example for PTP Ethertype
                 pr_err("Failed to delete AVB filter\n");
             break;
         case 'T': {
@@ -8062,7 +8117,7 @@ static void stmmac_avb_free_dma_desc(struct stmmac_priv *priv,
 struct stmmac_avb_dma_conf* stmmac_avb_init_dma_desc(struct stmmac_priv *priv)
 {
 	struct stmmac_avb_dma_conf *dma_conf;
-	int chan, ret;
+	int ret;
 
 	pr_info("%s\n", __func__);
 	dma_conf = kzalloc(sizeof(*dma_conf), GFP_KERNEL);
