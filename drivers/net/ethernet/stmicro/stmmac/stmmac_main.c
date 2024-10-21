@@ -40,6 +40,7 @@
 #include <linux/udp.h>
 #include <linux/bpf_trace.h>
 #include <net/pkt_cls.h>
+#include <net/tc_act/tc_gact.h>
 #include <net/xdp_sock_drv.h>
 #include "stmmac_ptp.h"
 #include "stmmac.h"
@@ -49,6 +50,10 @@
 #include "dwmac1000.h"
 #include "dwxgmac2.h"
 #include "hwif.h"
+#ifdef CONFIG_AVB_SUPPORT
+#include <linux/fec.h>
+#include "stmmac_frp.h"
+#endif
 
 /* As long as the interface is active, we keep the timestamping counter enabled
  * with fine resolution and binary rollover. This avoid non-monotonic behavior
@@ -142,6 +147,13 @@ static void stmmac_set_dma_operation_mode(struct stmmac_priv *priv, u32 txmode,
 static const struct net_device_ops stmmac_netdev_ops;
 static void stmmac_init_fs(struct net_device *dev);
 static void stmmac_exit_fs(struct net_device *dev);
+static struct dentry *stmmac_fs_dir;
+// to enable `echo Y > /sys/kernel/debug/stmmaceth/avb_enabled`
+// and dsiable `echo N > /sys/kernel/debug/stmmaceth/avb_enabled`
+static bool stmmac_avb_enabled = false;
+#endif
+#ifdef CONFIG_AVB_SUPPORT
+struct stmmac_avb_dma_conf* stmmac_avb_init_dma_desc(struct stmmac_priv *priv);
 #endif
 
 #define STMMAC_COAL_TIMER(x) (ns_to_ktime((x) * NSEC_PER_USEC))
@@ -566,7 +578,28 @@ static void stmmac_get_tx_hwtstamp(struct stmmac_priv *priv,
 	}
 }
 
-/* stmmac_get_rx_hwtstamp - get HW RX timestamps
+static inline
+u64 stmmac_get_rx_hwtstamp(struct stmmac_priv *priv, struct dma_desc *p,
+				   struct dma_desc *np)
+{
+	struct dma_desc *desc = p;
+	u64 ns = 0;
+
+	/* For GMAC4, the valid timestamp is from CTX next desc. */
+	if (priv->plat->has_gmac4 || priv->plat->has_xgmac)
+		desc = np;
+
+	if (stmmac_get_rx_timestamp_status(priv, p, np, priv->adv_ts)) {
+		stmmac_get_timestamp(priv, desc, priv->adv_ts, &ns);
+
+		ns -= priv->plat->cdc_error_adj;
+		netdev_dbg(priv->dev, "get valid RX hw timestamp %llu\n", ns);
+	}
+	return ns;
+}
+
+
+/* stmmac_fill_rx_hwtstamp - fill HW RX timestamps in the skb
  * @priv: driver private structure
  * @p : descriptor pointer
  * @np : next descriptor pointer
@@ -575,26 +608,18 @@ static void stmmac_get_tx_hwtstamp(struct stmmac_priv *priv,
  * This function will read received packet's timestamp from the descriptor
  * and pass it to stack. It also perform some sanity checks.
  */
-static void stmmac_get_rx_hwtstamp(struct stmmac_priv *priv, struct dma_desc *p,
+static void stmmac_fill_rx_hwtstamp(struct stmmac_priv *priv, struct dma_desc *p,
 				   struct dma_desc *np, struct sk_buff *skb)
 {
 	struct skb_shared_hwtstamps *shhwtstamp = NULL;
-	struct dma_desc *desc = p;
-	u64 ns = 0;
+	u64 ns;
 
 	if (!priv->hwts_rx_en)
 		return;
-	/* For GMAC4, the valid timestamp is from CTX next desc. */
-	if (priv->plat->has_gmac4 || priv->plat->has_xgmac)
-		desc = np;
 
+	ns = stmmac_get_rx_hwtstamp(priv, p, np);
 	/* Check if timestamp is available */
-	if (stmmac_get_rx_timestamp_status(priv, p, np, priv->adv_ts)) {
-		stmmac_get_timestamp(priv, desc, priv->adv_ts, &ns);
-
-		ns -= priv->plat->cdc_error_adj;
-
-		netdev_dbg(priv->dev, "get valid RX hw timestamp %llu\n", ns);
+	if (ns != 0) {
 		shhwtstamp = skb_hwtstamps(skb);
 		memset(shhwtstamp, 0, sizeof(struct skb_shared_hwtstamps));
 		shhwtstamp->hwtstamp = ns_to_ktime(ns);
@@ -1666,10 +1691,10 @@ static int __init_dma_rx_desc_rings(struct stmmac_priv *priv,
 	struct stmmac_rx_queue *rx_q = &dma_conf->rx_queue[queue];
 	int ret;
 
-	netif_dbg(priv, probe, priv->dev,
+	netdev_info(priv->dev, "probe "
 		  "(%s) dma_rx_phy=0x%08x\n", __func__,
 		  (u32)rx_q->dma_rx_phy);
-
+ 
 	stmmac_clear_rx_descriptors(priv, dma_conf, queue);
 
 	xdp_rxq_info_unreg_mem_model(&rx_q->xdp_rxq);
@@ -1729,7 +1754,7 @@ static int init_dma_rx_desc_rings(struct net_device *dev,
 	int ret;
 
 	/* RX INITIALIZATION */
-	netif_dbg(priv, probe, priv->dev,
+	netdev_info(priv->dev, "probe "
 		  "SKB addresses:\nskb\t\tskb data\tdma data\n");
 
 	for (queue = 0; queue < rx_count; queue++) {
@@ -1774,7 +1799,7 @@ static int __init_dma_tx_desc_rings(struct stmmac_priv *priv,
 	struct stmmac_tx_queue *tx_q = &dma_conf->tx_queue[queue];
 	int i;
 
-	netif_dbg(priv, probe, priv->dev,
+	netdev_info(priv->dev, "probe "
 		  "(%s) dma_tx_phy=0x%08x\n", __func__,
 		  (u32)tx_q->dma_tx_phy);
 
@@ -1845,6 +1870,7 @@ static int init_dma_desc_rings(struct net_device *dev,
 	struct stmmac_priv *priv = netdev_priv(dev);
 	int ret;
 
+	pr_info("%s\n", __func__);
 	ret = init_dma_rx_desc_rings(dev, dma_conf, flags);
 	if (ret)
 		return ret;
@@ -2664,7 +2690,7 @@ static int stmmac_tx_clean(struct stmmac_priv *priv, int budget, u32 queue)
 								queue))) &&
 	    stmmac_tx_avail(priv, queue) > STMMAC_TX_THRESH(priv)) {
 
-		netif_dbg(priv, tx_done, priv->dev,
+		netdev_info(priv->dev, "tx_done "
 			  "%s: restart transmit\n", __func__);
 		netif_tx_wake_queue(netdev_get_tx_queue(priv->dev, queue));
 	}
@@ -3731,6 +3757,7 @@ stmmac_setup_dma_desc(struct stmmac_priv *priv, unsigned int mtu)
 	struct stmmac_dma_conf *dma_conf;
 	int chan, bfsize, ret;
 
+	pr_info("%s\n", __func__);
 	dma_conf = kzalloc(sizeof(*dma_conf), GFP_KERNEL);
 	if (!dma_conf) {
 		netdev_err(priv->dev, "%s: DMA conf allocation failed\n",
@@ -3833,6 +3860,13 @@ static int __stmmac_open(struct net_device *dev,
 	buf_sz = dma_conf->dma_buf_sz;
 	memcpy(&priv->dma_conf, dma_conf, sizeof(*dma_conf));
 
+#ifdef CONFIG_AVB_SUPPORT
+	if (stmmac_avb_enabled && priv->avb_enabled) {
+        stmmac_avb_init_dma_desc(priv);
+		priv->avb->open(priv->avb_data, priv, priv->speed);
+    }
+#endif
+
 	stmmac_reset_queues_param(priv);
 
 	if (priv->plat->serdes_powerup) {
@@ -3887,6 +3921,7 @@ static int stmmac_open(struct net_device *dev)
 	struct stmmac_dma_conf *dma_conf;
 	int ret;
 
+	pr_info("%s\n", __func__);
 	dma_conf = stmmac_setup_dma_desc(priv, dev->mtu);
 	if (IS_ERR(dma_conf))
 		return PTR_ERR(dma_conf);
@@ -3933,6 +3968,12 @@ static int stmmac_release(struct net_device *dev)
 		hrtimer_cancel(&priv->dma_conf.tx_queue[chan].txtimer);
 
 	netif_tx_disable(dev);
+
+#ifdef CONFIG_AVB_SUPPORT
+    if (stmmac_avb_enabled && priv->avb_enabled) {
+        priv->avb->close(priv->avb_data);
+    }
+#endif
 
 	/* Free the IRQ lines */
 	stmmac_free_irq(dev, REQ_IRQ_ERR_ALL, 0);
@@ -4268,7 +4309,7 @@ static netdev_tx_t stmmac_tso_xmit(struct sk_buff *skb, struct net_device *dev)
 	tx_q->cur_tx = STMMAC_GET_ENTRY(tx_q->cur_tx, priv->dma_conf.dma_tx_size);
 
 	if (unlikely(stmmac_tx_avail(priv, queue) <= (MAX_SKB_FRAGS + 1))) {
-		netif_dbg(priv, hw, priv->dev, "%s: stop transmitted packets\n",
+		netdev_info(priv->dev, "hw " "%s: stop transmitted packets\n",
 			  __func__);
 		netif_tx_stop_queue(netdev_get_tx_queue(priv->dev, queue));
 	}
@@ -4501,7 +4542,7 @@ static netdev_tx_t stmmac_xmit(struct sk_buff *skb, struct net_device *dev)
 	}
 
 	if (unlikely(stmmac_tx_avail(priv, queue) <= (MAX_SKB_FRAGS + 1))) {
-		netif_dbg(priv, hw, priv->dev, "%s: stop transmitted packets\n",
+		netdev_info(priv->dev, "hw " "%s: stop transmitted packets\n",
 			  __func__);
 		netif_tx_stop_queue(netdev_get_tx_queue(priv->dev, queue));
 	}
@@ -4932,7 +4973,7 @@ static void stmmac_dispatch_skb_zc(struct stmmac_priv *priv, u32 queue,
 		return;
 	}
 
-	stmmac_get_rx_hwtstamp(priv, p, np, skb);
+	stmmac_fill_rx_hwtstamp(priv, p, np, skb);
 	stmmac_rx_vlan(priv->dev, skb);
 	skb->protocol = eth_type_trans(skb, priv->dev);
 
@@ -5137,8 +5178,22 @@ read_again:
 		buf->xdp->data_end = buf->xdp->data + buf1_len;
 		xsk_buff_dma_sync_for_cpu(buf->xdp, rx_q->xsk_pool);
 
-		prog = READ_ONCE(priv->xdp_prog);
-		res = __stmmac_xdp_run_prog(priv, prog, buf->xdp);
+		res = STMMAC_XDP_PASS;
+#ifdef CONFIG_AVB_SUPPORT
+		if (stmmac_avb_enabled && priv->avb_enabled) {
+			int avb_res;
+			pr_info("rx_zc buf_lens = %d\n", buf1_len);
+			avb_res = priv->avb->rx_avb(priv->avb_data, buf->xdp,
+						stmmac_get_rx_hwtstamp(priv, p, np));
+			if (avb_res == XDP_DROP) {
+				res = STMMAC_XDP_CONSUMED;
+			}
+		}
+#endif
+		if (res != STMMAC_XDP_CONSUMED) {
+			prog = READ_ONCE(priv->xdp_prog);
+			res = __stmmac_xdp_run_prog(priv, prog, buf->xdp);
+		}
 
 		switch (res) {
 		case STMMAC_XDP_PASS:
@@ -5328,7 +5383,21 @@ read_again:
 
 			pre_len = xdp.data_end - xdp.data_hard_start -
 				  buf->page_offset;
-			skb = stmmac_xdp_run_prog(priv, &xdp);
+    #ifdef CONFIG_AVB_SUPPORT
+			if (stmmac_avb_enabled && priv->avb_enabled) {
+				int avb_res;
+				avb_res = priv->avb->rx_avb(priv->avb_data, &xdp,
+						stmmac_get_rx_hwtstamp(priv, p, np));
+				if (avb_res == XDP_DROP) {
+				    pr_info("queue[%d] ch[%d] rx buf_lens = %d, %d\n", queue,
+                            ch->index, buf1_len, buf2_len);
+					skb = ERR_PTR(-STMMAC_XDP_CONSUMED);
+				}
+			}
+    #endif
+			if (!skb) {
+				skb = stmmac_xdp_run_prog(priv, &xdp);
+			}
 			/* Due xdp_adjust_tail: DMA sync for_device
 			 * cover max len CPU touch
 			 */
@@ -5418,7 +5487,7 @@ drain_data:
 
 		/* Got entire packet into SKB. Finish it. */
 
-		stmmac_get_rx_hwtstamp(priv, p, np, skb);
+		stmmac_fill_rx_hwtstamp(priv, p, np, skb);
 		stmmac_rx_vlan(priv->dev, skb);
 		skb->protocol = eth_type_trans(skb, priv->dev);
 
@@ -5540,6 +5609,7 @@ static int stmmac_napi_poll_rxtx(struct napi_struct *napi, int budget)
 	return min(rxtx_done, budget - 1);
 }
 
+#ifndef CONFIG_NET_SCH_MULTIQ
 /**
  *  stmmac_tx_timeout
  *  @dev : Pointer to net device structure
@@ -5555,6 +5625,7 @@ static void stmmac_tx_timeout(struct net_device *dev, unsigned int txqueue)
 
 	stmmac_global_err(priv);
 }
+#endif
 
 /**
  *  stmmac_set_rx_mode - entry point for multicast addressing
@@ -5591,6 +5662,7 @@ static int stmmac_change_mtu(struct net_device *dev, int new_mtu)
 	const int mtu = new_mtu;
 	int ret;
 
+	pr_info("%s\n", __func__);
 	if (txfifosz == 0)
 		txfifosz = priv->dma_cap.tx_fifo_size;
 
@@ -6032,6 +6104,164 @@ static int stmmac_setup_tc(struct net_device *ndev, enum tc_setup_type type,
 	}
 }
 
+static int stmmac_add_rxp_tc(struct stmmac_priv *priv, u16 eth_type)
+{
+    struct tc_cls_u32_offload cls_u32 = { };
+    struct tc_u32_sel *sel;
+    struct tcf_exts *exts;
+    struct tc_action **actions;
+    struct tcf_gact *gact;
+    int ret, nk = 1;
+
+    /* Allocate memory for filter selection (Ethertype) */
+	sel = kzalloc(struct_size(sel, keys, nk), GFP_KERNEL);
+	if (!sel)
+		return -ENOMEM;
+
+	exts = kzalloc(sizeof(*exts), GFP_KERNEL);
+	if (!exts) {
+		ret = -ENOMEM;
+		goto cleanup_sel;
+	}
+
+	actions = kcalloc(nk, sizeof(*actions), GFP_KERNEL);
+	if (!actions) {
+		ret = -ENOMEM;
+		goto cleanup_exts;
+	}
+
+	gact = kcalloc(nk, sizeof(*gact), GFP_KERNEL);
+	if (!gact) {
+		ret = -ENOMEM;
+		goto cleanup_actions;
+	}
+
+    /* Set up the cls_u32 filter to match the Ethertype */
+    cls_u32.command = TC_CLSU32_NEW_KNODE;
+    cls_u32.common.chain_index = 0;
+    cls_u32.common.protocol = htons(ETH_P_ALL);  // Match any protocol
+    cls_u32.knode.exts = exts;
+    cls_u32.knode.sel = sel;
+    cls_u32.knode.handle = 0x123;  // Arbitrary handle ID
+
+    /* Set up the action to forward packets to DMA Channel 4 */
+    exts->nr_actions = nk;
+    exts->actions = actions;
+    for (int i = 0; i < nk; i++) {
+        actions[i] = (struct tc_action *)&gact[i];
+        gact->tcf_action = TC_ACT_OK;  // Accept the packet
+        // gact->dscp = 4;  // This could be used to mark the DMA channel
+    }    
+
+    /* Filter based on Ethertype */
+    sel->nkeys = nk;
+    sel->offshift = 0;
+    sel->keys[0].off = 12;  // Ethertype is at offset 12 (non-VLAN case)
+    sel->keys[0].val = htons(eth_type);
+    sel->keys[0].mask = 0x0000FFFF;  // Match 16bits
+
+    /* Add filter rule for non-VLAN Ethertype */
+    pr_info("Adding AVB filter stmmac_tc_setup_cls_u32() no vlan\n");
+    ret = stmmac_tc_setup_cls_u32(priv, priv, &cls_u32);
+    if (ret)
+        goto cleanup;
+
+// todo: revisit - suppressed VLAN case due ot the knode hardcoded handle re-use
+#if 0
+    /* Add filter rule for VLAN Ethertype (VLAN adds 4 bytes, Ethertype at offset 16) */
+    sel->keys[0].off = 16;
+    pr_info("Adding AVB filter stmmac_tc_setup_cls_u32() with vlan\n");
+    ret = stmmac_tc_setup_cls_u32(priv, priv, &cls_u32);
+    if (ret)
+        goto cleanup;
+#endif
+
+cleanup:
+	kfree(gact);
+cleanup_actions:
+	kfree(actions);
+cleanup_exts:
+	kfree(exts);
+cleanup_sel:
+	kfree(sel);
+	return ret;
+}
+
+static int stmmac_del_rxp_tc(struct stmmac_priv *priv, u16 eth_type)
+{
+    struct tc_cls_u32_offload cls_u32 = { };
+    struct tc_u32_sel *sel;
+    int ret, nk = 1;
+
+    /* Allocate memory for filter selection (Ethertype) */
+    sel = kzalloc(struct_size(sel, keys, nk), GFP_KERNEL);
+    if (!sel)
+        return -ENOMEM;
+
+    /* Set up the cls_u32 filter to delete the rule for Ethertype */
+    cls_u32.command = TC_CLSU32_DELETE_KNODE;
+    cls_u32.common.chain_index = 0;
+    cls_u32.common.protocol = htons(ETH_P_ALL);
+    cls_u32.knode.sel = sel;
+    cls_u32.knode.handle = 0x123;
+
+    /* Delete filter rule for non-VLAN Ethertype */
+    sel->nkeys = nk;
+    sel->offshift = 0;
+    sel->keys[0].off = 12;
+    sel->keys[0].val = htonl(eth_type);
+    sel->keys[0].mask = ~0x0;
+
+    ret = stmmac_tc_setup_cls_u32(priv, priv, &cls_u32);
+    if (ret)
+        goto cleanup;
+
+// todo: revisit - suppressed VLAN case due ot the knode handle re-use
+#if 0
+    /* Delete filter rule for VLAN Ethertype (offset 16) */
+    sel->keys[0].off = 16;
+    ret = stmmac_tc_setup_cls_u32(priv, priv, &cls_u32);
+#endif
+
+cleanup:
+    kfree(sel);
+    return ret;
+}
+
+static int stmmac_add_rxp(struct stmmac_priv *priv, u16 eth_type)
+{
+    union frp_instruction instr = { };
+    int ret;
+    uint32_t config = 0;
+
+    stmmac_frp_set_ethertype_match(&instr, eth_type, 4);
+
+    dwmac5_disable_rx(priv->hw->pcsr, &config);
+    dwmac5_rxp_disable(priv->hw->pcsr);
+
+    ret = dwmac5_frp_update_single_entry(priv->hw->pcsr, &instr, 0);
+    stmmac_frp_accept_all(&instr);
+    ret |= dwmac5_frp_update_single_entry(priv->hw->pcsr, &instr, 1);
+    dwmac5_frp_update_num_entries(priv->hw->pcsr, 2);
+
+    dwmac5_rxp_enable(priv->hw->pcsr);
+    dwmac5_restore_rx(priv->hw->pcsr, config);
+
+    return ret;
+}
+
+static int stmmac_del_rxp(struct stmmac_priv *priv, u16 eth_type)
+{
+    uint32_t config = 0;
+    dwmac5_disable_rx(priv->hw->pcsr, &config);
+
+    dwmac5_rxp_disable(priv->hw->pcsr);
+    dwmac5_frp_update_num_entries(priv->hw->pcsr, 0);
+    //dwmac5_rxp_enable(priv->hw->pcsr);
+    dwmac5_restore_rx(priv->hw->pcsr, config);
+    return 0;
+}
+
 static u16 stmmac_select_queue(struct net_device *dev, struct sk_buff *skb,
 			       struct net_device *sb_dev)
 {
@@ -6072,8 +6302,6 @@ set_mac_error:
 }
 
 #ifdef CONFIG_DEBUG_FS
-static struct dentry *stmmac_fs_dir;
-
 static void sysfs_display_ring(void *head, int size, int extend_desc,
 			       struct seq_file *seq, dma_addr_t dma_phy_addr)
 {
@@ -6251,6 +6479,202 @@ static int stmmac_dma_cap_show(struct seq_file *seq, void *v)
 }
 DEFINE_SHOW_ATTRIBUTE(stmmac_dma_cap);
 
+static int stmmac_avb_status_show(struct seq_file *seq, void *v)
+{
+	struct net_device *dev = seq->private;
+	struct stmmac_priv *priv = netdev_priv(dev);
+
+	seq_printf(seq, "==============================\n");
+	seq_printf(seq, "\tAVB Status\n");
+	seq_printf(seq, "==============================\n");
+	seq_printf(seq, "\tAVB Enabled: %s\n",
+		   stmmac_avb_enabled ? "Y" : "N");
+	seq_printf(seq, "\tGenAVB registered: %s\n",
+		   priv->avb_enabled ? "Y" : "N");
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(stmmac_avb_status);
+
+#ifdef CONFIG_NET_CLS_ACT
+
+static int stmmac_test_rxp_block_src_addr(struct stmmac_priv *priv,
+    unsigned char addr[ETH_ALEN])
+{
+	struct tc_cls_u32_offload cls_u32 = { };
+	struct tc_action **actions;
+	struct tc_u32_sel *sel;
+	struct tcf_gact *gact;
+	struct tcf_exts *exts;
+	int ret, i, nk = 1;   // only one key supported by tc_fill_entry()
+    unsigned char addr2[ETH_ALEN] = {0xDE, 0xAD, 0xFA, 0xCE, 0xBE, 0xEF};
+    u16 ethertype = htons(ETH_P_1588);
+
+	if (!tc_can_offload(priv->dev))
+		return -EOPNOTSUPP;
+	if (!priv->dma_cap.frpsel)
+		return -EOPNOTSUPP;
+
+	sel = kzalloc(struct_size(sel, keys, nk), GFP_KERNEL);
+	if (!sel)
+		return -ENOMEM;
+
+	exts = kzalloc(sizeof(*exts), GFP_KERNEL);
+	if (!exts) {
+		ret = -ENOMEM;
+		goto cleanup_sel;
+	}
+
+	actions = kcalloc(nk, sizeof(*actions), GFP_KERNEL);
+	if (!actions) {
+		ret = -ENOMEM;
+		goto cleanup_exts;
+	}
+
+	gact = kcalloc(nk, sizeof(*gact), GFP_KERNEL);
+	if (!gact) {
+		ret = -ENOMEM;
+		goto cleanup_actions;
+	}
+
+	cls_u32.command = TC_CLSU32_NEW_KNODE;
+	cls_u32.common.chain_index = 0;
+	cls_u32.common.protocol = htons(ETH_P_ALL);
+	cls_u32.knode.exts = exts;
+	cls_u32.knode.sel = sel;
+	cls_u32.knode.handle = 0x123; // used to match the entry to delete
+
+	exts->nr_actions = nk;
+	exts->actions = actions;
+	for (i = 0; i < nk; i++) {
+		actions[i] = (struct tc_action *)&gact[i];
+		gact->tcf_action = TC_ACT_SHOT;
+	}
+
+    pr_info("Keys : %d\n", nk);
+	sel->nkeys = nk;
+	sel->offshift = 0;
+#if 0    
+    // filter for source address
+	sel->keys[0].off = 6;   // Source MAC address is at offset 6
+	sel->keys[0].val = htonl(0xdeadbeef);
+	sel->keys[0].mask = ~0x0;
+#else
+    // filter for ethertype
+    sel->keys[0].off = 12;  // Ethertype is at offset 12
+    sel->keys[0].val = ethertype;
+    sel->keys[0].mask = 0x0000FFFF;
+#endif
+
+	ret = stmmac_tc_setup_cls_u32(priv, priv, &cls_u32);
+	if (ret)
+		goto cleanup_act;
+
+    pr_info("Filter Active: 0x%x\n", ethertype);
+	ret = stmmac_test_mac_loopback_src_addr(priv, addr, ethertype);
+	ret = ret ? 0 : -EINVAL; /* Shall NOT receive packet */
+    if (ret) {
+        goto cleanup_act;
+    }
+
+    pr_info("Loop back didn't recieve the packet : 0x%x\n", ethertype);
+
+    ethertype = htons(ETH_P_IP);
+    ret = stmmac_test_mac_loopback_src_addr(priv, addr2, ethertype);
+
+    pr_info("Loop back %srecieved the packet : 0x%x\n", ret == 0 ? "" : "not ",
+        ethertype);
+    
+	cls_u32.command = TC_CLSU32_DELETE_KNODE;
+	if (stmmac_tc_setup_cls_u32(priv, priv, &cls_u32))
+        pr_err("Failed to delete filter\n");
+
+cleanup_act:
+	kfree(gact);
+cleanup_actions:
+	kfree(actions);
+cleanup_exts:
+	kfree(exts);
+cleanup_sel:
+	kfree(sel);
+	return ret;
+}
+#endif
+
+static ssize_t stmmac_avb_filter_write(struct file *file, const char __user *buf,
+                                       size_t count, loff_t *ppos)
+{
+    struct stmmac_priv *priv = file->private_data;
+    char input;
+
+    if (copy_from_user(&input, buf, 1))
+        return -EFAULT;
+
+    switch (input) {
+        case 'D':
+            pr_info("Dump FRP stats...\n");
+            dwmac5_frp_dump_stats(priv->hw->pcsr);
+            break;
+        case 'Y':
+            pr_info("Adding AVB filter...\n");
+            if (stmmac_add_rxp(priv, 0x88F7))  // Example for PTP Ethertype
+                pr_err("Failed to add AVB filter\n");
+            break;
+        case 'N':
+            pr_info("Deleting AVB filter...\n");
+            if (stmmac_del_rxp(priv, 0x88F7))  // Example for PTP Ethertype
+                pr_err("Failed to delete AVB filter\n");
+            break;
+        case '1':
+            pr_info("Adding AVB filter in TC...\n");
+            if (stmmac_add_rxp_tc(priv, 0x88F7))  // Example for PTP Ethertype
+                pr_err("Failed to add AVB filter\n");
+            break;
+        case '2':
+            pr_info("Deleting AVB filter in TC...\n");
+            if (stmmac_del_rxp_tc(priv, 0x88F7))  // Example for PTP Ethertype
+                pr_err("Failed to delete AVB filter\n");
+            break;
+        case 'T': {
+	        unsigned char addr[ETH_ALEN] = {0xde, 0xad, 0xbe, 0xef, 0x00, 0x00};
+            pr_info("Testing AVB filter with source MAC address...\n");
+
+            if (stmmac_set_mac_loopback(priv, priv->ioaddr, true)) {
+                pr_err("Failed to set MAC loopback\n");
+                break;
+            }
+
+            if (stmmac_test_mac_loopback_src_addr(priv, addr, htons(ETH_P_IP))) {
+                pr_err("Failed to test MAC loopback\n");
+                break;
+            }
+
+            pr_info("Testing AVB filter recieved loopback\n");
+            if (stmmac_test_rxp_block_src_addr(priv, addr)) {
+                pr_err("Failed to test AVB filter\n");
+                break;
+            }
+
+            if (stmmac_set_mac_loopback(priv, priv->ioaddr, false)) {
+                pr_err("Failed to clear MAC loopback\n");
+                break;
+            }
+            break;
+        }
+        default:
+            pr_err("Invalid input: Use 'Y' to add filter, 'N' to delete filter\n");
+            return -EINVAL;
+    }
+
+    return count;
+}
+
+static const struct file_operations stmmac_avb_filter_fops = {
+    .owner = THIS_MODULE,
+    .write = stmmac_avb_filter_write,
+    .open = simple_open,
+    .llseek = default_llseek,
+};
+
 /* Use network device events to rename debugfs file entries.
  */
 static int stmmac_device_event(struct notifier_block *unused,
@@ -6295,6 +6719,13 @@ static void stmmac_init_fs(struct net_device *dev)
 	/* Entry to report the DMA HW features */
 	debugfs_create_file("dma_cap", 0444, priv->dbgfs_dir, dev,
 			    &stmmac_dma_cap_fops);
+
+	debugfs_create_file("avb_status", 0444, priv->dbgfs_dir, dev,
+			    &stmmac_avb_status_fops);
+
+    /* Create an entry for AVB filter control */
+    debugfs_create_file("avb_filter", 0222, priv->dbgfs_dir, priv,
+                &stmmac_avb_filter_fops);
 
 	rtnl_unlock();
 }
@@ -6502,6 +6933,7 @@ void stmmac_enable_rx_queue(struct stmmac_priv *priv, u32 queue)
 	u32 buf_size;
 	int ret;
 
+	pr_info("%s\n", __func__);
 	ret = __alloc_dma_rx_desc_resources(priv, &priv->dma_conf, queue);
 	if (ret) {
 		netdev_err(priv->dev, "Failed to alloc RX desc.\n");
@@ -7622,6 +8054,143 @@ int stmmac_resume(struct device *dev)
 }
 EXPORT_SYMBOL_GPL(stmmac_resume);
 
+#ifdef CONFIG_AVB_SUPPORT
+
+static int stmmac_avb_alloc_rx_desc(struct stmmac_priv *priv,
+        				   struct stmmac_avb_dma_conf *dma_conf)
+{
+	struct stmmac_avb_rx_queue *rx_q = &dma_conf->rx_queue;
+
+	rx_q->priv_data = priv;
+
+	rx_q->dma_rx = dma_alloc_coherent(priv->device,
+					  dma_conf->dma_rx_size * sizeof(struct dma_desc),
+					  &rx_q->dma_rx_phy,
+					  GFP_KERNEL);
+	if (!rx_q->dma_rx) {
+		netdev_err(priv->dev, "Failed to alloc rx_desc\n");
+		return -ENOMEM;
+	}
+
+	/* Allocate rx buffers */
+	for (int i = 0; i < dma_conf->dma_rx_size; i++) {
+		struct dma_desc *desc = &rx_q->dma_rx[i];
+		struct avb_rx_desc *avb_desc;
+		void *buffer;
+
+		buffer = priv->avb->alloc(priv->avb_data);
+		if (!buffer) {
+			netdev_err(priv->dev, "Failed to alloc rx buffer\n");
+			goto err_alloc;
+		}
+
+		avb_desc = (struct avb_rx_desc *)buffer;
+		avb_desc->common.len = 0;
+		avb_desc->queue_id = 0;
+
+		stmmac_set_desc_addr(priv, desc, avb_desc->dma_addr);
+	}
+
+	return 0;
+
+ err_alloc:
+	/* todo:
+	fec_enet_free_buffers(ndev); */
+	return -ENOMEM;
+}
+
+static void stmmac_avb_free_dma_desc(struct stmmac_priv *priv,
+		struct stmmac_avb_dma_conf *dma_conf)
+{
+	struct stmmac_avb_rx_queue *rx_q = &dma_conf->rx_queue;
+
+	if (rx_q->dma_rx) {
+		/* todo: free the dma buffers */
+		dma_free_coherent(priv->device,
+						  dma_conf->dma_rx_size * sizeof(struct dma_desc),
+						  rx_q->dma_rx,
+						  rx_q->dma_rx_phy);
+		rx_q->dma_rx = NULL;
+	}
+}
+
+struct stmmac_avb_dma_conf* stmmac_avb_init_dma_desc(struct stmmac_priv *priv)
+{
+	struct stmmac_avb_dma_conf *dma_conf;
+	int ret;
+
+	pr_info("%s\n", __func__);
+	dma_conf = kzalloc(sizeof(*dma_conf), GFP_KERNEL);
+	if (!dma_conf) {
+		netdev_err(priv->dev, "%s: DMA conf allocation failed\n",
+			   __func__);
+		return ERR_PTR(ENOMEM);
+	}
+
+	dma_conf->dma_buf_sz = DEFAULT_BUFSIZE;
+	dma_conf->dma_tx_size = DMA_DEFAULT_TX_SIZE;
+	dma_conf->dma_rx_size = DMA_DEFAULT_RX_SIZE;
+
+	/* Time based shaper available on the tx-q*/
+	dma_conf->tx_queue.tbs = STMMAC_TBS_AVAIL;
+
+	ret = stmmac_avb_alloc_rx_desc(priv, dma_conf);
+	if (ret < 0) {
+		netdev_err(priv->dev, "%s: DMA descriptors allocation failed\n",
+			   __func__);
+		goto alloc_error;
+	}
+
+	return dma_conf;
+
+init_error:
+	stmmac_avb_free_dma_desc(priv, dma_conf);
+alloc_error:
+	kfree(dma_conf);
+	return ERR_PTR(ret);
+}
+
+int fec_enet_set_idle_slope(void *data, unsigned int queue_id, u32 idle_slope)
+{
+	return 0;
+}
+EXPORT_SYMBOL(fec_enet_set_idle_slope);
+
+int fec_enet_rx_poll_avb(void *data)
+{
+	struct stmmac_priv *priv = data;
+	u32 queue, maxq;
+	maxq = priv->plat->rx_queues_to_use;
+
+	for (queue = 0; queue < maxq; queue++) {
+		struct stmmac_channel *ch = &priv->channel[queue];
+
+		ch->priv_data = priv;
+		ch->index = queue;
+		stmmac_napi_poll_rx(&ch->rx_napi, 0);
+	}
+	return 0;
+}
+EXPORT_SYMBOL(fec_enet_rx_poll_avb);
+
+int fec_enet_start_xmit_avb(void *data, struct avb_tx_desc *desc)
+{
+	return 0;
+}
+EXPORT_SYMBOL(fec_enet_start_xmit_avb);
+
+void fec_enet_finish_xmit_avb(void *data, unsigned int queue_id)
+{
+}
+EXPORT_SYMBOL(fec_enet_finish_xmit_avb);
+
+int fec_enet_tx_avb(void *data)
+{
+	return 0;
+}
+EXPORT_SYMBOL(fec_enet_tx_avb);
+#endif
+
 #ifndef MODULE
 static int __init stmmac_cmdline_opt(char *str)
 {
@@ -7675,6 +8244,9 @@ static int __init stmmac_init(void)
 	/* Create debugfs main directory if it doesn't exist yet */
 	if (!stmmac_fs_dir)
 		stmmac_fs_dir = debugfs_create_dir(STMMAC_RESOURCE_NAME, NULL);
+	
+	/* created the avb_enabled boolean in the debugfs directory */
+	debugfs_create_bool("avb_enabled", 0644, stmmac_fs_dir, &stmmac_avb_enabled);
 	register_netdevice_notifier(&stmmac_notifier);
 #endif
 

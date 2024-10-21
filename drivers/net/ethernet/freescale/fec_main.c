@@ -74,7 +74,7 @@
 #include <asm/cacheflush.h>
 
 #include "fec.h"
-
+#undef CONFIG_AVB_SUPPORT
 static void set_multicast_list(struct net_device *ndev);
 static void fec_enet_itr_coal_set(struct net_device *ndev);
 #ifndef CONFIG_AVB_SUPPORT

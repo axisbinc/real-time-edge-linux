@@ -447,6 +447,173 @@ err_match_data:
 	return ret;
 }
 
+#ifdef CONFIG_AVB_SUPPORT
+
+static struct platform_driver imx_dwmac_driver;
+
+/* Checks if the net_device is registered by the fec */
+static bool __is_fec_net_device(struct net_device *ndev)
+{
+	if (!ndev)
+		return false;
+
+	if (ndev->dev.parent->driver == &imx_dwmac_driver.driver)
+		return true;
+	else
+		return false;
+}
+
+struct device *fec_enet_avb_get_device(const char *ifname)
+{
+	struct net_device *ndev;
+	struct stmmac_priv *priv;
+
+	ndev = dev_get_by_name(&init_net, ifname);
+	if (!ndev)
+		goto err_dev_get;
+
+	if (!__is_fec_net_device(ndev))
+		goto err_ndev;
+
+	priv = netdev_priv(ndev);
+
+	dev_put(ndev);
+
+	return priv->device;
+
+err_ndev:
+	dev_put(ndev);
+
+err_dev_get:
+	return NULL;
+}
+EXPORT_SYMBOL(fec_enet_avb_get_device);
+
+int fec_enet_avb_register(const char *ifname, const struct avb_ops *avb, void *data)
+{
+	struct net_device *ndev;
+	struct stmmac_priv *priv;
+	unsigned int up;
+	int ifindex;
+
+	ndev = dev_get_by_name(&init_net, ifname);
+	if (!ndev)
+		goto err_dev_get;
+
+	if (!__is_fec_net_device(ndev))
+		goto err_ndev;
+
+	priv = netdev_priv(ndev);
+
+	if (priv->avb)
+		goto err_avb;
+
+	rtnl_lock();
+	up = ndev->flags & IFF_UP;
+	if (up)
+		dev_close(ndev);
+
+	priv->avb = avb;
+	priv->avb_data = data;
+	priv->avb_enabled = 1;
+	ifindex = ndev->ifindex;
+
+	if (up) {
+		/* In case of error, device is closed but avb interface is registered */
+		dev_open(ndev, NULL);
+	}
+
+	rtnl_unlock();
+
+	dev_put(ndev);
+
+	return ifindex;
+
+err_avb:
+err_ndev:
+	dev_put(ndev);
+
+err_dev_get:
+	return -1;
+}
+EXPORT_SYMBOL(fec_enet_avb_register);
+
+int fec_enet_avb_unregister(int ifindex, const struct avb_ops *avb)
+{
+	struct net_device *ndev;
+	struct stmmac_priv *priv;
+	unsigned int up;
+
+	ndev = dev_get_by_index(&init_net, ifindex);
+	if (!ndev)
+		goto err_dev_get;
+
+	if (!__is_fec_net_device(ndev))
+		goto err_ndev;
+
+	priv = netdev_priv(ndev);
+	if (priv->avb != avb)
+		goto err_avb;
+
+	rtnl_lock();
+	up = ndev->flags & IFF_UP;
+	if (up)
+		dev_close(ndev);
+
+	priv->avb = NULL;
+	priv->avb_data = NULL;
+	priv->avb_enabled = 0;
+
+	if (up)
+		/* In case of error, device is closed but avb interface is unregistered */
+		dev_open(ndev, NULL);
+
+	rtnl_unlock();
+
+	dev_put(ndev);
+
+	return 0;
+
+err_avb:
+err_ndev:
+	dev_put(ndev);
+
+err_dev_get:
+	return -1;
+}
+EXPORT_SYMBOL(fec_enet_avb_unregister);
+
+int fec_enet_get_tx_queue_properties(int ifindex, struct tx_queue_properties *prop)
+{
+	struct net_device *ndev;
+	struct stmmac_priv *priv;
+
+	ndev = dev_get_by_index(&init_net, ifindex);
+	if (!ndev)
+		goto err_dev_get;
+
+	if (!__is_fec_net_device(ndev))
+		goto err_ndev;
+
+	priv = netdev_priv(ndev);
+    prop->num_queues = 1;
+	prop->queue[0].priority = 0;
+	prop->queue[0].flags = TX_QUEUE_FLAGS_STRICT_PRIORITY;
+
+	dev_put(ndev);
+
+	return 0;
+
+err_queues:
+err_ndev:
+	dev_put(ndev);
+
+err_dev_get:
+	return -1;
+}
+EXPORT_SYMBOL(fec_enet_get_tx_queue_properties);
+#endif /* CONFIG_AVB_SUPPORT */
+
 static struct imx_dwmac_ops imx8mp_dwmac_data = {
 	.addr_width = 34,
 	.mac_rgmii_txclk_auto_adj = false,
