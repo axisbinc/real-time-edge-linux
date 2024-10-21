@@ -93,6 +93,10 @@
 #define RXPI				BIT(31)
 #define NPE				GENMASK(23, 16)
 #define NVE				GENMASK(7, 0)
+
+#define MTL_RXP_DROP_CNT		0x00000ca8
+#define MTL_RXP_ERROR_CNT		0x00000cac
+
 #define MTL_RXP_IACC_CTRL_STATUS	0x00000cb0
 #define STARTBUSY			BIT(31)
 #define RXPEIEC				GENMASK(22, 21)
@@ -131,6 +135,11 @@
 #define DMA_ECC_INT_ENABLE		0x00001084
 #define TCEIE				BIT(0)
 #define DMA_ECC_INT_STATUS		0x00001088
+
+#define DMA_CH1_RXP_ACCEPT_CNT         0x000011E8
+#define DMA_CH2_RXP_ACCEPT_CNT         0x00001268
+#define DMA_CH3_RXP_ACCEPT_CNT         0x000012E8
+#define DMA_CH4_RXP_ACCEPT_CNT         0x00001368
 
 /* EQoS version 5.xx VLAN Tag Filter Fail Packets Queuing */
 #define GMAC_RXQ_CTRL4			0x00000094
