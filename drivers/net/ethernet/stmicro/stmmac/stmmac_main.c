@@ -153,7 +153,8 @@ static struct dentry *stmmac_fs_dir;
 static bool stmmac_avb_enabled = false;
 #endif
 #ifdef CONFIG_AVB_SUPPORT
-struct stmmac_avb_dma_conf* stmmac_avb_init_dma_desc(struct stmmac_priv *priv);
+static struct stmmac_avb_dma_conf* stmmac_avb_init_dma_desc(struct stmmac_priv *priv);
+static int stmmac_avb_init_dma_engine(struct stmmac_priv *priv);
 #endif
 
 #define STMMAC_COAL_TIMER(x) (ns_to_ktime((x) * NSEC_PER_USEC))
@@ -498,7 +499,7 @@ bool stmmac_eee_init(struct stmmac_priv *priv)
 	/* Check if it needs to be deactivated */
 	if (!priv->eee_active) {
 		if (priv->eee_enabled) {
-			netdev_dbg(priv->dev, "disable EEE\n");
+			netdev_info(priv->dev, "disable EEE\n");
 			stmmac_lpi_entry_timer_config(priv, 0);
 			del_timer_sync(&priv->eee_ctrl_timer);
 			stmmac_set_eee_timer(priv, priv->hw, 0, eee_tw_timer);
@@ -532,7 +533,7 @@ bool stmmac_eee_init(struct stmmac_priv *priv)
 	}
 
 	mutex_unlock(&priv->lock);
-	netdev_dbg(priv->dev, "Energy-Efficient Ethernet initialized\n");
+	netdev_info(priv->dev, "Energy-Efficient Ethernet initialized\n");
 	return true;
 }
 
@@ -572,7 +573,7 @@ static void stmmac_get_tx_hwtstamp(struct stmmac_priv *priv,
 		memset(&shhwtstamp, 0, sizeof(struct skb_shared_hwtstamps));
 		shhwtstamp.hwtstamp = ns_to_ktime(ns);
 
-		netdev_dbg(priv->dev, "get valid TX hw timestamp %llu\n", ns);
+		netdev_info(priv->dev, "get valid TX hw timestamp %llu\n", ns);
 		/* pass tstamp to stack */
 		skb_tstamp_tx(skb, &shhwtstamp);
 	}
@@ -593,7 +594,7 @@ u64 stmmac_get_rx_hwtstamp(struct stmmac_priv *priv, struct dma_desc *p,
 		stmmac_get_timestamp(priv, desc, priv->adv_ts, &ns);
 
 		ns -= priv->plat->cdc_error_adj;
-		netdev_dbg(priv->dev, "get valid RX hw timestamp %llu\n", ns);
+		netdev_info(priv->dev, "get valid RX hw timestamp %llu\n", ns);
 	}
 	return ns;
 }
@@ -624,7 +625,7 @@ static void stmmac_fill_rx_hwtstamp(struct stmmac_priv *priv, struct dma_desc *p
 		memset(shhwtstamp, 0, sizeof(struct skb_shared_hwtstamps));
 		shhwtstamp->hwtstamp = ns_to_ktime(ns);
 	} else  {
-		netdev_dbg(priv->dev, "cannot get RX hw timestamp\n");
+		netdev_info(priv->dev, "cannot get RX hw timestamp\n");
 	}
 }
 
@@ -664,7 +665,7 @@ static int stmmac_hwtstamp_set(struct net_device *dev, struct ifreq *ifr)
 			   sizeof(config)))
 		return -EFAULT;
 
-	netdev_dbg(priv->dev, "%s config flags:0x%x, tx_type:0x%x, rx_filter:0x%x\n",
+	netdev_info(priv->dev, "%s config flags:0x%x, tx_type:0x%x, rx_filter:0x%x\n",
 		   __func__, config.flags, config.tx_type, config.rx_filter);
 
 	if (config.tx_type != HWTSTAMP_TX_OFF &&
@@ -1142,10 +1143,10 @@ static void stmmac_check_pcs_mode(struct stmmac_priv *priv)
 		    (interface == PHY_INTERFACE_MODE_RGMII_ID) ||
 		    (interface == PHY_INTERFACE_MODE_RGMII_RXID) ||
 		    (interface == PHY_INTERFACE_MODE_RGMII_TXID)) {
-			netdev_dbg(priv->dev, "PCS RGMII support enabled\n");
+			netdev_info(priv->dev, "PCS RGMII support enabled\n");
 			priv->hw->pcs = STMMAC_PCS_RGMII;
 		} else if (interface == PHY_INTERFACE_MODE_SGMII) {
-			netdev_dbg(priv->dev, "PCS SGMII support enabled\n");
+			netdev_info(priv->dev, "PCS SGMII support enabled\n");
 			priv->hw->pcs = STMMAC_PCS_SGMII;
 		}
 	}
@@ -2270,7 +2271,7 @@ static void stmmac_mac_enable_rx_queues(struct stmmac_priv *priv)
  */
 static void stmmac_start_rx_dma(struct stmmac_priv *priv, u32 chan)
 {
-	netdev_dbg(priv->dev, "DMA RX processes started in channel %d\n", chan);
+	netdev_info(priv->dev, "DMA RX processes started in channel %d\n", chan);
 	stmmac_start_rx(priv, priv->ioaddr, chan);
 }
 
@@ -2283,7 +2284,7 @@ static void stmmac_start_rx_dma(struct stmmac_priv *priv, u32 chan)
  */
 static void stmmac_start_tx_dma(struct stmmac_priv *priv, u32 chan)
 {
-	netdev_dbg(priv->dev, "DMA TX processes started in channel %d\n", chan);
+	netdev_info(priv->dev, "DMA TX processes started in channel %d\n", chan);
 	stmmac_start_tx(priv, priv->ioaddr, chan);
 }
 
@@ -2296,7 +2297,7 @@ static void stmmac_start_tx_dma(struct stmmac_priv *priv, u32 chan)
  */
 static void stmmac_stop_rx_dma(struct stmmac_priv *priv, u32 chan)
 {
-	netdev_dbg(priv->dev, "DMA RX processes stopped in channel %d\n", chan);
+	netdev_info(priv->dev, "DMA RX processes stopped in channel %d\n", chan);
 	stmmac_stop_rx(priv, priv->ioaddr, chan);
 }
 
@@ -2309,7 +2310,7 @@ static void stmmac_stop_rx_dma(struct stmmac_priv *priv, u32 chan)
  */
 static void stmmac_stop_tx_dma(struct stmmac_priv *priv, u32 chan)
 {
-	netdev_dbg(priv->dev, "DMA TX processes stopped in channel %d\n", chan);
+	netdev_info(priv->dev, "DMA TX processes stopped in channel %d\n", chan);
 	stmmac_stop_tx(priv, priv->ioaddr, chan);
 }
 
@@ -3864,6 +3865,7 @@ static int __stmmac_open(struct net_device *dev,
 	if (stmmac_avb_enabled && priv->avb_enabled) {
         stmmac_avb_init_dma_desc(priv);
 		priv->avb->open(priv->avb_data, priv, priv->speed);
+        stmmac_avb_init_dma_engine(priv);
     }
 #endif
 
@@ -4532,12 +4534,12 @@ static netdev_tx_t stmmac_xmit(struct sk_buff *skb, struct net_device *dev)
 	tx_q->cur_tx = entry;
 
 	if (netif_msg_pktdata(priv)) {
-		netdev_dbg(priv->dev,
+		netdev_info(priv->dev,
 			   "%s: curr=%d dirty=%d f=%d, e=%d, first=%p, nfrags=%d",
 			   __func__, tx_q->cur_tx, tx_q->dirty_tx, first_entry,
 			   entry, first, nfrags);
 
-		netdev_dbg(priv->dev, ">>> frame to be transmitted: ");
+		netdev_info(priv->dev, ">>> frame to be transmitted: ");
 		print_pkt(skb->data, skb->len);
 	}
 
@@ -5065,7 +5067,7 @@ static int stmmac_rx_zc(struct stmmac_priv *priv, int limit, u32 queue)
 	if (netif_msg_rx_status(priv)) {
 		void *rx_head;
 
-		netdev_dbg(priv->dev, "%s: descriptor ring:\n", __func__);
+		netdev_info(priv->dev, "%s: descriptor ring:\n", __func__);
 		if (priv->extend_desc) {
 			rx_head = (void *)rx_q->dma_erx;
 			desc_size = sizeof(struct dma_extended_desc);
@@ -5266,7 +5268,7 @@ static int stmmac_rx(struct stmmac_priv *priv, int limit, u32 queue)
 	if (netif_msg_rx_status(priv)) {
 		void *rx_head;
 
-		netdev_dbg(priv->dev, "%s: descriptor ring:\n", __func__);
+		netdev_info(priv->dev, "%s: descriptor ring:\n", __func__);
 		if (priv->extend_desc) {
 			rx_head = (void *)rx_q->dma_erx;
 			desc_size = sizeof(struct dma_extended_desc);
@@ -5669,7 +5671,7 @@ static int stmmac_change_mtu(struct net_device *dev, int new_mtu)
 	txfifosz /= priv->plat->tx_queues_to_use;
 
 	if (stmmac_xdp_is_enabled(priv) && new_mtu > ETH_DATA_LEN) {
-		netdev_dbg(priv->dev, "Jumbo frames not supported for XDP\n");
+		netdev_info(priv->dev, "Jumbo frames not supported for XDP\n");
 		return -EINVAL;
 	}
 
@@ -5680,7 +5682,7 @@ static int stmmac_change_mtu(struct net_device *dev, int new_mtu)
 		return -EINVAL;
 
 	if (netif_running(dev)) {
-		netdev_dbg(priv->dev, "restarting interface to change its MTU\n");
+		netdev_info(priv->dev, "restarting interface to change its MTU\n");
 		/* Try to allocate the new DMA conf with the new mtu */
 		dma_conf = stmmac_setup_dma_desc(priv, mtu);
 		if (IS_ERR(dma_conf)) {
@@ -8056,6 +8058,27 @@ EXPORT_SYMBOL_GPL(stmmac_resume);
 
 #ifdef CONFIG_AVB_SUPPORT
 
+static int stmmac_avb_init_dma_engine(struct stmmac_priv *priv)
+{
+    u32 avb_chan = 4; // todo: priv->plat->avb_dma_cfg->avb_dma_chan;
+	struct stmmac_avb_rx_queue *rx_q;
+    u32 num_descs = priv->dma_avb_conf.dma_rx_size;
+    
+    stmmac_init_chan(priv, priv->ioaddr, priv->plat->dma_cfg, avb_chan);
+    stmmac_disable_dma_irq(priv, priv->ioaddr, avb_chan, 1, 1);
+
+    stmmac_set_rx_ring_len(priv, priv->ioaddr, (num_descs - 1), avb_chan);
+    rx_q = &priv->dma_avb_conf.rx_queue;
+    stmmac_init_rx_chan(priv, priv->ioaddr, priv->plat->dma_cfg,
+                        rx_q->dma_rx_phy, avb_chan);
+    rx_q->rx_tail_addr = rx_q->dma_rx_phy + (num_descs * sizeof(struct dma_desc));
+    stmmac_set_rx_tail_ptr(priv, priv->ioaddr, rx_q->rx_tail_addr, avb_chan);
+
+	netdev_info(priv->dev, "AVB RX processes started in channel %d\n", avb_chan);
+    stmmac_start_rx(priv, priv->ioaddr, avb_chan);
+    return 0;
+}
+
 static int stmmac_avb_alloc_rx_desc(struct stmmac_priv *priv,
         				   struct stmmac_avb_dma_conf *dma_conf)
 {
@@ -8063,32 +8086,39 @@ static int stmmac_avb_alloc_rx_desc(struct stmmac_priv *priv,
 
 	rx_q->priv_data = priv;
 
+   	rx_q->buf_pool = kcalloc(dma_conf->dma_rx_size, sizeof(*rx_q->buf_pool),
+            GFP_KERNEL);
+	if (!rx_q->buf_pool)
+		return -ENOMEM;
+
 	rx_q->dma_rx = dma_alloc_coherent(priv->device,
 					  dma_conf->dma_rx_size * sizeof(struct dma_desc),
 					  &rx_q->dma_rx_phy,
 					  GFP_KERNEL);
 	if (!rx_q->dma_rx) {
 		netdev_err(priv->dev, "Failed to alloc rx_desc\n");
-		return -ENOMEM;
+        goto err_alloc_coherent;
 	}
 
 	/* Allocate rx buffers */
 	for (int i = 0; i < dma_conf->dma_rx_size; i++) {
 		struct dma_desc *desc = &rx_q->dma_rx[i];
+        struct stmmac_avb_rx_buffer *buf = &rx_q->buf_pool[i];
 		struct avb_rx_desc *avb_desc;
-		void *buffer;
 
-		buffer = priv->avb->alloc(priv->avb_data);
-		if (!buffer) {
+		buf->vaddr = priv->avb->alloc(priv->avb_data);
+		if (!buf->vaddr) {
 			netdev_err(priv->dev, "Failed to alloc rx buffer\n");
 			goto err_alloc;
 		}
 
-		avb_desc = (struct avb_rx_desc *)buffer;
+		avb_desc = (struct avb_rx_desc *)buf->vaddr;
 		avb_desc->common.len = 0;
-		avb_desc->queue_id = 0;
+		avb_desc->queue_id = 0;     /* todo: irrelevant? */
+        buf->addr = avb_desc->dma_addr;
 
 		stmmac_set_desc_addr(priv, desc, avb_desc->dma_addr);
+        rx_q->buf_alloc_num++;
 	}
 
 	return 0;
@@ -8097,6 +8127,9 @@ static int stmmac_avb_alloc_rx_desc(struct stmmac_priv *priv,
 	/* todo:
 	fec_enet_free_buffers(ndev); */
 	return -ENOMEM;
+ err_alloc_coherent:
+    kfree(rx_q->buf_pool);
+    return -ENOMEM;
 }
 
 static void stmmac_avb_free_dma_desc(struct stmmac_priv *priv,
@@ -8114,7 +8147,8 @@ static void stmmac_avb_free_dma_desc(struct stmmac_priv *priv,
 	}
 }
 
-struct stmmac_avb_dma_conf* stmmac_avb_init_dma_desc(struct stmmac_priv *priv)
+static struct stmmac_avb_dma_conf* 
+stmmac_avb_init_dma_desc(struct stmmac_priv *priv)
 {
 	struct stmmac_avb_dma_conf *dma_conf;
 	int ret;
@@ -8143,9 +8177,8 @@ struct stmmac_avb_dma_conf* stmmac_avb_init_dma_desc(struct stmmac_priv *priv)
 
 	return dma_conf;
 
-init_error:
-	stmmac_avb_free_dma_desc(priv, dma_conf);
 alloc_error:
+	stmmac_avb_free_dma_desc(priv, dma_conf);
 	kfree(dma_conf);
 	return ERR_PTR(ret);
 }
@@ -8158,17 +8191,56 @@ EXPORT_SYMBOL(fec_enet_set_idle_slope);
 
 int fec_enet_rx_poll_avb(void *data)
 {
+    int entry, next_entry, status = 0, len = 0;
+    struct stmmac_avb_rx_buffer *buf;
+    struct stmmac_avb_rx_queue *rx_q;
+    struct avb_rx_desc *avb_pkt_desc;
 	struct stmmac_priv *priv = data;
-	u32 queue, maxq;
-	maxq = priv->plat->rx_queues_to_use;
+    void *new_avb_buf;
+    struct dma_desc *desc;
+    unsigned int count;
 
-	for (queue = 0; queue < maxq; queue++) {
-		struct stmmac_channel *ch = &priv->channel[queue];
+    rx_q = &priv->dma_avb_conf.rx_queue;
+    next_entry = rx_q->cur_rx;
 
-		ch->priv_data = priv;
-		ch->index = queue;
-		stmmac_napi_poll_rx(&ch->rx_napi, 0);
-	}
+	/* 20 packets per 125us > 64 bytes packets @ 100Mbps */
+    for (count = 0; count < 20; count++) {
+        entry = next_entry;
+        desc  = &rx_q->dma_rx[entry];
+        buf   = &rx_q->buf_pool[entry];
+
+        status = stmmac_rx_status(priv, &priv->dev->stats, &priv->xstats, desc);
+        if (unlikely(status & dma_own))
+            break;
+
+        len = stmmac_rx_buf1_len(priv, desc, status, 0);
+
+        next_entry = rx_q->cur_rx = STMMAC_GET_ENTRY(rx_q->cur_rx, 
+                priv->dma_avb_conf.dma_rx_size);
+        prefetch(buf->vaddr);
+		dma_sync_single_for_cpu(priv->device, buf->addr, len, DMA_FROM_DEVICE);
+
+        avb_pkt_desc = (struct avb_rx_desc*)buf->vaddr;
+        avb_pkt_desc->common.len = len;
+
+        /* todo: timestamp */
+
+        /* replace the rx_buffer */
+        new_avb_buf = priv->avb->alloc(priv->avb_data);
+        if (!new_avb_buf) {
+            netdev_err(priv->dev, "Failed to alloc rx buffer\n");
+            break;
+        }
+
+        /* install the new rx buffer in the dma descriptor */
+        buf->vaddr = new_avb_buf;
+        buf->addr = ((struct avb_rx_desc*)new_avb_buf)->dma_addr;
+		stmmac_set_desc_addr(priv, desc, buf->addr);
+
+        /* dispatch the inbound packet */
+        (void)priv->avb->rx(priv->avb_data, avb_pkt_desc);
+    }
+
 	return 0;
 }
 EXPORT_SYMBOL(fec_enet_rx_poll_avb);
