@@ -203,11 +203,17 @@ struct stmmac_dma_conf {
 
 #ifdef CONFIG_AVB_SUPPORT
 
+struct stmmac_avb_rx_buffer {
+	void *vaddr;
+	dma_addr_t addr;
+};
+
 struct stmmac_avb_rx_queue {
 	u32 rx_count_frames;
 	struct stmmac_priv *priv_data;
 	struct dma_desc *dma_rx ____cacheline_aligned_in_smp;
 	unsigned int cur_rx;
+    struct stmmac_avb_rx_buffer *buf_pool;
 	unsigned int dirty_rx;
 	unsigned int buf_alloc_num;
 	u32 rx_zeroc_thresh;
