@@ -214,17 +214,8 @@ struct stmmac_avb_rx_queue {
 	struct dma_desc *dma_rx ____cacheline_aligned_in_smp;
 	unsigned int cur_rx;
     struct stmmac_avb_rx_buffer *buf_pool;
-	unsigned int dirty_rx;
-	unsigned int buf_alloc_num;
-	u32 rx_zeroc_thresh;
 	dma_addr_t dma_rx_phy;
 	u32 rx_tail_addr;
-	unsigned int state_saved;
-	struct {
-		struct sk_buff *skb;
-		unsigned int len;
-		unsigned int error;
-	} state;
 };
 struct stmmac_avb_dma_conf {
 	unsigned int dma_buf_sz;
@@ -333,7 +324,7 @@ struct stmmac_priv {
 	void *avb_data;
 	unsigned int avb_enabled;
 	//__ETHTOOL_DECLARE_LINK_MODE_MASK(phy_advertising);
-    struct stmmac_avb_dma_conf dma_avb_conf;
+    struct stmmac_avb_dma_conf *dma_avb_conf;
 #endif
 
 	struct stmmac_dma_conf dma_conf;
