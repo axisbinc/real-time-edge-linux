@@ -40,7 +40,6 @@
 #include <linux/udp.h>
 #include <linux/bpf_trace.h>
 #include <net/pkt_cls.h>
-#include <net/tc_act/tc_gact.h>
 #include <net/xdp_sock_drv.h>
 #include "stmmac_ptp.h"
 #include "stmmac.h"
@@ -5187,22 +5186,8 @@ read_again:
 		buf->xdp->data_end = buf->xdp->data + buf1_len;
 		xsk_buff_dma_sync_for_cpu(buf->xdp, rx_q->xsk_pool);
 
-		res = STMMAC_XDP_PASS;
-#ifdef CONFIG_AVB_SUPPORT1
-		if (stmmac_avb_enabled && priv->avb_enabled) {
-			int avb_res;
-			pr_info("rx_zc buf_lens = %d\n", buf1_len);
-			avb_res = priv->avb->rx_avb(priv->avb_data, buf->xdp,
-						stmmac_get_rx_hwtstamp(priv, p, np));
-			if (avb_res == XDP_DROP) {
-				res = STMMAC_XDP_CONSUMED;
-			}
-		}
-#endif
-		if (res != STMMAC_XDP_CONSUMED) {
-			prog = READ_ONCE(priv->xdp_prog);
-			res = __stmmac_xdp_run_prog(priv, prog, buf->xdp);
-		}
+		prog = READ_ONCE(priv->xdp_prog);
+		res = __stmmac_xdp_run_prog(priv, prog, buf->xdp);
 
 		switch (res) {
 		case STMMAC_XDP_PASS:
@@ -5392,21 +5377,7 @@ read_again:
 
 			pre_len = xdp.data_end - xdp.data_hard_start -
 				  buf->page_offset;
-    #ifdef CONFIG_AVB_SUPPORT1
-			if (stmmac_avb_enabled && priv->avb_enabled) {
-				int avb_res;
-				avb_res = priv->avb->rx_avb(priv->avb_data, &xdp,
-						stmmac_get_rx_hwtstamp(priv, p, np));
-				if (avb_res == XDP_DROP) {
-				    pr_info("queue[%d] ch[%d] rx buf_lens = %d, %d\n", queue,
-                            ch->index, buf1_len, buf2_len);
-					skb = ERR_PTR(-STMMAC_XDP_CONSUMED);
-				}
-			}
-    #endif
-			if (!skb) {
-				skb = stmmac_xdp_run_prog(priv, &xdp);
-			}
+			skb = stmmac_xdp_run_prog(priv, &xdp);
 			/* Due xdp_adjust_tail: DMA sync for_device
 			 * cover max len CPU touch
 			 */
@@ -6113,130 +6084,6 @@ static int stmmac_setup_tc(struct net_device *ndev, enum tc_setup_type type,
 	}
 }
 
-static int stmmac_add_rxp_tc(struct stmmac_priv *priv, u16 eth_type)
-{
-    struct tc_cls_u32_offload cls_u32 = { };
-    struct tc_u32_sel *sel;
-    struct tcf_exts *exts;
-    struct tc_action **actions;
-    struct tcf_gact *gact;
-    int ret, nk = 1;
-
-    /* Allocate memory for filter selection (Ethertype) */
-	sel = kzalloc(struct_size(sel, keys, nk), GFP_KERNEL);
-	if (!sel)
-		return -ENOMEM;
-
-	exts = kzalloc(sizeof(*exts), GFP_KERNEL);
-	if (!exts) {
-		ret = -ENOMEM;
-		goto cleanup_sel;
-	}
-
-	actions = kcalloc(nk, sizeof(*actions), GFP_KERNEL);
-	if (!actions) {
-		ret = -ENOMEM;
-		goto cleanup_exts;
-	}
-
-	gact = kcalloc(nk, sizeof(*gact), GFP_KERNEL);
-	if (!gact) {
-		ret = -ENOMEM;
-		goto cleanup_actions;
-	}
-
-    /* Set up the cls_u32 filter to match the Ethertype */
-    cls_u32.command = TC_CLSU32_NEW_KNODE;
-    cls_u32.common.chain_index = 0;
-    cls_u32.common.protocol = htons(ETH_P_ALL);  // Match any protocol
-    cls_u32.knode.exts = exts;
-    cls_u32.knode.sel = sel;
-    cls_u32.knode.handle = 0x123;  // Arbitrary handle ID
-
-    /* Set up the action to forward packets to DMA Channel 4 */
-    exts->nr_actions = nk;
-    exts->actions = actions;
-    for (int i = 0; i < nk; i++) {
-        actions[i] = (struct tc_action *)&gact[i];
-        gact->tcf_action = TC_ACT_OK;  // Accept the packet
-        // gact->dscp = 4;  // This could be used to mark the DMA channel
-    }    
-
-    /* Filter based on Ethertype */
-    sel->nkeys = nk;
-    sel->offshift = 0;
-    sel->keys[0].off = 12;  // Ethertype is at offset 12 (non-VLAN case)
-    sel->keys[0].val = htons(eth_type);
-    sel->keys[0].mask = 0x0000FFFF;  // Match 16bits
-
-    /* Add filter rule for non-VLAN Ethertype */
-    pr_info("Adding AVB filter stmmac_tc_setup_cls_u32() no vlan\n");
-    ret = stmmac_tc_setup_cls_u32(priv, priv, &cls_u32);
-    if (ret)
-        goto cleanup;
-
-// todo: revisit - suppressed VLAN case due ot the knode hardcoded handle re-use
-#if 0
-    /* Add filter rule for VLAN Ethertype (VLAN adds 4 bytes, Ethertype at offset 16) */
-    sel->keys[0].off = 16;
-    pr_info("Adding AVB filter stmmac_tc_setup_cls_u32() with vlan\n");
-    ret = stmmac_tc_setup_cls_u32(priv, priv, &cls_u32);
-    if (ret)
-        goto cleanup;
-#endif
-
-cleanup:
-	kfree(gact);
-cleanup_actions:
-	kfree(actions);
-cleanup_exts:
-	kfree(exts);
-cleanup_sel:
-	kfree(sel);
-	return ret;
-}
-
-static int stmmac_del_rxp_tc(struct stmmac_priv *priv, u16 eth_type)
-{
-    struct tc_cls_u32_offload cls_u32 = { };
-    struct tc_u32_sel *sel;
-    int ret, nk = 1;
-
-    /* Allocate memory for filter selection (Ethertype) */
-    sel = kzalloc(struct_size(sel, keys, nk), GFP_KERNEL);
-    if (!sel)
-        return -ENOMEM;
-
-    /* Set up the cls_u32 filter to delete the rule for Ethertype */
-    cls_u32.command = TC_CLSU32_DELETE_KNODE;
-    cls_u32.common.chain_index = 0;
-    cls_u32.common.protocol = htons(ETH_P_ALL);
-    cls_u32.knode.sel = sel;
-    cls_u32.knode.handle = 0x123;
-
-    /* Delete filter rule for non-VLAN Ethertype */
-    sel->nkeys = nk;
-    sel->offshift = 0;
-    sel->keys[0].off = 12;
-    sel->keys[0].val = htonl(eth_type);
-    sel->keys[0].mask = ~0x0;
-
-    ret = stmmac_tc_setup_cls_u32(priv, priv, &cls_u32);
-    if (ret)
-        goto cleanup;
-
-// todo: revisit - suppressed VLAN case due ot the knode handle re-use
-#if 0
-    /* Delete filter rule for VLAN Ethertype (offset 16) */
-    sel->keys[0].off = 16;
-    ret = stmmac_tc_setup_cls_u32(priv, priv, &cls_u32);
-#endif
-
-cleanup:
-    kfree(sel);
-    return ret;
-}
-
 static int stmmac_add_rxp(struct stmmac_priv *priv, u16 eth_type)
 {
     union frp_instruction instr = { };
@@ -6504,111 +6351,6 @@ static int stmmac_avb_status_show(struct seq_file *seq, void *v)
 }
 DEFINE_SHOW_ATTRIBUTE(stmmac_avb_status);
 
-#ifdef CONFIG_NET_CLS_ACT
-
-static int stmmac_test_rxp_block_src_addr(struct stmmac_priv *priv,
-    unsigned char addr[ETH_ALEN])
-{
-	struct tc_cls_u32_offload cls_u32 = { };
-	struct tc_action **actions;
-	struct tc_u32_sel *sel;
-	struct tcf_gact *gact;
-	struct tcf_exts *exts;
-	int ret, i, nk = 1;   // only one key supported by tc_fill_entry()
-    unsigned char addr2[ETH_ALEN] = {0xDE, 0xAD, 0xFA, 0xCE, 0xBE, 0xEF};
-    u16 ethertype = htons(ETH_P_1588);
-
-	if (!tc_can_offload(priv->dev))
-		return -EOPNOTSUPP;
-	if (!priv->dma_cap.frpsel)
-		return -EOPNOTSUPP;
-
-	sel = kzalloc(struct_size(sel, keys, nk), GFP_KERNEL);
-	if (!sel)
-		return -ENOMEM;
-
-	exts = kzalloc(sizeof(*exts), GFP_KERNEL);
-	if (!exts) {
-		ret = -ENOMEM;
-		goto cleanup_sel;
-	}
-
-	actions = kcalloc(nk, sizeof(*actions), GFP_KERNEL);
-	if (!actions) {
-		ret = -ENOMEM;
-		goto cleanup_exts;
-	}
-
-	gact = kcalloc(nk, sizeof(*gact), GFP_KERNEL);
-	if (!gact) {
-		ret = -ENOMEM;
-		goto cleanup_actions;
-	}
-
-	cls_u32.command = TC_CLSU32_NEW_KNODE;
-	cls_u32.common.chain_index = 0;
-	cls_u32.common.protocol = htons(ETH_P_ALL);
-	cls_u32.knode.exts = exts;
-	cls_u32.knode.sel = sel;
-	cls_u32.knode.handle = 0x123; // used to match the entry to delete
-
-	exts->nr_actions = nk;
-	exts->actions = actions;
-	for (i = 0; i < nk; i++) {
-		actions[i] = (struct tc_action *)&gact[i];
-		gact->tcf_action = TC_ACT_SHOT;
-	}
-
-    pr_info("Keys : %d\n", nk);
-	sel->nkeys = nk;
-	sel->offshift = 0;
-#if 0    
-    // filter for source address
-	sel->keys[0].off = 6;   // Source MAC address is at offset 6
-	sel->keys[0].val = htonl(0xdeadbeef);
-	sel->keys[0].mask = ~0x0;
-#else
-    // filter for ethertype
-    sel->keys[0].off = 12;  // Ethertype is at offset 12
-    sel->keys[0].val = ethertype;
-    sel->keys[0].mask = 0x0000FFFF;
-#endif
-
-	ret = stmmac_tc_setup_cls_u32(priv, priv, &cls_u32);
-	if (ret)
-		goto cleanup_act;
-
-    pr_info("Filter Active: 0x%x\n", ethertype);
-	ret = stmmac_test_mac_loopback_src_addr(priv, addr, ethertype);
-	ret = ret ? 0 : -EINVAL; /* Shall NOT receive packet */
-    if (ret) {
-        goto cleanup_act;
-    }
-
-    pr_info("Loop back didn't recieve the packet : 0x%x\n", ethertype);
-
-    ethertype = htons(ETH_P_IP);
-    ret = stmmac_test_mac_loopback_src_addr(priv, addr2, ethertype);
-
-    pr_info("Loop back %srecieved the packet : 0x%x\n", ret == 0 ? "" : "not ",
-        ethertype);
-    
-	cls_u32.command = TC_CLSU32_DELETE_KNODE;
-	if (stmmac_tc_setup_cls_u32(priv, priv, &cls_u32))
-        pr_err("Failed to delete filter\n");
-
-cleanup_act:
-	kfree(gact);
-cleanup_actions:
-	kfree(actions);
-cleanup_exts:
-	kfree(exts);
-cleanup_sel:
-	kfree(sel);
-	return ret;
-}
-#endif
-
 static ssize_t stmmac_avb_filter_write(struct file *file, const char __user *buf,
                                        size_t count, loff_t *ppos)
 {
@@ -6633,40 +6375,9 @@ static ssize_t stmmac_avb_filter_write(struct file *file, const char __user *buf
             if (stmmac_del_rxp(priv, 0x88F7))  // Example for PTP Ethertype
                 pr_err("Failed to delete AVB filter\n");
             break;
-        case '1':
-            pr_info("Adding AVB filter in TC...\n");
-            if (stmmac_add_rxp_tc(priv, 0x88F7))  // Example for PTP Ethertype
-                pr_err("Failed to add AVB filter\n");
-            break;
-        case '2':
-            pr_info("Deleting AVB filter in TC...\n");
-            if (stmmac_del_rxp_tc(priv, 0x88F7))  // Example for PTP Ethertype
-                pr_err("Failed to delete AVB filter\n");
-            break;
         case 'T': {
 	        unsigned char addr[ETH_ALEN] = {0xde, 0xad, 0xbe, 0xef, 0x00, 0x00};
-            pr_info("Testing AVB filter with source MAC address...\n");
-
-            if (stmmac_set_mac_loopback(priv, priv->ioaddr, true)) {
-                pr_err("Failed to set MAC loopback\n");
-                break;
-            }
-
-            if (stmmac_test_mac_loopback_src_addr(priv, addr, htons(ETH_P_IP))) {
-                pr_err("Failed to test MAC loopback\n");
-                break;
-            }
-
-            pr_info("Testing AVB filter recieved loopback\n");
-            if (stmmac_test_rxp_block_src_addr(priv, addr)) {
-                pr_err("Failed to test AVB filter\n");
-                break;
-            }
-
-            if (stmmac_set_mac_loopback(priv, priv->ioaddr, false)) {
-                pr_err("Failed to clear MAC loopback\n");
-                break;
-            }
+            pr_info("... REMOVED ...\n");
             break;
         }
         case '9': { // open AVB
@@ -8241,6 +7952,21 @@ int fec_enet_set_idle_slope(void *data, unsigned int queue_id, u32 idle_slope)
 }
 EXPORT_SYMBOL(fec_enet_set_idle_slope);
 
+static void stmmamc_avb_print_hex_dump(const void *buf, size_t len)
+{
+    const unsigned char *p = buf;
+    size_t i, j;
+
+    pr_info("Hex Dump (%zu bytes):\n", len);
+    for (i = 0; i < len; i += 16) {
+        pr_info("%08zx  ", i);
+        for (j = 0; j < 16 && i + j < len; j++) {
+            pr_cont("%02x ", p[i + j]);
+        }
+        pr_cont("\n");
+    }
+}
+
 int fec_enet_rx_poll_avb(void *data)
 {
     int entry, status = 0, len = 0;
@@ -8251,6 +7977,8 @@ int fec_enet_rx_poll_avb(void *data)
     void *new_avb_buf;
     struct dma_desc *desc;
     unsigned int count;
+
+    static int rx_count = 0;
 
     rx_q = &priv->dma_avb_conf->rx_queue;
 
@@ -8295,6 +8023,11 @@ int fec_enet_rx_poll_avb(void *data)
                 entry, buf->addr, desc->des0, desc->des1, desc->des2, desc->des3);
         dma_wmb();
 		stmmac_set_rx_owner(priv, desc, true); /* give back to the DMA */
+
+        /* print the packet */
+        if (rx_count++ % 0x10 == 0) {
+            stmmamc_avb_print_hex_dump(avb_pkt_desc, len);
+        }
 
         /* dispatch the inbound packet */
         (void)priv->avb->rx(priv->avb_data, avb_pkt_desc);
