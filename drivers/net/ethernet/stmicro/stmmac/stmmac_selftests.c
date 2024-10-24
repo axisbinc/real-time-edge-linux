@@ -52,7 +52,6 @@ struct stmmac_packet_attrs {
 	int sarc;
 	u16 queue_mapping;
 	u64 timestamp;
-    u16 h_proto;
 };
 
 static u8 stmmac_test_next_id;
@@ -67,7 +66,6 @@ static struct sk_buff *stmmac_test_get_udp_skb(struct stmmac_priv *priv,
 	struct ethhdr *ehdr;
 	struct iphdr *ihdr;
 	int iplen, size;
-    u16 h_proto = attr->h_proto ? attr->h_proto : htons(ETH_P_IP);
 
 	size = attr->size + STMMAC_TEST_PKT_SIZE;
 	if (attr->vlan) {
@@ -118,12 +116,12 @@ static struct sk_buff *stmmac_test_get_udp_skb(struct stmmac_priv *priv,
 		ether_addr_copy(ehdr->h_dest, attr->dst);
 
 	if (!attr->remove_sa) {
-		ehdr->h_proto = h_proto;
+		ehdr->h_proto = htons(ETH_P_IP);
 	} else {
 		__be16 *ptr = (__be16 *)ehdr;
 
 		/* HACK */
-		ptr[3] = h_proto;
+		ptr[3] = htons(ETH_P_IP);
 	}
 
 	if (attr->vlan) {
@@ -139,12 +137,12 @@ static struct sk_buff *stmmac_test_get_udp_skb(struct stmmac_priv *priv,
 
 		proto[0] = htons(ETH_P_8021Q);
 		tag[0] = htons(attr->vlan_id_out);
-		tag[1] = h_proto;
+		tag[1] = htons(ETH_P_IP);
 		if (attr->vlan > 1) {
 			proto[0] = htons(ETH_P_8021AD);
 			tag[1] = htons(ETH_P_8021Q);
 			tag[2] = htons(attr->vlan_id_in);
-			tag[3] = h_proto;
+			tag[3] = htons(ETH_P_IP);
 		}
 	}
 
@@ -208,7 +206,7 @@ static struct sk_buff *stmmac_test_get_udp_skb(struct stmmac_priv *priv,
 		udp4_hwcsum(skb, ihdr->saddr, ihdr->daddr);
 	}
 
-	skb->protocol = h_proto;
+	skb->protocol = htons(ETH_P_IP);
 	skb->pkt_type = PACKET_HOST;
 	skb->dev = priv->dev;
 
@@ -333,7 +331,7 @@ static int __stmmac_test_loopback(struct stmmac_priv *priv,
 	tpriv->ok = false;
 	init_completion(&tpriv->comp);
 
-	tpriv->pt.type = attr->h_proto ? attr->h_proto : htons(ETH_P_IP);
+	tpriv->pt.type = htons(ETH_P_IP);
 	tpriv->pt.func = stmmac_test_loopback_validate;
 	tpriv->pt.dev = priv->dev;
 	tpriv->pt.af_packet_priv = tpriv;
@@ -366,17 +364,6 @@ cleanup:
 		dev_remove_pack(&tpriv->pt);
 	kfree(tpriv);
 	return ret;
-}
-
-int stmmac_test_mac_loopback_src_addr(struct stmmac_priv *priv,
-        unsigned char addr[ETH_ALEN], u16 h_proto)
-{
-	struct stmmac_packet_attrs attr = { };
-
-	attr.dst = priv->dev->dev_addr;
-    attr.src = addr;
-    attr.h_proto = h_proto;
-	return __stmmac_test_loopback(priv, &attr);
 }
 
 static int stmmac_test_mac_loopback(struct stmmac_priv *priv)

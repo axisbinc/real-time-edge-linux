@@ -33,7 +33,6 @@ static struct stmmac_tc_entry *tc_find_entry(struct stmmac_priv *priv,
 	u32 loc = cls->knode.handle;
 	int i;
 
-	pr_info("%s\n", __func__);
 	for (i = 0; i < priv->tc_entries_max; i++) {
 		entry = &priv->tc_entries[i];
 		if (!entry->in_use && !first && free)
@@ -42,17 +41,14 @@ static struct stmmac_tc_entry *tc_find_entry(struct stmmac_priv *priv,
 			dup = entry;
 	}
 
-	if (dup) {
-	    pr_info("Found the matching entry\n");
+	if (dup)
 		return dup;
-    }
 	if (first) {
 		first->handle = loc;
 		first->in_use = true;
 
 		/* Reset HW values */
 		memset(&first->val, 0, sizeof(first->val));
-	    pr_info("Found a free entry\n");
 	}
 
 	return first;
@@ -67,7 +63,6 @@ static int tc_fill_actions(struct stmmac_tc_entry *entry,
 	struct tcf_exts *exts;
 	int i;
 
-	pr_info("%s\n", __func__);
 	exts = cls->knode.exts;
 	if (!tcf_exts_has_actions(exts))
 		return -EINVAL;
@@ -78,14 +73,11 @@ static int tc_fill_actions(struct stmmac_tc_entry *entry,
 		/* Accept */
 		if (is_tcf_gact_ok(act)) {
 			action_entry->val.af = 1;
-            action_entry->val.dma_ch_no = 0x10;
-            pr_info("Adding AVB filter af:1, ch_no:4\n");
 			break;
 		}
 		/* Drop */
 		if (is_tcf_gact_shot(act)) {
 			action_entry->val.rf = 1;
-            pr_info("Adding AVB filter rf:1\n");
 			break;
 		}
 
@@ -105,7 +97,6 @@ static int tc_fill_entry(struct stmmac_priv *priv,
 	u32 prio = cls->common.prio << 16;
 	int ret;
 
-	pr_info("%s\n", __func__);
 	/* Only 1 match per entry */
 	if (sel->nkeys <= 0 || sel->nkeys > 1)
 		return -EINVAL;
@@ -157,7 +148,6 @@ static int tc_fill_entry(struct stmmac_priv *priv,
 		frag->prio = prio;
 		frag->is_frag = true;
 	} else {
-        pr_info("Adding AVB filter : No fragments\n");
 		entry->frag_ptr = NULL;
 		entry->val.match_en = mask;
 		entry->val.match_data = data;
@@ -183,12 +173,9 @@ static void tc_unfill_entry(struct stmmac_priv *priv,
 {
 	struct stmmac_tc_entry *entry;
 
-	pr_info("%s\n", __func__);
 	entry = tc_find_entry(priv, cls, false);
-	if (!entry) {
-	    pr_info("%s entry not found\n", __func__);
+	if (!entry)
 		return;
-    }
 
 	entry->in_use = false;
 	if (entry->frag_ptr) {
@@ -203,13 +190,10 @@ static int tc_config_knode(struct stmmac_priv *priv,
 {
 	int ret;
 
-	pr_info("%s\n", __func__);
-
 	ret = tc_fill_entry(priv, cls);
 	if (ret)
 		return ret;
-    pr_info("Adding AVB filter stmmac_rxp_config() %d entries\n",
-            priv->tc_entries_max);
+
 	ret = stmmac_rxp_config(priv, priv->hw->pcsr, priv->tc_entries,
 			priv->tc_entries_max);
 	if (ret)
@@ -228,8 +212,6 @@ static int tc_delete_knode(struct stmmac_priv *priv,
 	/* Set entry and fragments as not used */
 	tc_unfill_entry(priv, cls);
 
-    pr_info("Adding AVB filter stmmac_rxp_config() %d entries\n",
-            priv->tc_entries_max);
 	return stmmac_rxp_config(priv, priv->hw->pcsr, priv->tc_entries,
 				 priv->tc_entries_max);
 }
