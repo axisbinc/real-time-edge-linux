@@ -35,7 +35,7 @@
 #include <linux/of_net.h>
 
 #include "fec.h"
-
+#undef CONFIG_AVB_SUPPORT
 /* FEC 1588 register bits */
 #define FEC_T_CTRL_SLAVE                0x00002000
 #define FEC_T_CTRL_CAPTURE              0x00000800
