@@ -202,10 +202,10 @@ struct stmmac_dma_conf {
 };
 
 #ifdef CONFIG_AVB_SUPPORT
-
 struct stmmac_avb_rx_buffer {
 	void *vaddr;
-	dma_addr_t addr;
+    __u32 offset; /* Offset from vaddr for rx data */
+	dma_addr_t dma_addr; /* DMA address for vaddr + offset */
 };
 
 struct stmmac_avb_rx_queue {
