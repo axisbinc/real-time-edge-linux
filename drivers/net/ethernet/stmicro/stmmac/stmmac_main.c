@@ -53,6 +53,22 @@
 #ifdef CONFIG_AVB_SUPPORT
 #include <linux/fec.h>
 #include "stmmac_frp.h"
+
+static void stmmmac_avb_print_hex_dump(const void *buf, size_t len)
+{
+    const unsigned char *p = buf;
+    size_t i, j;
+
+    pr_info("Hex Dump (%zu bytes):\n", len);
+    for (i = 0; i < len; i += 16) {
+        pr_info("%08zx  ", i);
+        for (j = 0; j < 16 && i + j < len; j++) {
+            pr_cont("%02x ", p[i + j]);
+        }
+        pr_cont("\n");
+    }
+}
+
 #endif
 
 /* As long as the interface is active, we keep the timestamping counter enabled
@@ -5188,7 +5204,7 @@ read_again:
 		xsk_buff_dma_sync_for_cpu(buf->xdp, rx_q->xsk_pool);
 
 		res = STMMAC_XDP_PASS;
-#ifdef CONFIG_AVB_SUPPORT1
+#ifdef CONFIG_AVB_SUPPORT
 		if (stmmac_avb_enabled && priv->avb_enabled) {
 			int avb_res;
 			pr_info("rx_zc buf_lens = %d\n", buf1_len);
@@ -5392,7 +5408,7 @@ read_again:
 
 			pre_len = xdp.data_end - xdp.data_hard_start -
 				  buf->page_offset;
-    #ifdef CONFIG_AVB_SUPPORT1
+    #ifdef CONFIG_AVB_SUPPORT
 			if (stmmac_avb_enabled && priv->avb_enabled) {
 				int avb_res;
 				avb_res = priv->avb->rx_avb(priv->avb_data, &xdp,
@@ -8093,6 +8109,8 @@ EXPORT_SYMBOL_GPL(stmmac_resume);
 
 #ifdef CONFIG_AVB_SUPPORT
 
+#define DEFAULT_AVB_BUFSIZE 2048
+
 static int stmmac_avb_init_dma_engine(struct stmmac_priv *priv)
 {
     u32 avb_chan = 4; // todo: priv->plat->avb_dma_cfg->avb_dma_chan;
@@ -8105,6 +8123,9 @@ static int stmmac_avb_init_dma_engine(struct stmmac_priv *priv)
 
 	stmmac_set_dma_bfsize(priv, priv->ioaddr, priv->dma_conf.dma_buf_sz, avb_chan);
 
+     /* no split header - aiming for one frame per packet */
+	stmmac_enable_sph(priv, priv->ioaddr, false, avb_chan);
+
     rx_q = &priv->dma_avb_conf->rx_queue;
     stmmac_init_rx_chan(priv, priv->ioaddr, priv->plat->dma_cfg,
                         rx_q->dma_rx_phy, avb_chan);
@@ -8116,9 +8137,9 @@ static int stmmac_avb_init_dma_engine(struct stmmac_priv *priv)
         struct stmmac_avb_rx_buffer *buf = &rx_q->buf_pool[i];
         struct dma_desc *desc = &rx_q->dma_rx[i];
 
-		stmmac_set_desc_addr(priv, desc, buf->addr);
+		stmmac_set_desc_addr(priv, desc, buf->dma_addr);
         pr_info("descriptor[%d] addr: 0x%x: 0x%x 0x%x | 0x%x 0x%x\n",
-                i, buf->addr, desc->des0, desc->des1, desc->des2, desc->des3);
+                i, buf->dma_addr, desc->des0, desc->des1, desc->des2, desc->des3);
         dma_wmb();
 		stmmac_set_rx_owner(priv, desc, true); /* DMA owns this descriptor */
     }
@@ -8153,7 +8174,8 @@ static int stmmac_avb_alloc_rx_desc(struct stmmac_priv *priv,
 	}
 
 	/* Allocate rx buffers */
-	pr_info("[%d] %s buffers: %d\n", __LINE__, __func__, dma_conf->dma_rx_size);
+	pr_info("[%d] %s buffers: %d, rxoffset: %d\n", __LINE__, __func__,
+            dma_conf->dma_rx_size, stmmac_rx_offset(priv));
 	for (int i = 0; i < dma_conf->dma_rx_size; i++) {
         struct stmmac_avb_rx_buffer *buf;
 		struct avb_rx_desc *avb_desc;
@@ -8165,7 +8187,8 @@ static int stmmac_avb_alloc_rx_desc(struct stmmac_priv *priv,
 			goto err_alloc;
 		}
         avb_desc = (struct avb_rx_desc *)buf->vaddr;
-        buf->addr = avb_desc->dma_addr;
+        buf->dma_addr = avb_desc->dma_addr;
+        buf->offset = avb_desc->common.offset;
 		avb_desc->common.len = 0;
 		avb_desc->queue_id = 0;     /* todo: irrelevant? */
         //pr_info("descriptor[%d] vaddr: %p %x\n", i, buf->vaddr, buf->addr);
@@ -8211,7 +8234,7 @@ stmmac_avb_init_dma_desc(struct stmmac_priv *priv)
 		return ERR_PTR(ENOMEM);
 	}
 
-	dma_conf->dma_buf_sz = DEFAULT_BUFSIZE;
+	dma_conf->dma_buf_sz = DEFAULT_AVB_BUFSIZE;
 	dma_conf->dma_tx_size = DMA_DEFAULT_TX_SIZE;
 	dma_conf->dma_rx_size = DMA_DEFAULT_RX_SIZE;
     // todo: remove, reduced for debugging
@@ -8272,8 +8295,8 @@ int fec_enet_rx_poll_avb(void *data)
         rx_q->cur_rx = STMMAC_GET_ENTRY(rx_q->cur_rx,
                 priv->dma_avb_conf->dma_rx_size);
 
-        prefetch(buf->vaddr);
-		dma_sync_single_for_cpu(priv->device, buf->addr, len, DMA_FROM_DEVICE);
+        prefetch(buf->vaddr + buf->offset);
+		dma_sync_single_for_cpu(priv->device, buf->dma_addr, len, DMA_FROM_DEVICE);
 
         avb_pkt_desc = (struct avb_rx_desc*)buf->vaddr;
         avb_pkt_desc->common.len = len;
@@ -8289,12 +8312,17 @@ int fec_enet_rx_poll_avb(void *data)
 
         /* install the new rx buffer in the dma descriptor */
         buf->vaddr = new_avb_buf;
-        buf->addr = ((struct avb_rx_desc*)new_avb_buf)->dma_addr;
-		stmmac_set_desc_addr(priv, desc, buf->addr);
+        buf->dma_addr = ((struct avb_rx_desc*)new_avb_buf)->dma_addr;
+        buf->offset = ((struct avb_rx_desc*)new_avb_buf)->common.offset;
+		stmmac_set_desc_addr(priv, desc, buf->dma_addr);
         pr_info("descriptor[%d] addr: %p: 0x%x 0x%x | 0x%x 0x%x\n",
-                entry, buf->addr, desc->des0, desc->des1, desc->des2, desc->des3);
+                entry, buf->dma_addr, desc->des0, desc->des1, desc->des2, desc->des3);
         dma_wmb();
 		stmmac_set_rx_owner(priv, desc, true); /* give back to the DMA */
+
+        rx_q->rx_count_frames++;
+        stmmmac_avb_print_hex_dump((void*)avb_pkt_desc + avb_pkt_desc->common.offset,
+                len);
 
         /* dispatch the inbound packet */
         (void)priv->avb->rx(priv->avb_data, avb_pkt_desc);
