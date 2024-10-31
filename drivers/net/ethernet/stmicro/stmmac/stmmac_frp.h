@@ -26,7 +26,7 @@ union frp_instruction {
 } __attribute__((packed));
 
 void stmmac_frp_set_ethertype_match(union frp_instruction *instr,
-        uint16_t ethertype, uint8_t dma_channel);
+        uint16_t ethertype, bool is_vlan, uint8_t dma_channel);
 void stmmac_frp_accept_all(union frp_instruction *instr);
 
 int dwmac5_rxp_disable(void __iomem *ioaddr);
