@@ -6100,29 +6100,48 @@ static int stmmac_setup_tc(struct net_device *ndev, enum tc_setup_type type,
 	}
 }
 
-static int stmmac_add_rxp(struct stmmac_priv *priv, u16 eth_type)
+static
+int stmmac_setup_rxp(struct stmmac_priv *priv, u16 eth_types[], u16 count)
 {
     union frp_instruction instr = { };
-    int ret;
+    int ret = 0;
     uint32_t config = 0;
+    int entry_index = 0;
 
-    stmmac_frp_set_ethertype_match(&instr, eth_type, 4);
-
+    // Disable the RXP for configuration
     dwmac5_disable_rx(priv->hw->pcsr, &config);
     dwmac5_rxp_disable(priv->hw->pcsr);
 
-    ret = dwmac5_frp_update_single_entry(priv->hw->pcsr, &instr, 0);
-    stmmac_frp_accept_all(&instr);
-    ret |= dwmac5_frp_update_single_entry(priv->hw->pcsr, &instr, 1);
-    dwmac5_frp_update_num_entries(priv->hw->pcsr, 2);
+    // Iterate over each Ethertype in the array
+    for (int i = 0; i < count; i++) {
+        u16 eth_type = eth_types[i];
 
+        // Set up FRP instruction for standard Ethernet header (non-VLAN)
+        stmmac_frp_set_ethertype_match(&instr, eth_type, false, 4);
+        ret |= dwmac5_frp_update_single_entry(priv->hw->pcsr, &instr,
+                entry_index++);
+        
+        // Set up FRP instruction for VLAN-tagged Ethernet header
+        stmmac_frp_set_ethertype_match(&instr, eth_type, true, 4);
+        ret |= dwmac5_frp_update_single_entry(priv->hw->pcsr, &instr,
+                entry_index++);
+    }
+
+    // Add a final entry to accept all remaining packets
+    stmmac_frp_accept_all(&instr);
+    ret |= dwmac5_frp_update_single_entry(priv->hw->pcsr, &instr, entry_index);
+
+    // Update the number of FRP entries
+    dwmac5_frp_update_num_entries(priv->hw->pcsr, entry_index + 1);
+
+    // Re-enable RXP
     dwmac5_rxp_enable(priv->hw->pcsr);
     dwmac5_restore_rx(priv->hw->pcsr, config);
 
     return ret;
 }
 
-static int stmmac_del_rxp(struct stmmac_priv *priv, u16 eth_type)
+static int stmmac_clear_rxp(struct stmmac_priv *priv)
 {
     uint32_t config = 0;
     dwmac5_disable_rx(priv->hw->pcsr, &config);
@@ -6383,12 +6402,14 @@ static ssize_t stmmac_avb_filter_write(struct file *file, const char __user *buf
             break;
         case 'Y':
             pr_info("Adding AVB filter...\n");
-            if (stmmac_add_rxp(priv, 0x88F7))  // Example for PTP Ethertype
+            u16 eth_types[] = {ETH_P_1588, ETH_P_TSN, ETH_P_MVRP, 0x88F6, 0x22ea};  // avb ether types
+
+            if (stmmac_setup_rxp(priv, eth_types, ARRAY_SIZE(eth_types)))
                 pr_err("Failed to add AVB filter\n");
             break;
         case 'N':
             pr_info("Deleting AVB filter...\n");
-            if (stmmac_del_rxp(priv, 0x88F7))  // Example for PTP Ethertype
+            if (stmmac_clear_rxp(priv))
                 pr_err("Failed to delete AVB filter\n");
             break;
         case 'T': {
