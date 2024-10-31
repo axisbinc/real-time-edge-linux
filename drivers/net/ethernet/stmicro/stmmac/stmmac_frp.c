@@ -1,9 +1,9 @@
 #include "stmmac_frp.h"
 #include <asm/byteorder.h>
 
-// Function to set up an Ethertype match instruction for the FRP
+// Function to set up an Ethertype match instruction for the FRP, with VLAN support
 void stmmac_frp_set_ethertype_match(union frp_instruction *instr,
-        uint16_t ethertype, uint8_t dma_channel)
+        uint16_t ethertype, bool is_vlan, uint8_t dma_channel)
 {
     if (!instr) {
         return;  // Ensure the provided pointer is valid
@@ -17,8 +17,8 @@ void stmmac_frp_set_ethertype_match(union frp_instruction *instr,
     // Enable all 16 bits of the Ethertype for comparison (matching all bits)
     instr->fields.match_en = 0xFFFF;  // Enable mask for the 16 lower bits
 
-    // Set the frame offset to 12 bytes (where Ethertype is located in the Ethernet frame)
-    instr->fields.frame_offset = 3;  // 3 indicates byte offset 12 (in 4-byte chunks)
+    // Set the frame offset based on whether VLAN tagging is expected
+    instr->fields.frame_offset = is_vlan ? 4 : 3;  // Offset is 16 bytes for VLAN-tagged frames, 12 bytes otherwise
 
     // Accept the frame if the Ethertype matches
     instr->fields.af = 1;  // Accept frame
