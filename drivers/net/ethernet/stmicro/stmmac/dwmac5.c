@@ -366,12 +366,57 @@ void dwmac5_rxp_enable(void __iomem *ioaddr)
 	writel(val, ioaddr + MTL_OPERATION_MODE);
 }
 
+#include "dwmac4_dma.h"
+
+static void _dwmac4_dump_dma_regs(void __iomem *ioaddr, u32 channel)
+{
+    pr_info("    DMA_CHAN_CONTROL: 0x%x\n",
+        readl(ioaddr + DMA_CHAN_CONTROL(channel)));
+    pr_info("    DMA_CHAN_TX_CONTROL: 0x%x\n",
+        readl(ioaddr + DMA_CHAN_TX_CONTROL(channel)));
+    pr_info("    DMA_CHAN_RX_CONTROL: 0x%x\n",
+        readl(ioaddr + DMA_CHAN_RX_CONTROL(channel)));
+    pr_info("    DMA_CHAN_TX_BASE_ADDR: 0x%x\n",
+        readl(ioaddr + DMA_CHAN_TX_BASE_ADDR(channel)));
+    pr_info("    DMA_CHAN_RX_BASE_ADDR: 0x%x\n",
+        readl(ioaddr + DMA_CHAN_RX_BASE_ADDR(channel)));
+    pr_info("    DMA_CHAN_TX_END_ADDR: 0x%x\n",
+        readl(ioaddr + DMA_CHAN_TX_END_ADDR(channel)));
+    pr_info("    DMA_CHAN_RX_END_ADDR: 0x%x\n",
+        readl(ioaddr + DMA_CHAN_RX_END_ADDR(channel)));
+    pr_info("    DMA_CHAN_TX_RING_LEN: 0x%x\n",
+        readl(ioaddr + DMA_CHAN_TX_RING_LEN(channel)));
+    pr_info("    DMA_CHAN_RX_RING_LEN: 0x%x\n",
+        readl(ioaddr + DMA_CHAN_RX_RING_LEN(channel)));
+    pr_info("    DMA_CHAN_INTR_ENA: 0x%x\n",
+        readl(ioaddr + DMA_CHAN_INTR_ENA(channel)));
+    pr_info("    DMA_CHAN_RX_WATCHDOG: 0x%x\n",
+        readl(ioaddr + DMA_CHAN_RX_WATCHDOG(channel)));
+    pr_info("    DMA_CHAN_SLOT_CTRL_STATUS: 0x%x\n",
+        readl(ioaddr + DMA_CHAN_SLOT_CTRL_STATUS(channel)));
+    pr_info("    DMA_CHAN_CUR_TX_DESC: 0x%x\n",
+        readl(ioaddr + DMA_CHAN_CUR_TX_DESC(channel)));
+    pr_info("    DMA_CHAN_CUR_RX_DESC: 0x%x\n",
+        readl(ioaddr + DMA_CHAN_CUR_RX_DESC(channel)));
+    pr_info("    DMA_CHAN_CUR_TX_BUF_ADDR: 0x%x\n",
+        readl(ioaddr + DMA_CHAN_CUR_TX_BUF_ADDR(channel)));
+    pr_info("    DMA_CHAN_CUR_RX_BUF_ADDR: 0x%x\n",
+        readl(ioaddr + DMA_CHAN_CUR_RX_BUF_ADDR(channel)));
+    pr_info("    DMA_CHAN_STATUS: 0x%x\n",
+        readl(ioaddr + DMA_CHAN_STATUS(channel)));
+}
+
 void dwmac5_frp_dump_stats(void __iomem *ioaddr)
 {
     u32 val;
 
 	val = readl(ioaddr + GMAC_CONFIG);
     pr_info("GMAC_CONFIG: 0x%x\n", val);
+
+    val = readl(ioaddr + MTL_RXQ_DMA_MAP0);
+    pr_info("MTL_RXQ_DMA_MAP0: 0x%x\n", val);
+    val = readl(ioaddr + MTL_RXQ_DMA_MAP1);
+    pr_info("MTL_RXQ_DMA_MAP1: 0x%x\n", val);
 
     val = readl(ioaddr + MTL_RXP_CONTROL_STATUS);
     pr_info("MTL_RXP_CONTROL_STATUS: 0x%x\n", val);
@@ -391,6 +436,23 @@ void dwmac5_frp_dump_stats(void __iomem *ioaddr)
     pr_info("DMA_CH3_RXP_ACCEPT_CNT: 0x%x\n", val);
     val = readl(ioaddr + DMA_CH4_RXP_ACCEPT_CNT);
     pr_info("DMA_CH4_RXP_ACCEPT_CNT: 0x%x\n", val);
+
+#define DWC_EQOS_NUM_DMA_RX_CH 5
+#define DWC_EQOS_NUM_DMA_TX_CH 5
+    for (int i = 0; i < 5; i++) {
+        pr_info("DMA_CHANNEL(%d) Registers\n", i);
+        _dwmac4_dump_dma_regs(ioaddr, i);
+        val = readl(ioaddr + MTL_CHAN_TX_OP_MODE(i));
+        pr_info("    MTL_CHAN_TX_OP_MODE(%d): 0x%x\n", i, val);
+        // print MTL_CHAN_TX_DEBUG
+        //val = readl(ioaddr + DMA_CHAN_CONTROL(i));
+        //pr_info("DMA_CHAN_CONTROL(%d): 0x%x\n", i, val);
+        //val = readl(ioaddr + DMA_CHAN_TX_CONTROL(i));
+        //pr_info("DMA_CHAN_TX_CONTROL(%d): 0x%x\n", i, val);
+        val = readl(ioaddr + MTL_CHAN_TX_DEBUG(i));
+        pr_info("    MTL_CHAN_TX_DEBUG(%d): 0x%x\n", i, val);
+    }
+
 
     return;
 }

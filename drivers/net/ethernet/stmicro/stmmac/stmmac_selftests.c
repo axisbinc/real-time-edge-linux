@@ -56,7 +56,7 @@ struct stmmac_packet_attrs {
 
 static u8 stmmac_test_next_id;
 
-static struct sk_buff *stmmac_test_get_udp_skb(struct stmmac_priv *priv,
+struct sk_buff *stmmac_test_get_udp_skb(struct stmmac_priv *priv,
 					       struct stmmac_packet_attrs *attr)
 {
 	struct sk_buff *skb = NULL;
@@ -366,7 +366,7 @@ cleanup:
 	return ret;
 }
 
-static int stmmac_test_mac_loopback(struct stmmac_priv *priv)
+int stmmac_test_mac_loopback(struct stmmac_priv *priv)
 {
 	struct stmmac_packet_attrs attr = { };
 
