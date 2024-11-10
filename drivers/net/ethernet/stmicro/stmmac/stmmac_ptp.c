@@ -338,7 +338,7 @@ void stmmac_ptp_unregister(struct stmmac_priv *priv)
 	mutex_destroy(&priv->aux_ts_lock);
 }
 
-#ifdef CONFIG_AVB_SUPPORT
+#ifdef CONFIG_STMMAC_GENAVB
 /**
  * fec_ptp_read
  * @data: fec private context ptr
@@ -405,4 +405,4 @@ int fec_ptp_tc_reload(void *data, u8 id, u32 ts)
 	return 0;
 }
 EXPORT_SYMBOL(fec_ptp_tc_reload);
-#endif /* CONFIG_AVB_SUPPORT */
+#endif /* CONFIG_STMMAC_GENAVB */
