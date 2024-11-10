@@ -1,6 +1,6 @@
 #include "stmmac.h"
+#ifdef CONFIG_STMMAC_GENAVB
 #include "stmmac_genavb.h"
-
 #define STMMAC_AVB_TX_ROOT_CAUSE_TESTS 0
 
 static bool stmmac_avb_test_in_progress = false;
@@ -359,3 +359,4 @@ error:
     stmmac_avb_test_in_progress = false;
     return ret;
 }
+#endif  // CONFIG_STMMAC_AVB

@@ -25,6 +25,9 @@
 #include <uapi/linux/bpf.h>
 #include <linux/fec.h>
 
+/* STMMAC adapter for GenAVB */
+#define CONFIG_STMMAC_GENAVB
+
 struct stmmac_resources {
 	void __iomem *addr;
 	u8 mac[ETH_ALEN];
@@ -42,7 +45,9 @@ enum stmmac_txbuf_type {
 	STMMAC_TXBUF_T_XDP_TX,
 	STMMAC_TXBUF_T_XDP_NDO,
 	STMMAC_TXBUF_T_XSK_TX,
+#ifdef CONFIG_STMMAC_GENAVB
     STMMAC_TXBUF_T_AVB_POOL,
+#endif
 };
 
 struct stmmac_tx_info {
@@ -204,7 +209,7 @@ struct stmmac_dma_conf {
 	unsigned int dma_tx_size;
 };
 
-#ifdef CONFIG_AVB_SUPPORT
+#ifdef CONFIG_STMMAC_GENAVB
 struct stmmac_avb_buffer {
 	void *vaddr;
     __u32 offset; /* Offset from vaddr for rx data */
@@ -274,7 +279,7 @@ struct stmmac_priv {
 	int (*hwif_quirks)(struct stmmac_priv *priv);
 	struct mutex lock;
 
-#ifdef CONFIG_AVB_SUPPORT
+#ifdef CONFIG_STMMAC_GENAVB
 	const struct avb_ops *avb;
 	void *avb_data;
 	unsigned int avb_enabled;
