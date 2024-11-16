@@ -591,7 +591,7 @@ static void stmmac_get_tx_hwtstamp(struct stmmac_priv *priv,
 		memset(&shhwtstamp, 0, sizeof(struct skb_shared_hwtstamps));
 		shhwtstamp.hwtstamp = ns_to_ktime(ns);
 
-		netdev_info(priv->dev, "get valid TX hw timestamp %llu\n", ns);
+		netdev_dbg(priv->dev, "get valid TX hw timestamp %llu\n", ns);
 		/* pass tstamp to stack */
 		skb_tstamp_tx(skb, &shhwtstamp);
 	}
@@ -612,8 +612,7 @@ u64 stmmac_get_rx_hwtstamp(struct stmmac_priv *priv, struct dma_desc *p,
 		stmmac_get_timestamp(priv, desc, priv->adv_ts, &ns);
 
 		ns -= priv->plat->cdc_error_adj;
-        // todo: why is this commented out? there are excessive prints from here
-		//netdev_info(priv->dev, "get valid RX hw timestamp %llu\n", ns);
+		netdev_dbg(priv->dev, "get valid RX hw timestamp %llu\n", ns);
 	}
 	return ns;
 }
@@ -644,7 +643,7 @@ static void stmmac_fill_rx_hwtstamp(struct stmmac_priv *priv, struct dma_desc *p
 		memset(shhwtstamp, 0, sizeof(struct skb_shared_hwtstamps));
 		shhwtstamp->hwtstamp = ns_to_ktime(ns);
 	} else  {
-		netdev_info(priv->dev, "cannot get RX hw timestamp\n");
+		netdev_dbg(priv->dev, "cannot get RX hw timestamp\n");
 	}
 }
 
@@ -8010,7 +8009,7 @@ static void stmmac_avb_free_dma_desc(struct stmmac_priv *priv,
         rx_q->buf_pool = NULL;
     }
 
-    /* todo: free any pending tx */
+    /* free any pending tx */
     if (tx_q->dma_tx) {
         dma_free_coherent(priv->device,
                           dma_conf->dma_tx_size * sizeof(struct dma_desc),
@@ -8084,6 +8083,7 @@ int fec_enet_rx_poll_avb(void *data)
     void *new_avb_buf;
     struct dma_desc *desc;
     unsigned int count;
+	unsigned int rc = 0;
 
     rx_q = &priv->dma_avb_conf->rx_queue;
 
@@ -8112,7 +8112,9 @@ int fec_enet_rx_poll_avb(void *data)
         avb_pkt_desc = (struct avb_rx_desc*)buf->vaddr;
         avb_pkt_desc->common.len = len;
 
-        /* todo: timestamp */
+        /* get timestamp from next descriptor */
+        avb_pkt_desc->common.ts = stmmac_get_rx_hwtstamp(priv, desc,
+                &rx_q->dma_rx[rx_q->cur_rx]);
 
         /* replace the rx_buffer */
         new_avb_buf = priv->avb->alloc(priv->avb_data);
@@ -8136,10 +8138,10 @@ int fec_enet_rx_poll_avb(void *data)
                     (void*)avb_pkt_desc + avb_pkt_desc->common.offset, len, "RX avb poll");
 
         /* dispatch the inbound packet */
-        (void)priv->avb->rx(priv->avb_data, avb_pkt_desc);
+        rc |= priv->avb->rx(priv->avb_data, avb_pkt_desc);
     }
 
-	return 0;
+	return rc;
 }
 EXPORT_SYMBOL(fec_enet_rx_poll_avb);
 
