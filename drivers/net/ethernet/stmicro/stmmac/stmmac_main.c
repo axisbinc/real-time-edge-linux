@@ -8100,11 +8100,20 @@ int fec_enet_rx_poll_avb(void *data)
         len = stmmac_rx_buf1_len(priv, desc, status, 0);
 
         if (stmmac_avb_verbose)
-	        pr_info("fec_enet_rx_poll_avb [%d, %d] : 0x%x 0x%x | 0x%x 0x%x\n",
-                    entry, len, desc->des0, desc->des1, desc->des2, desc->des3);
+	        pr_info("fec_enet_rx_poll_avb [%d, %d, 0x%x] "
+                    ": 0x%x 0x%x | 0x%x 0x%x\n",
+                    entry, len, status,
+                    desc->des0, desc->des1, desc->des2, desc->des3);
 
         rx_q->cur_rx = STMMAC_GET_ENTRY(rx_q->cur_rx,
                 priv->dma_avb_conf->dma_rx_size);
+
+        if (unlikely(status == discard_frame)) {
+            // recycle the frame
+            dma_wmb();
+            stmmac_set_rx_owner(priv, desc, true); /* give back to the DMA */
+            continue;
+        }
 
         prefetch(buf->vaddr + buf->offset);
 		dma_sync_single_for_cpu(priv->device, buf->dma_addr, len, DMA_FROM_DEVICE);
@@ -8113,6 +8122,7 @@ int fec_enet_rx_poll_avb(void *data)
         avb_pkt_desc->common.len = len;
 
         /* get timestamp from next descriptor */
+        prefetch(&rx_q->dma_rx[rx_q->cur_rx]);
         avb_pkt_desc->common.ts = stmmac_get_rx_hwtstamp(priv, desc,
                 &rx_q->dma_rx[rx_q->cur_rx]);
 
