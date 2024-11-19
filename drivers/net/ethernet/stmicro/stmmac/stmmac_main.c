@@ -168,7 +168,11 @@ static struct dentry *stmmac_fs_dir;
 // to enable `echo Y > /sys/kernel/debug/stmmaceth/avb_enabled`
 // and dsiable `echo N > /sys/kernel/debug/stmmaceth/avb_enabled`
 static bool stmmac_avb_enabled = false;
-static bool stmmac_avb_verbose = false;
+
+#define STMMAC_AVB_VERBOSE_RX   0x1
+#define STMMAC_AVB_VERBOSE_TX   0x2
+#define STMMAC_AVB_VERBOSE_ALL  0x3
+static u32 stmmac_avb_verbose = 0;
 #endif
 #ifdef CONFIG_STMMAC_GENAVB
 static struct stmmac_avb_dma_conf* stmmac_avb_init_dma_desc(struct stmmac_priv *priv);
@@ -553,6 +557,23 @@ bool stmmac_eee_init(struct stmmac_priv *priv)
 	mutex_unlock(&priv->lock);
 	netdev_info(priv->dev, "Energy-Efficient Ethernet initialized\n");
 	return true;
+}
+
+static inline 
+u64 __stmmac_get_tx_hwstamp(struct stmmac_priv *priv, struct dma_desc *p)
+{
+    u64 ns = 0;
+
+    if (priv->hwts_tx_en) {
+        if (stmmac_get_tx_timestamp_status(priv, p)) {
+            stmmac_get_timestamp(priv, p, priv->adv_ts, &ns);
+            ns -= priv->plat->cdc_error_adj;
+        } else if (!stmmac_get_mac_tx_timestamp(priv, priv->hw, &ns)) {
+            ns = 0;
+        }
+    }
+
+    return ns;
 }
 
 /* stmmac_get_tx_hwtstamp - get HW TX timestamps
@@ -6362,8 +6383,7 @@ static int stmmac_avb_status_show(struct seq_file *seq, void *v)
 	seq_printf(seq, "==============================\n");
 	seq_printf(seq, "\tAVB Enabled: %s\n",
 		   stmmac_avb_enabled ? "Y" : "N");
-    seq_printf(seq, "\tAVB Logging: %s\n",
-           stmmac_avb_verbose ? "Y" : "N");
+	seq_printf(seq, "\tAVB Logging: %d\n", stmmac_avb_verbose);
 	seq_printf(seq, "\tGenAVB registered: %s\n",
 		   priv->avb_enabled ? "Y" : "N");
 	return 0;
@@ -8099,7 +8119,7 @@ int fec_enet_rx_poll_avb(void *data)
 
         len = stmmac_rx_buf1_len(priv, desc, status, 0);
 
-        if (stmmac_avb_verbose)
+        if (stmmac_avb_verbose & STMMAC_AVB_VERBOSE_RX)
 	        pr_info("fec_enet_rx_poll_avb [%d, %d, 0x%x] "
                     ": 0x%x 0x%x | 0x%x 0x%x\n",
                     entry, len, status,
@@ -8143,7 +8163,8 @@ int fec_enet_rx_poll_avb(void *data)
 
         rx_q->rx_count_frames++;
         rx_q->rx_count_bytes += len;
-        if (stmmac_avb_verbose || stmmac_avb_test_is_in_progress())
+        if ((stmmac_avb_verbose & STMMAC_AVB_VERBOSE_RX)
+                || stmmac_avb_test_is_in_progress())
             stmmac_avb_print_hex_dump(
                     (void*)avb_pkt_desc + avb_pkt_desc->common.offset, len, "RX avb poll");
 
@@ -8223,6 +8244,12 @@ int fec_enet_start_xmit_avb(void *data, struct avb_tx_desc *avb_buff)
     tx_q->buf_pool[entry].offset = avb_buff->common.offset;
     stmmac_set_desc_addr(priv, tx_desc, avb_buff->dma_addr);
 
+    if (avb_buff->common.flags & AVB_TX_FLAG_HW_TS) {
+        stmmac_enable_tx_timestamp(priv, tx_desc);
+    }
+
+    /* todo: flags */
+
     /* Prepare the descriptor and set the own bit too */
     stmmac_prepare_tx_desc(priv, tx_desc, 1 /* first */, avb_buff->common.len,
             false /* no header checksum */, priv->mode,
@@ -8236,7 +8263,7 @@ int fec_enet_start_xmit_avb(void *data, struct avb_tx_desc *avb_buff)
     wmb();
 
     tx_q->tx_tail_addr = tx_q->dma_tx_phy + (entry * sizeof(struct dma_desc));
-    if (stmmac_avb_verbose)
+    if (stmmac_avb_verbose & STMMAC_AVB_VERBOSE_TX)
         pr_info("%s [%d] tx_tail_addr: %llx, base_addr: %llx\n", __func__, entry,
                 tx_q->tx_tail_addr, tx_q->dma_tx_phy);
     stmmac_set_tx_tail_ptr(priv, priv->ioaddr, tx_q->tx_tail_addr, tx_q->avb_chan);
@@ -8256,12 +8283,14 @@ int fec_enet_tx_avb(void *data)
     struct stmmac_priv* priv = data;
     struct stmmac_avb_tx_queue *tx_q = &priv->dma_avb_conf->tx_queue;
 	unsigned int entry = tx_q->dirty_tx;
+	int rc = 0;
 
     /* try to clean all TX complete frames */
     while (entry != tx_q->cur_tx) {
         struct dma_desc *tx_desc;
         int status;
         struct avb_tx_desc *avb_buff;
+        u64 ns = 0;
 
         tx_desc = &tx_q->dma_tx[entry];
         status = stmmac_tx_status(priv, &priv->dev->stats, &priv->xstats,
@@ -8272,21 +8301,36 @@ int fec_enet_tx_avb(void *data)
         dma_rmb();
 
         avb_buff = tx_q->buf_pool[entry].vaddr;
-        if (stmmac_avb_verbose)
+        if (stmmac_avb_verbose & STMMAC_AVB_VERBOSE_TX)
             pr_info("fec_enet_tx_avb [%d] : 0x%x 0x%x | 0x%x 0x%x\n", entry,
                     tx_desc->des0, tx_desc->des1, tx_desc->des2, tx_desc->des3);
-        if (stmmac_avb_verbose || stmmac_avb_test_is_in_progress()) {
+        if ((stmmac_avb_verbose & STMMAC_AVB_VERBOSE_TX) || stmmac_avb_test_is_in_progress()) {
+            // print the hwts_tx_en and hwts_rx_en
+            pr_info("fec_enet_tx_avb [%d] : hwts_tx_en: %d, hwts_rx_en: %d\n",
+                    entry, priv->hwts_tx_en, priv->hwts_rx_en);
+
             stmmac_avb_print_hex_dump(
                 (void*)avb_buff + avb_buff->common.offset,
                 avb_buff->common.len,
                 "AVB desc cleanup");
         }
-        /* todo: get hw tstamp */
+
+        /* get hw tstamp */
+        ns = __stmmac_get_tx_hwstamp(priv, tx_desc);
 
 		dma_unmap_single(priv->device, avb_buff->dma_addr, avb_buff->common.len,
 						 DMA_TO_DEVICE);
-        /* free the tx buffer */
-        priv->avb->free(priv->avb_data, tx_q->buf_pool[entry].vaddr);
+        /* free or return the tx buffer */
+        if (ns && (avb_buff->common.flags & AVB_TX_FLAG_HW_TS)) {
+            if (stmmac_avb_verbose & STMMAC_AVB_VERBOSE_TX)
+                pr_info("fec_enet_tx_avb [%d] : ts: %llu\n", entry, ns);
+            avb_buff->common.ts = ns;
+            rc |= priv->avb->tx_ts(priv->avb_data, &avb_buff->common);
+        }
+        else {
+            priv->avb->free(priv->avb_data, &avb_buff->common);
+        }
+
         tx_q->buf_pool[entry].vaddr = 0;
         tx_q->buf_pool[entry].dma_addr = 0;
         tx_q->buf_pool[entry].offset = 0;
@@ -8297,7 +8341,8 @@ int fec_enet_tx_avb(void *data)
         entry = STMMAC_GET_ENTRY(entry, priv->dma_avb_conf->dma_tx_size);
     }
     tx_q->dirty_tx = entry;
-	return 0;
+
+	return rc;
 }
 EXPORT_SYMBOL(fec_enet_tx_avb);
 
@@ -8360,7 +8405,7 @@ static int __init stmmac_init(void)
 #ifdef CONFIG_STMMAC_GENAVB	
 	/* create the avb_enabled boolean in the debugfs directory */
 	debugfs_create_bool("avb_enabled", 0644, stmmac_fs_dir, &stmmac_avb_enabled);
-	debugfs_create_bool("avb_verbose", 0644, stmmac_fs_dir, &stmmac_avb_verbose);
+	debugfs_create_u32("avb_verbose", 0644, stmmac_fs_dir, &stmmac_avb_verbose);
 #endif
 	register_netdevice_notifier(&stmmac_notifier);
 #endif
