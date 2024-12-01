@@ -447,7 +447,7 @@ err_match_data:
 	return ret;
 }
 
-#ifdef CONFIG_AVB_SUPPORT
+#ifdef CONFIG_STMMAC_GENAVB
 
 static struct platform_driver imx_dwmac_driver;
 
@@ -612,7 +612,7 @@ err_dev_get:
 	return -1;
 }
 EXPORT_SYMBOL(fec_enet_get_tx_queue_properties);
-#endif /* CONFIG_AVB_SUPPORT */
+#endif /* CONFIG_STMMAC_GENAVB */
 
 static struct imx_dwmac_ops imx8mp_dwmac_data = {
 	.addr_width = 34,
