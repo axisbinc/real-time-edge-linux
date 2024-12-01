@@ -307,6 +307,9 @@ void stmmac_ptp_register(struct stmmac_priv *priv)
 	stmmac_ptp_clock_ops.n_per_out = priv->dma_cap.pps_out_num;
 	stmmac_ptp_clock_ops.n_ext_ts = priv->dma_cap.aux_snapshot_n;
 
+#ifdef CONFIG_STMMAC_GENAVB
+	raw_spin_lock_init(&priv->ptp_spinlock);
+#endif
 	rwlock_init(&priv->ptp_lock);
 	mutex_init(&priv->aux_ts_lock);
 	priv->ptp_clock_ops = stmmac_ptp_clock_ops;
@@ -352,9 +355,10 @@ int fec_ptp_read_cnt(void *data, u32 *cnt)
 	unsigned long flags;
 	u64 ns = 0;
 
-	read_lock_irqsave(&priv->ptp_lock, flags);
-	stmmac_get_systime(priv, priv->ptpaddr, &ns);
-	read_unlock_irqrestore(&priv->ptp_lock, flags);
+    // todo: evaluate if we need to serialize
+	raw_spin_lock_irqsave(&priv->ptp_spinlock, flags);
+	stmmac_get_ptptime(priv, priv->ptpaddr, &ns);
+	raw_spin_unlock_irqrestore(&priv->ptp_spinlock, flags);
 
 	*cnt = (u32) ns;
 
