@@ -59,28 +59,67 @@
     };
 };
 
+/* ------------------------------------------------------------------------ */
+/*   Enable I2C5 under Linux and bind the pins you already muxed above      */
+&i2c5 {
+    status = "okay";
+    pinctrl-names = "default";
+    pinctrl-0 = <&pinctrl_i2c5>;
+
+    tas5825m: audio-codec@2d {
+        compatible = "ti,tas5805m";
+        reg = <0x2d>;
+        #sound-dai-cells = <0>;
+        ti,dsp-config-name = "default";
+
+        status = "okay";
+    };
+};
+
+/* ------------------------------------------------------------------------ */
+/*   Enable SAI2 under Linux and bind the pins you already muxed above      */
+&sai2 {
+    status = "okay";
+    pinctrl-names = "default";
+    pinctrl-0 = <&pinctrl_sai2>;
+    assigned-clocks = <&clk IMX8MP_CLK_SAI2>;
+    assigned-clock-parents = <&clk IMX8MP_CLK_24M>;
+    assigned-clock-rates = <12288000>;
+};
+
+/* Sound Card definition binding SAI2 and TAS5825M */
+/ {
+    sound-tas5825m {
+        compatible = "simple-audio-card";
+        simple-audio-card,name = "tas5825m-soundcard";
+        simple-audio-card,format = "i2s";
+        simple-audio-card,bitclock-master = <&sound_codec>;
+        simple-audio-card,frame-master = <&sound_codec>;
+
+        simple-audio-card,cpu {
+            sound-dai = <&sai2>;
+        };
+
+        sound_codec: simple-audio-card,codec {
+            sound-dai = <&tas5825m>;
+        };
+    };
+};
+
 &dsp {
 	compatible = "fsl,imx8mp-hifi4";
 	reg = <0x0 0x3B6E8000 0x0 0x88000>;
 	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_sai2>, <&pinctrl_i2c5>, <&pinctrl_uart4>, <&gpio4_21>;
-	assigned-clocks = <&clk IMX8MP_CLK_SAI2>;
-	assigned-clock-parents = <&clk IMX8MP_AUDIO_PLL1_OUT>;
-	assigned-clock-rates = <24576000>;
+	pinctrl-0 = <&pinctrl_uart4>;
 	clocks = <&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_OCRAMA_IPG>,
 			 <&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_DSP_ROOT>,
 			 <&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_DSPDBG_ROOT>,
-			 <&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_SAI2_IPG>,
-			 <&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_SAI2_MCLK1>,
 			 <&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_SDMA3_ROOT>,
-			 <&clk IMX8MP_CLK_I2C5_ROOT>,
 			 <&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_ASRC_IPG>,
-			 <&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_SAI2_MCLK1>,
 			 <&clk IMX8MP_CLK_UART4_ROOT>;
 	clock-names = "ocram", "core", "debug",
 				  "per_clk1", "per_clk2", "per_clk3",
-                  "per_clk4", "per_clk5", "per_clk6",
-				  "per_clk7";
+                  "per_clk5", "per_clk7";
 	firmware-name = "imx/dsp/hifi4.bin";
 	power-domains = <&audiomix_pd>;
 	mbox-names = "tx0", "rx0", "rxdb0";
