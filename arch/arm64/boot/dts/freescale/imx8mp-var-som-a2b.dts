@@ -72,6 +72,8 @@
         #sound-dai-cells = <0>;
         ti,dsp-config-name = "default";
         status = "okay";
+        //clocks = <&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_SAI2_MCLK1>;
+        //clock-names = "mclk";
     };
 
 #if 0
@@ -82,15 +84,18 @@
         ti,dsp-config-name = "default";
         status = "okay";
     };
+#endif
 
 	pcm1690_1: audio-codec@4a {
         compatible = "ti,pcm1690";
         reg = <0x4a>;
+        reset-gpios = <&gpio4_21 21 GPIO_ACTIVE_LOW>;
         #sound-dai-cells = <0>;
         ti,dsp-config-name = "default";
         status = "okay";
     };
 
+#if 0
 	pcm1690_2: audio-codec@4b {
         compatible = "ti,pcm1690";
         reg = <0x4b>;
@@ -108,24 +113,27 @@
     #sound-dai-cells = <0>;
     pinctrl-names = "default";
     pinctrl-0 = <&pinctrl_sai2>;
+
+    /* audio clock for BCLK/FS generation */
     assigned-clocks = <&clk IMX8MP_CLK_SAI2>;
-    assigned-clock-parents = <&clk IMX8MP_CLK_24M>;
+    assigned-clock-parents = <&clk IMX8MP_AUDIO_PLL1_OUT>;
     assigned-clock-rates = <12288000>;
+    fsl,sai-mclk-direction-output;
 };
 
 /* ------------------------------------------------------------------------ */
 /*   Sound Cards */
 / {
 
-    /*   Sound Card for Dual TAS5825M Setup */
+    /*   Sound Card TAS5825M */
     sound-tas5825m {
         compatible = "simple-audio-card";
         simple-audio-card,name = "tas5825m-soundcard";
         simple-audio-card,format = "i2s";
-        simple-audio-card,bitclock-master = <&sound_codec1>;
-        simple-audio-card,frame-master = <&sound_codec1>;
+        simple-audio-card,bitclock-master = <&tas585mcpu>;
+        simple-audio-card,frame-master = <&tas585mcpu>;
 
-        simple-audio-card,cpu {
+        tas585mcpu: simple-audio-card,cpu {
             sound-dai = <&sai2>;
         };
 
@@ -138,7 +146,7 @@
 //        };
     };
 
-#if 0
+#if 1
 	pcm1690-soundcard {
         compatible = "simple-audio-card";
         simple-audio-card,name = "pcm1690-soundcard";
