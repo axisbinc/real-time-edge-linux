@@ -209,7 +209,7 @@ static struct snd_soc_dai_driver pcm1690_dai = {
 		.rates = SNDRV_PCM_RATE_CONTINUOUS,
 		.rate_min = 10000,
 		.rate_max = 200000,
-		.formats = pcm1690_FORMATS,
+		.formats = PCM1690_FORMATS,
 	},
 	.ops = &pcm1690_dai_ops,
 };
@@ -274,17 +274,20 @@ EXPORT_SYMBOL_GPL(pcm1690_common_exit);
 
 static int pcm1690_i2c_probe(struct i2c_client *client)
 {
+	struct device *dev = &client->dev;
 	struct regmap *regmap;
 	int ret;
 
+	dev_info(dev, "pcm1690: probing codec\n");
 	regmap = devm_regmap_init_i2c(client, &pcm1690_regmap_config);
 	if (IS_ERR(regmap)) {
 		ret = PTR_ERR(regmap);
-		dev_err(&client->dev, "Failed to allocate regmap: %d\n", ret);
+		dev_err(dev, "Failed to allocate regmap: %d\n", ret);
 		return ret;
 	}
 
-	return pcm1690_common_init(&client->dev, regmap);
+	dev_info(dev, "pcm1690: probe succeeded\n");
+	return pcm1690_common_init(dev, regmap);
 }
 
 static void pcm1690_i2c_remove(struct i2c_client *client)

@@ -87,7 +87,7 @@
 	pcm1690_1: audio-codec@4a {
         compatible = "ti,pcm1690";
         reg = <0x4a>;
-        reset-gpios = <&gpio4_21 21 GPIO_ACTIVE_LOW>;
+        reset-gpios = <&gpio4 21 GPIO_ACTIVE_LOW>;
         #sound-dai-cells = <0>;
         ti,dsp-config-name = "default";
         status = "okay";
