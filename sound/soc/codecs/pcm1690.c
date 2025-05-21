@@ -63,6 +63,8 @@ static int pcm1690_set_dai_fmt(struct snd_soc_dai *codec_dai,
 
 	priv->format = format;
 
+    dev_info(priv->dev, "pcm1690: format %d\n", format);
+
 	return 0;
 }
 
@@ -126,6 +128,8 @@ static int pcm1690_hw_params(struct snd_pcm_substream *substream,
 		return -EINVAL;
 	}
 
+    dev_info(priv->dev, "pcm1690: format %d, rate %d, width %d\n", priv->format,
+         priv->rate, params_width(params));
 	ret = regmap_update_bits(priv->regmap, pcm1690_FMT_CONTROL,
 				 pcm1690_FMT_MASK, val);
 	if (ret < 0)
