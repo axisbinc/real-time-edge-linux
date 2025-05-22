@@ -19,11 +19,11 @@
 
 #include "pcm1690.h"
 
-#define pcm1690_MUTE_CONTROL	0x10
-#define pcm1690_FMT_CONTROL	0x11
-#define pcm1690_SOFT_MUTE	0x14
-#define pcm1690_DAC_VOL_LEFT	0x18
-#define pcm1690_DAC_VOL_RIGHT	0x19
+#define pcm1690_MUTE_CONTROL	0x40
+#define pcm1690_FMT_CONTROL	0x41
+#define pcm1690_SOFT_MUTE	0x44
+#define pcm1690_DAC_VOL_LEFT	0x4A
+#define pcm1690_DAC_VOL_RIGHT	0x4B
 
 #define pcm1690_FMT_MASK	0x07
 #define pcm1690_MUTE_MASK	0x03

@@ -440,6 +440,7 @@ static int asoc_simple_set_tdm(struct snd_soc_dai *dai,
 	int i, ret;
 
 	if (!simple_dai || !simple_dai->tdm_width_map)
+		dev_info(dai->dev, "TDM: no simple_dai or tdm_width_map\n");
 		return 0;
 
 	slot_width = simple_dai->slot_width;
@@ -447,11 +448,15 @@ static int asoc_simple_set_tdm(struct snd_soc_dai *dai,
 
 	if (slot_width == 0)
 		slot_width = sample_bits;
+		dev_info(dai->dev, "TDM: slot_width not set, using sample_bits (%d)\n", sample_bits);
 
 	for (i = 0; i < simple_dai->n_tdm_widths; ++i) {
 		if (simple_dai->tdm_width_map[i].sample_bits == sample_bits) {
 			slot_width = simple_dai->tdm_width_map[i].slot_width;
 			slot_count = simple_dai->tdm_width_map[i].slot_count;
+			dev_info(dai->dev,
+				"TDM: match found for sample_bits=%d -> slot_width=%d, slot_count=%d\n",
+				sample_bits, slot_width, slot_count);
 			break;
 		}
 	}
