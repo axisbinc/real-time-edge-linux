@@ -201,6 +201,7 @@ int asoc_simple_remove(struct platform_device *pdev);
 int asoc_graph_card_probe(struct snd_soc_card *card);
 int asoc_graph_is_ports0(struct device_node *port);
 
+#ifdef DEBUG
 static inline void asoc_simple_debug_dai(struct asoc_simple_priv *priv,
 					 char *name,
 					 struct asoc_simple_dai *dai)
@@ -274,4 +275,8 @@ static inline void asoc_simple_debug_info(struct asoc_simple_priv *priv)
 			dev_dbg(dev, "mclk-fs = %d\n", props->mclk_fs);
 	}
 }
+#else
+#define  asoc_simple_debug_info(priv)
+#endif /* DEBUG */
+
 #endif /* __SIMPLE_CARD_UTILS_H */
