@@ -154,10 +154,14 @@
         /* TDM settings */
         dai-tdm-slot-num = <8>;
         dai-tdm-slot-width = <32>;
-        dai-tdm-slot-tx-mask = <0 0 1 1 0 0 0 0>;
+        dai-tdm-slot-tx-mask = <0x0C>;
 
         pcm1690_cpu: simple-audio-card,cpu {
             sound-dai = <&sai2>;
+            //dai-tdm-slot-num = <8>;
+            //dai-tdm-slot-width = <32>;
+            //dai-tdm-slot-tx-mask = <0x03>;
+            //dai-tdm-slot-rx-mask = <0x03>;
         };
 
         pcm1690_codec: simple-audio-card,codec@0 {

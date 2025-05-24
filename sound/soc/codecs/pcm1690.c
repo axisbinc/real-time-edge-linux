@@ -53,6 +53,7 @@ struct pcm1690_private {
 	struct gpio_desc *reset;
 	struct work_struct work;
 	struct device *dev;
+	int rate;
 };
 
 static const struct reg_default pcm1690_reg_defaults[] = {
@@ -102,7 +103,20 @@ static int pcm1690_set_dai_tdm_slot(struct snd_soc_dai *dai,
 {
 	struct snd_soc_component *component = dai->component;
 	struct pcm1690_private *priv = snd_soc_component_get_drvdata(component);
-	int ret;
+
+	/*if (tx_mask >= (1<<slots) || rx_mask >= (1<<slots)) {
+		dev_err(component->dev,
+			"Bad tdm mask tx: 0x%08x rx: 0x%08x slots %d\n",
+			tx_mask, rx_mask, slots);
+		return -EINVAL;
+	}
+
+	if (slot_width &&
+	    (slot_width != 16 && slot_width != 24 && slot_width != 32 )) {
+		dev_err(component->dev, "Unsupported slot_width %d\n",
+			slot_width);
+		return -EINVAL;
+	}*/
 
 	priv->io_params.tdm_slots = slots;
 	priv->io_params.tdm_mask = tx_mask;
@@ -126,7 +140,7 @@ static int pcm1690_hw_params(struct snd_pcm_substream *substream,
 
 	switch (priv->io_params.format & SND_SOC_DAIFMT_FORMAT_MASK) {
 	case SND_SOC_DAIFMT_LEFT_J:
-		if (priv->io_params.tmd_slots > 2) {
+		if (priv->io_params.tdm_slots > 2) {
 			val = PCM1690_FMT_LEFT_J_TDM;
 		} else {
 			val = PCM1690_FMT_LEFT_J;
@@ -138,8 +152,11 @@ static int pcm1690_hw_params(struct snd_pcm_substream *substream,
 		return -EINVAL;
 	}
 
-	dev_info(priv->dev, "pcm1690: format %d, rate %d, width %d\n", priv->format,
-		 priv->rate, params_width(params));
+	//dev_info(priv->dev, "pcm1690: format %d, rate %d, width %d\n", priv->format,
+		 //priv->rate, params_width(params));
+	dev_info(priv->dev, "pcm1690: format %d, rate %d, width %d\n",
+		priv->io_params.format, priv->io_params.rate, priv->io_params.pcm_width);
+   
 	ret = regmap_update_bits(priv->regmap, pcm1690_FMT_CONTROL,
 				 pcm1690_FMT_MASK, val);
 	if (ret < 0)
