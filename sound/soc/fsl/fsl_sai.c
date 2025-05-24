@@ -168,6 +168,8 @@ out:
 static int fsl_sai_set_dai_tdm_slot(struct snd_soc_dai *cpu_dai, u32 tx_mask,
 				u32 rx_mask, int slots, int slot_width)
 {
+	dev_info(cpu_dai->dev, "SAI: fsl_sai_set_dai_tdm_slot() entered");
+
 	struct fsl_sai *sai = snd_soc_dai_get_drvdata(cpu_dai);
 
 	sai->slots = slots;
