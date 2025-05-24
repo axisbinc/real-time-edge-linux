@@ -170,6 +170,10 @@ static int simple_parse_node(struct asoc_simple_priv *priv,
 	if (ret)
 		return ret;
 
+    ret = asoc_simple_parse_tdm_width_map(dev, np, dai);
+    if (ret)
+        return ret;
+
 	return 0;
 }
 

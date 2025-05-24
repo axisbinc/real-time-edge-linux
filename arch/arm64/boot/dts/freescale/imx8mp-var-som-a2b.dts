@@ -151,13 +151,10 @@
         simple-audio-card,bitclock-master = <&pcm1690_cpu>;
         simple-audio-card,frame-master = <&pcm1690_cpu>;
 
-        /* TDM settings */
-        dai-tdm-slot-num = <8>;
-        dai-tdm-slot-width = <32>;
-        dai-tdm-slot-width-map = <24 32 8>;
-        //dai-tdm-slot-tx-mask = <0x0C>;
-
         pcm1690_cpu: simple-audio-card,cpu {
+            /* TDM settings */
+            dai-tdm-slot-width-map = <24 32 8>;
+            dai-tdm-slot-tx-mask = <0xFF>;
             sound-dai = <&sai2>;
         };
 

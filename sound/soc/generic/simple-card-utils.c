@@ -444,7 +444,7 @@ static int asoc_simple_set_tdm(struct snd_soc_dai *dai,
 	dev_info(dai->dev, "TDM: checking simple_dai and tdm_width_map\n");
 	dev_info(dai->dev, "TDM: simple_dai=%p, tdm_width_map=%p\n", simple_dai, simple_dai ? simple_dai->tdm_width_map : NULL);
 
-	if (!simple_dai) {
+	if (!simple_dai || !simple_dai->tdm_width_map) {
 		dev_info(dai->dev, "TDM: no simple_dai or tdm_width_map\n");
 		return 0;
 	}
