@@ -537,6 +537,7 @@ int asoc_simple_hw_params(struct snd_pcm_substream *substream,
 	}
 
 	for_each_prop_dai_codec(props, i, pdai) {
+        dev_info(sdai->dev, "simple-card: set_tdm_slot codec: %d\n", i);
 		sdai = asoc_rtd_to_codec(rtd, i);
 		ret = asoc_simple_set_tdm(sdai, pdai, params);
 		if (ret < 0)
@@ -544,6 +545,7 @@ int asoc_simple_hw_params(struct snd_pcm_substream *substream,
 	}
 
 	for_each_prop_dai_cpu(props, i, pdai) {
+        dev_info(sdai->dev, "simple-card: set_tdm_slot cpu: %d\n", i);
 		sdai = asoc_rtd_to_cpu(rtd, i);
 		ret = asoc_simple_set_tdm(sdai, pdai, params);
 		if (ret < 0)
