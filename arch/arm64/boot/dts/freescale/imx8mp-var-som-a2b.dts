@@ -52,9 +52,15 @@
 		>;
 	};
 
-    gpio4_21: gpio_perf_grp {
+    pinctrl_gpio4_21: gpio_perf_grp {
         fsl,pins = <
 			MX8MP_IOMUXC_SAI2_RXFS__GPIO4_IO21			            0xd6
+        >;
+    };
+
+    pinctrl_gpio5_7: gpio_perf_grp2 {
+        fsl,pins = <
+			MX8MP_IOMUXC_ECSPI1_MOSI__GPIO5_IO07			        0xd6
         >;
     };
 };
@@ -189,6 +195,16 @@
 					<&dsp_vdev0vring1>, <&dsp_reserved>;
 	syscon = <&audio_blk_ctrl>;
 	status = "okay";
+};
+
+&uart3 {
+	status = "disabled";
+};
+
+&gpio5 {
+    status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_gpio5_7>;
 };
 
 &uart4 {
