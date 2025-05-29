@@ -57,12 +57,6 @@
 			MX8MP_IOMUXC_SAI2_RXFS__GPIO4_IO21			            0xd6
         >;
     };
-
-    pinctrl_gpio5_7: gpio_perf_grp2 {
-        fsl,pins = <
-			MX8MP_IOMUXC_ECSPI1_MOSI__GPIO5_IO07			        0xd6
-        >;
-    };
 };
 
 /* ------------------------------------------------------------------------ */
@@ -80,7 +74,6 @@
         status = "okay";
     };
 
-#if 0
     tas5825m_2: audio-codec@4d {
         compatible = "ti,tas5825m";
         reg = <0x4d>;
@@ -88,7 +81,6 @@
         ti,dsp-config-name = "default";
         status = "okay";
     };
-#endif
 
 	a2b24xx: a2b24xx@0x68 {
 		compatible = "adi,a2b24xx";
@@ -100,19 +92,15 @@
         reg = <0x4a>;
         reset-gpios = <&gpio4 21 GPIO_ACTIVE_LOW>;
         #sound-dai-cells = <0>;
-        ti,dsp-config-name = "default";
         status = "okay";
     };
 
-#if 0
 	pcm1690_2: audio-codec@4b {
         compatible = "ti,pcm1690";
         reg = <0x4b>;
         #sound-dai-cells = <0>;
-        ti,dsp-config-name = "default";
         status = "okay";
     };
-#endif
 };
 
 /* ------------------------------------------------------------------------ */
@@ -136,23 +124,16 @@
 
     /*   Sound Card TAS5825M */
     sound-tas5825m {
-        compatible = "simple-audio-card";
-        simple-audio-card,name = "tas5825m-soundcard";
-        simple-audio-card,format = "i2s";
-        simple-audio-card,bitclock-master = <&tas585mcpu>;
-        simple-audio-card,frame-master = <&tas585mcpu>;
+        compatible = "fsl,imx-audio-card";
+        model      = "tas5825m-soundcard";
 
-        tas585mcpu: simple-audio-card,cpu {
-            sound-dai = <&sai2>;
+        playback-dai-link {
+            link-name = "TAS5825M Playback";
+            format    = "i2s";
+
+            cpu { sound-dai = <&sai2>; };
+            codec { sound-dai = <&tas5825m_1>; };
         };
-
-        sound_codec1: simple-audio-card,codec@0 {
-            sound-dai = <&tas5825m_1>;
-        };
-
-//        sound_codec2: simple-audio-card,codec@1 {
-//            sound-dai = <&tas5825m_2>;
-//        };
     };
 
     /*   Sound Cards over a2b24xx */
@@ -172,21 +153,16 @@
     };
 
 	pcm1690-soundcard {
-        compatible = "simple-audio-card";
-        simple-audio-card,name = "pcm1690-soundcard";
-        simple-audio-card,format = "left_j";
-        simple-audio-card,bitclock-master = <&pcm1690_cpu>;
-        simple-audio-card,frame-master = <&pcm1690_cpu>;
+        compatible = "fsl,imx-audio-card";
+        model = "sound-pcm1690";
 
-        pcm1690_cpu: simple-audio-card,cpu {
-            /* TDM settings */
-            dai-tdm-slot-width-map = <24 32 8>;
-            dai-tdm-slot-tx-mask = <0xFF>;
-            sound-dai = <&sai2>;
-        };
-
-        pcm1690_codec: simple-audio-card,codec@0 {
-            sound-dai = <&pcm1690_1>;
+        playback-dai-link {
+            link-name = "PCM1690 Playback";
+            format = "dsp_b";
+            dai-tdm-slot-num = <8>;
+            dai-tdm-slot-width = <24>;
+            cpu { sound-dai = <&sai2>; };
+            codec { sound-dai = <&pcm1690_1> /*, <&pcm1690_2>*/; };
         };
     };
 };
@@ -216,16 +192,6 @@
 					<&dsp_vdev0vring1>, <&dsp_reserved>;
 	syscon = <&audio_blk_ctrl>;
 	status = "okay";
-};
-
-&uart3 {
-	status = "disabled";
-};
-
-&gpio5 {
-    status = "okay";
-	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_gpio5_7>;
 };
 
 &uart4 {

@@ -86,6 +86,13 @@ static int pcm1690_set_dai_fmt(struct snd_soc_dai *codec_dai,
 	return 0;
 }
 
+static int pcm1690_set_sysclk(struct snd_soc_dai *dai,
+    int clk_id, unsigned int freq, int dir)
+{
+	/* TODO: store freq if you need it, or program a PLL/divider… */
+	return 0;
+}
+
 static int pcm1690_mute(struct snd_soc_dai *codec_dai, int mute, int direction)
 {
 	struct snd_soc_component *component = codec_dai->component;
@@ -146,14 +153,18 @@ static int pcm1690_hw_params(struct snd_pcm_substream *substream,
 			val = PCM1690_FMT_LEFT_J;
 		}
 		break;
-	/* TODO: revisit to handle other formats */
-	default:
+    case SND_SOC_DAIFMT_DSP_B:
+        /* packed-TDM mode */
+		val = PCM1690_FMT_DSP_B;    /* 0x5 */
+		break;
+    case SND_SOC_DAIFMT_I2S:
+		val = PCM1690_FMT_I2S;
+		break;
+    default:
 		dev_err(component->dev, "Invalid DAI format\n");
 		return -EINVAL;
 	}
 
-	//dev_info(priv->dev, "pcm1690: format %d, rate %d, width %d\n", priv->format,
-		 //priv->rate, params_width(params));
 	dev_info(priv->dev, "pcm1690: format %d, rate %d, width %d\n",
 		priv->io_params.format, priv->io_params.rate, priv->io_params.pcm_width);
    
@@ -203,6 +214,7 @@ static int pcm1690_trigger(struct snd_pcm_substream *substream, int cmd,
 
 static const struct snd_soc_dai_ops pcm1690_dai_ops = {
 	.set_fmt	= pcm1690_set_dai_fmt,
+	.set_sysclk     = pcm1690_set_sysclk,
 	.hw_params	= pcm1690_hw_params,
 	.mute_stream	= pcm1690_mute,
 	.set_tdm_slot = pcm1690_set_dai_tdm_slot,
@@ -237,7 +249,7 @@ static struct snd_soc_dai_driver pcm1690_dai = {
 	.playback = {
 		.stream_name = "Playback",
 		.channels_min = 2,
-		.channels_max = 2,
+		.channels_max = 8,
 		.rates = SNDRV_PCM_RATE_CONTINUOUS,
 		.rate_min = 10000,
 		.rate_max = 200000,

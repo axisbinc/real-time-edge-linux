@@ -435,36 +435,23 @@ static int asoc_simple_set_tdm(struct snd_soc_dai *dai,
 				struct asoc_simple_dai *simple_dai,
 				struct snd_pcm_hw_params *params)
 {
-	dev_info(dai->dev, "TDM: asoc_simple_set_tdm() entered\n");
-	
 	int sample_bits = params_width(params);
 	int slot_width, slot_count;
 	int i, ret;
 
-	dev_info(dai->dev, "TDM: checking simple_dai and tdm_width_map\n");
-	dev_info(dai->dev, "TDM: simple_dai=%p, tdm_width_map=%p\n", simple_dai, simple_dai ? simple_dai->tdm_width_map : NULL);
-
-	if (!simple_dai || !simple_dai->tdm_width_map) {
-		dev_info(dai->dev, "TDM: no simple_dai or tdm_width_map\n");
+	if (!simple_dai || !simple_dai->tdm_width_map)
 		return 0;
-	}
 
 	slot_width = simple_dai->slot_width;
 	slot_count = simple_dai->slots;
 
-	dev_info(dai->dev, "sample bits = %d, slot width = %d, slot count = %d", sample_bits, slot_width, slot_count);
-	if (slot_width == 0) {
+	if (slot_width == 0)
 		slot_width = sample_bits;
-		dev_info(dai->dev, "TDM: slot_width not set, using sample_bits (%d)\n", sample_bits);
-	}
 
 	for (i = 0; i < simple_dai->n_tdm_widths; ++i) {
 		if (simple_dai->tdm_width_map[i].sample_bits == sample_bits) {
 			slot_width = simple_dai->tdm_width_map[i].slot_width;
 			slot_count = simple_dai->tdm_width_map[i].slot_count;
-			dev_info(dai->dev,
-				"TDM: match found for sample_bits=%d -> slot_width=%d, slot_count=%d\n",
-				sample_bits, slot_width, slot_count);
 			break;
 		}
 	}
@@ -537,7 +524,6 @@ int asoc_simple_hw_params(struct snd_pcm_substream *substream,
 	}
 
 	for_each_prop_dai_codec(props, i, pdai) {
-        dev_info(sdai->dev, "simple-card: set_tdm_slot codec: %d\n", i);
 		sdai = asoc_rtd_to_codec(rtd, i);
 		ret = asoc_simple_set_tdm(sdai, pdai, params);
 		if (ret < 0)
@@ -545,7 +531,6 @@ int asoc_simple_hw_params(struct snd_pcm_substream *substream,
 	}
 
 	for_each_prop_dai_cpu(props, i, pdai) {
-        dev_info(sdai->dev, "simple-card: set_tdm_slot cpu: %d\n", i);
 		sdai = asoc_rtd_to_cpu(rtd, i);
 		ret = asoc_simple_set_tdm(sdai, pdai, params);
 		if (ret < 0)
