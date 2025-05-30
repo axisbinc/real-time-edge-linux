@@ -156,11 +156,17 @@
         compatible = "fsl,imx-audio-card";
         model = "sound-pcm1690";
 
+        /* connect the CPU “Playback” widget to your codec’s line-outs */
+        audio-routing =
+             "IOUTL+", "Playback",
+             "IOUTL-", "Playback",
+             "IOUTR+", "Playback",
+             "IOUTR-", "Playback";
         playback-dai-link {
             link-name = "PCM1690 Playback";
             format = "dsp_b";
             dai-tdm-slot-num = <8>;
-            dai-tdm-slot-width = <24>;
+            dai-tdm-slot-width = <32>;
             cpu { sound-dai = <&sai2>; };
             codec { sound-dai = <&pcm1690_1> /*, <&pcm1690_2>*/; };
         };
