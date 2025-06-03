@@ -732,7 +732,7 @@ static int imx_card_probe(struct platform_device *pdev)
 	struct imx_card_data *data;
 	int ret, i;
 
-    printk(KERN_ERR "imx_card_probe: %s\n", __func__);
+    printk(KERN_EMERG "imx_card_probe: %s\n", __func__);
 
 	data = devm_kzalloc(&pdev->dev, sizeof(*data), GFP_KERNEL);
 	if (!data)
