@@ -856,7 +856,7 @@ static int imx_card_probe(struct platform_device *pdev)
 	if (ret)
 		return dev_err_probe(&pdev->dev, ret, "snd_soc_register_card failed\n");
 
-    dev_info_probe(&pdev->dev, "i.MX ASoC Machine Driver probed card:%s\n",
+    dev_info(&pdev->dev, "i.MX ASoC Machine Driver probed card:%s\n",
                    data->card.name);
 	return 0;
 }
