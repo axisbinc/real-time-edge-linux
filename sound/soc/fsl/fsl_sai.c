@@ -1345,6 +1345,8 @@ static int fsl_sai_probe(struct platform_device *pdev)
 	int index;
 	u32 dmas[4];
 
+	printk(KERN_ERR "fsl_sai: >>> fsl_sai_probe() called for %s\n", dev_name(&pdev->dev));
+
 	sai = devm_kzalloc(dev, sizeof(*sai), GFP_KERNEL);
 	if (!sai)
 		return -ENOMEM;
