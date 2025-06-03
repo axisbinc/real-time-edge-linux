@@ -306,6 +306,9 @@ static int imx_aif_hw_params(struct snd_pcm_substream *substream,
 	slots = link_data->slots;
 	slot_width = link_data->slot_width;
 
+    dev_info(dev, "imx_aif_hw_params: slots=%d, slot_width=%d\n",
+         slots, slot_width);
+
 	if (!format_is_tdm(link_data)) {
 		if (format_is_dsd(params)) {
 			slots = 1;
@@ -418,6 +421,9 @@ static int imx_aif_startup(struct snd_pcm_substream *substream)
 	static struct snd_pcm_hw_constraint_list constraint_rates;
 	static struct snd_pcm_hw_constraint_list constraint_channels;
 	int ret = 0;
+
+    dev_info(card->dev, "imx_aif_startup: slots=%d, slot_width=%d\n",
+         link_data->slots, link_data->slot_width);
 
 	if (format_is_tdm(link_data)) {
 		constraint_channels.list = data->plat_data->support_tdm_channels;
@@ -850,6 +856,8 @@ static int imx_card_probe(struct platform_device *pdev)
 	if (ret)
 		return dev_err_probe(&pdev->dev, ret, "snd_soc_register_card failed\n");
 
+    dev_info_probe(&pdev->dev, "i.MX ASoC Machine Driver probed card:%s\n",
+                   data->card.name);
 	return 0;
 }
 
