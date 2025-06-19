@@ -25,6 +25,20 @@ config STMMAC_SELFTESTS
 	  feature if you are facing problems with your HW and submit the test
 	  results to the netdev Mailing List.
 
+config STMMAC_GENAVB
+	bool "Enable AVTP QoS Adapter support for STMMAC"
+	depends on STMMAC_ETH
+	default y
+	help
+	  Enable logic to support AVTP QoS Adapter handling inside the
+	  STMMAC Ethernet driver.
+
+	  This option will compile the `stmmac_qos_adapter.c` file and
+	  include packet-based relay and prioritization logic for
+	  time-sensitive networking (TSN) use cases.
+
+	  If unsure, say N.
+
 config STMMAC_PLATFORM
 	tristate "STMMAC Platform bus support"
 	depends on STMMAC_ETH

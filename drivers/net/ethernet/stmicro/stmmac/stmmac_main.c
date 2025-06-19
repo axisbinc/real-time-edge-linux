@@ -49,6 +49,10 @@
 #include "dwmac1000.h"
 #include "dwxgmac2.h"
 #include "hwif.h"
+#ifdef CONFIG_STMMAC_GENAVB
+#include "stmmac_qos_adapter.h"
+static struct qos_adapter_context *qos_ctx;
+#endif
 
 /* As long as the interface is active, we keep the timestamping counter enabled
  * with fine resolution and binary rollover. This avoid non-monotonic behavior
@@ -3891,9 +3895,26 @@ static int stmmac_open(struct net_device *dev)
 	if (IS_ERR(dma_conf))
 		return PTR_ERR(dma_conf);
 
-	ret = __stmmac_open(dev, dma_conf);
-	if (ret)
+#ifdef CONFIG_STMMAC_GENAVB
+	// Register the QOS adapter (for AVTP interception)
+	qos_ctx = qos_adapter_register(dev);
+	if (!qos_ctx) {
+		netdev_err(dev, "QOS_ADAPTER registration failed\n");
 		free_dma_desc_resources(priv, dma_conf);
+		kfree(dma_conf);
+		return -ENOMEM;
+	}
+	netdev_info(dev, "QOS_ADAPTER registered successfully\n");
+#endif
+
+	ret = __stmmac_open(dev, dma_conf);
+	if (ret) {
+#ifdef CONFIG_STMMAC_GENAVB
+		qos_adapter_unregister(qos_ctx);
+		qos_ctx = NULL;
+#endif
+		free_dma_desc_resources(priv, dma_conf);
+	}
 
 	kfree(dma_conf);
 	return ret;
@@ -3919,6 +3940,13 @@ static int stmmac_release(struct net_device *dev)
 {
 	struct stmmac_priv *priv = netdev_priv(dev);
 	u32 chan;
+
+#ifdef CONFIG_STMMAC_GENAVB
+	if (qos_ctx) {
+		qos_adapter_unregister(qos_ctx);  // Unregister QOS relay/adapter
+		qos_ctx = NULL;
+	}
+#endif
 
 	if (device_may_wakeup(priv->device))
 		phylink_speed_down(priv->phylink, false);
@@ -4341,6 +4369,12 @@ static netdev_tx_t stmmac_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	unsigned int first_entry, tx_packets, enh_desc;
 	struct stmmac_priv *priv = netdev_priv(dev);
+#ifdef CONFIG_STMMAC_GENAVB
+	if (qos_ctx && qos_adapter_is_avtp(skb)) {
+		qos_adapter_handle_tx(qos_ctx, skb);
+		return NETDEV_TX_OK;  // Handled by AVTP QOS adapter
+	}
+#endif
 	unsigned int nopaged_len = skb_headlen(skb);
 	int i, csum_insertion = 0, is_jumbo = 0;
 	u32 queue = skb_get_queue_mapping(skb);
