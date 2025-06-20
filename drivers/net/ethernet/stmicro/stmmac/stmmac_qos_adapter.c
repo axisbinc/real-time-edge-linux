@@ -17,7 +17,7 @@ struct qos_adapter_context {
 #endif
 };
 
-// Register the adapter for the given device
+// Register the adapter on the specified net_device
 struct qos_adapter_context *qos_adapter_register(struct net_device *dev)
 {
 	struct qos_adapter_context *ctx;
@@ -37,7 +37,7 @@ struct qos_adapter_context *qos_adapter_register(struct net_device *dev)
 	ctx->dev = dev;
 
 #ifdef CONFIG_QOS_RELAY
-	// Try to find "eth1" for AVTP packet forwarding
+	// Try to bind a secondary relay device (e.g., eth1) if available
 	ctx->relay_dev = dev_get_by_name(&init_net, "eth1");
 	if (!ctx->relay_dev)
 		pr_warn("QOS_ADAPTER: relay device 'eth1' not found\n");
@@ -70,10 +70,11 @@ bool qos_adapter_is_avtp(struct sk_buff *skb)
 	if (!skb)
 		return false;
 
-	eth = eth_hdr(skb);
+	eth = eth_hdr(skb);	   // Extract Ethernet header
 	if (!eth)
 		return false;
 
+	// Compare EtherType to AVTP
 	return (ntohs(eth->h_proto) == ETH_P_AVTP);
 }
 
@@ -92,31 +93,77 @@ void qos_adapter_handle_tx(struct qos_adapter_context *ctx, struct sk_buff *skb)
 	        skb->len, eth->h_source, eth->h_dest);
 
 #ifdef CONFIG_QOS_RELAY
-	// Relay to eth1 if available
+	// Clone and forward the packet to relay_dev if available and up
 	if (ctx->relay_dev && netif_running(ctx->relay_dev)) {
 		struct sk_buff *skb_clone = skb_copy(skb, GFP_ATOMIC);
 		if (!skb_clone) {
-			pr_err("QOS_ADAPTER: failed to clone skb\n");
+			pr_err("QOS_ADAPTER: TX relay clone failed\n");
 			goto drop;
 		}
 
+		// Set the relay interface as the target
 		skb_clone->dev = ctx->relay_dev;
 		skb_clone->protocol = eth_type_trans(skb_clone, ctx->relay_dev);
 		skb_reset_network_header(skb_clone);
 		skb_reset_mac_header(skb_clone);
 
 		if (dev_queue_xmit(skb_clone) != NET_XMIT_SUCCESS) {
-			pr_err("QOS_ADAPTER: relay failed\n");
+			pr_err("QOS_ADAPTER: TX relay failed\n");
 			kfree_skb(skb_clone);
 		}
         else {
-			pr_info("QOS_ADAPTER: relayed AVTP packet to %s\n",
+			pr_info("QOS_ADAPTER: relayed TX AVTP packet to %s\n",
 			        ctx->relay_dev->name);
 		}
 	}
 drop:
 #endif
 
-	// Drop the original packet (already handled)
+	// Drop the original TX skb as we already handled it
+	kfree_skb(skb);
+}
+
+// Handle AVTP packets during reception (RX)
+void qos_adapter_handle_rx(struct qos_adapter_context *ctx, struct sk_buff *skb)
+{
+	struct ethhdr *eth;
+
+	if (!ctx || !skb)
+		return;
+
+	eth = eth_hdr(skb);
+
+	// Log details about the AVTP RX packet
+	pr_info("QOS_ADAPTER: AVTP RX detected (len=%u, src=%pM, dst=%pM)\n",
+	        skb->len, eth->h_source, eth->h_dest);
+
+#ifdef CONFIG_QOS_RELAY
+	// Forward AVTP RX packet to relay device if present and running
+	if (ctx->relay_dev && netif_running(ctx->relay_dev)) {
+		struct sk_buff *skb_clone = skb_copy(skb, GFP_ATOMIC);
+		if (!skb_clone) {
+			pr_err("QOS_ADAPTER: RX relay clone failed\n");
+			goto drop;
+		}
+
+		// Assign the relay device as the new target
+		skb_clone->dev = ctx->relay_dev;
+		skb_clone->protocol = eth_type_trans(skb_clone, ctx->relay_dev);
+		skb_reset_network_header(skb_clone);
+		skb_reset_mac_header(skb_clone);
+
+		// Transmit the relayed packet
+		if (dev_queue_xmit(skb_clone) != NET_XMIT_SUCCESS) {
+			pr_err("QOS_ADAPTER: RX relay failed\n");
+			kfree_skb(skb_clone);
+		} else {
+			pr_info("QOS_ADAPTER: relayed RX AVTP to %s\n",
+			        ctx->relay_dev->name);
+		}
+	}
+drop:
+#endif
+
+	// Drop the original RX skb
 	kfree_skb(skb);
 }

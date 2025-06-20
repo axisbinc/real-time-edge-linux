@@ -35,4 +35,11 @@ bool qos_adapter_is_avtp(struct sk_buff *skb);
  */
 void qos_adapter_handle_tx(struct qos_adapter_context *ctx, struct sk_buff *skb);
 
+/**
+ * qos_adapter_handle_rx - Handle or relay AVTP RX packets
+ * @ctx: Pointer to QOS adapter context
+ * @skb: Received packet to process (will be freed here)
+ */
+void qos_adapter_handle_rx(struct qos_adapter_context *ctx, struct sk_buff *skb);
+
 #endif /* __QOS_ADAPTER_H__ */

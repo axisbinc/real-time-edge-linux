@@ -28,7 +28,7 @@ config STMMAC_SELFTESTS
 config STMMAC_GENAVB
 	bool "Enable AVTP QoS Adapter support for STMMAC"
 	depends on STMMAC_ETH
-	default y
+	default n
 	help
 	  Enable logic to support AVTP QoS Adapter handling inside the
 	  STMMAC Ethernet driver.
@@ -38,6 +38,15 @@ config STMMAC_GENAVB
 	  time-sensitive networking (TSN) use cases.
 
 	  If unsure, say N.
+
+config QOS_RELAY
+	bool "Enable QOS Relay for AVTP packets"
+	depends on STMMAC_ETH
+	default n
+	help
+	  This option enables relay (loopback) support for AVTP packets.
+	  If enabled, the driver will forward AVTP packets to a secondary
+	  device like 'eth1'. Useful for testing and diagnostics.
 
 config STMMAC_PLATFORM
 	tristate "STMMAC Platform bus support"

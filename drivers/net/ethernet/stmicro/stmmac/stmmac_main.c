@@ -4966,6 +4966,13 @@ static void stmmac_dispatch_skb_zc(struct stmmac_priv *priv, u32 queue,
 		return;
 	}
 
+#ifdef CONFIG_STMMAC_GENAVB
+	if (qos_ctx && qos_adapter_is_avtp(skb)) {
+		qos_adapter_handle_rx(qos_ctx, skb);  // loopback / drop / relay
+		return;
+	}
+#endif
+
 	stmmac_get_rx_hwtstamp(priv, p, np, skb);
 	stmmac_rx_vlan(priv->dev, skb);
 	skb->protocol = eth_type_trans(skb, priv->dev);
