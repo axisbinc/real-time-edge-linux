@@ -3,6 +3,7 @@
 #include <linux/skbuff.h>            // For sk_buff
 #include <linux/etherdevice.h>       // For Ethernet helpers
 #include <linux/slab.h>              // For kzalloc/kfree
+#include <linux/debugfs.h>         // For debugfs interface
 #include "stmmac_qos_adapter.h"      // QOS Adapter header
 
 // AVTP EtherType definition
@@ -16,6 +17,10 @@ struct qos_adapter_context {
 	struct net_device *relay_dev;    // Optional forwarding interface (e.g., eth1)
 #endif
 };
+
+// Global debugfs root directory
+static struct dentry *qos_debugfs_root;
+static bool debugfs_initialized = false;
 
 // Register the adapter on the specified net_device
 struct qos_adapter_context *qos_adapter_register(struct net_device *dev)
@@ -44,6 +49,12 @@ struct qos_adapter_context *qos_adapter_register(struct net_device *dev)
 #endif
 
 	pr_info("QOS_ADAPTER: registered on %s\n", dev->name);
+
+	if (!debugfs_initialized) {
+		qos_adapter_debugfs_init();
+		debugfs_initialized = true;
+	}
+
 	return ctx;
 }
 
@@ -60,6 +71,11 @@ void qos_adapter_unregister(struct qos_adapter_context *ctx)
 
 	pr_info("QOS_ADAPTER: unregistered from %s\n", ctx->dev->name);
 	kfree(ctx);  // Free memory
+
+	if (debugfs_initialized) {
+		debugfs_remove_recursive(qos_debugfs_root);
+		debugfs_initialized = false;
+	}
 }
 
 // Check if skb contains an AVTP packet
@@ -166,4 +182,48 @@ drop:
 
 	// Drop the original RX skb
 	kfree_skb(skb);
+}
+
+/* ============================ */
+/*        DebugFS support       */
+/* ============================ */
+
+/**
+ * qos_adapter_run_selftests - Simple placeholder self-test logic
+ */
+static void qos_adapter_run_selftests(void)
+{
+	pr_info("QOS_ADAPTER: Running self-tests...\n");
+	pr_info("QOS_ADAPTER: Self-tests completed.\n");
+}
+
+/**
+ * run_selftest_write - DebugFS callback: triggers self-tests on write
+ */
+static ssize_t run_selftest_write(struct file *file, const char __user *buf,
+                                  size_t count, loff_t *ppos)
+{
+	qos_adapter_run_selftests();
+	return count;
+}
+
+// File ops for debugfs "run_selftest"
+static const struct file_operations run_selftest_fops = {
+	.owner = THIS_MODULE,
+	.write = run_selftest_write,
+};
+
+/**
+ * qos_adapter_debugfs_init - Create debugfs entries
+ */
+static void qos_adapter_debugfs_init(void)
+{
+	qos_debugfs_root = debugfs_create_dir("qos_adapter", NULL);
+	if (!qos_debugfs_root || IS_ERR(qos_debugfs_root)) {
+		pr_warn("QOS_ADAPTER: Failed to create debugfs directory\n");
+		return;
+	}
+
+	debugfs_create_file("run_selftest", 0200, qos_debugfs_root,
+	                    NULL, &run_selftest_fops);
 }

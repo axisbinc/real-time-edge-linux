@@ -1,5 +1,5 @@
-#ifndef __QOS_ADAPTER_H__
-#define __QOS_ADAPTER_H__
+#ifndef __STMMAC_QOS_ADAPTER_H__
+#define __STMMAC_QOS_ADAPTER_H__
 
 #include <linux/types.h>
 #include <linux/netdevice.h>
@@ -42,4 +42,9 @@ void qos_adapter_handle_tx(struct qos_adapter_context *ctx, struct sk_buff *skb)
  */
 void qos_adapter_handle_rx(struct qos_adapter_context *ctx, struct sk_buff *skb);
 
-#endif /* __QOS_ADAPTER_H__ */
+/**
+ * qos_adapter_debugfs_init - Create DebugFS interface (called internally)
+ */
+void qos_adapter_debugfs_init(void);
+
+#endif /* __STMMAC_QOS_ADAPTER_H__ */
