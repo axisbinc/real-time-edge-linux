@@ -1,7 +1,7 @@
 #ifndef __QOS_ADAPTER_H__
 #define __QOS_ADAPTER_H__
 
-#include <stdbool.h>
+#include <linux/types.h>
 #include <linux/netdevice.h>
 #include <linux/skbuff.h>
 
