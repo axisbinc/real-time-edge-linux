@@ -7404,6 +7404,10 @@ int stmmac_dvr_probe(struct device *device,
 		goto error_netdev_register;
 	}
 
+#ifdef CONFIG_STMMAC_GENAVB
+	qos_adapter_debugfs_init();
+#endif
+
 #ifdef CONFIG_DEBUG_FS
 	stmmac_init_fs(ndev);
 #endif
