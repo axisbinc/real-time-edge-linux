@@ -4,13 +4,13 @@
 #include <linux/etherdevice.h>       // For Ethernet helpers
 #include <linux/slab.h>              // For kzalloc/kfree
 #include <linux/debugfs.h>         // For debugfs interface
-#include "stmmac_qos_adapter.h"      // QOS Adapter header
+#include "stmmac_enet_qos_adapter.h"      // QOS Adapter header
 
 // AVTP EtherType definition
 #define ETH_P_AVTP 0x22F0
 
 // Adapter context structure
-struct qos_adapter_context {
+struct stmmac_enet_qos_ctx {
 	struct net_device *dev;          // Interface being monitored
 
 #ifdef CONFIG_QOS_RELAY
@@ -23,19 +23,19 @@ static struct dentry *qos_debugfs_root;
 static bool debugfs_initialized = false;
 
 // Register the adapter on the specified net_device
-struct qos_adapter_context *qos_adapter_register(struct net_device *dev)
+struct stmmac_enet_qos_ctx *stmmac_enet_qos_register(struct net_device *dev)
 {
-	struct qos_adapter_context *ctx;
+	struct stmmac_enet_qos_ctx *ctx;
 
 	if (!dev) {
-		pr_err("QOS_ADAPTER: Invalid device\n");
+		pr_err("STMMAC_ENET_QOS: Invalid device\n");
 		return NULL;
 	}
 
 	// Allocate and zero memory for the context
 	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
 	if (!ctx) {
-		pr_err("QOS_ADAPTER: Memory allocation failed\n");
+		pr_err("STMMAC_ENET_QOS: Memory allocation failed\n");
 		return NULL;
 	}
 
@@ -45,13 +45,13 @@ struct qos_adapter_context *qos_adapter_register(struct net_device *dev)
 	// Try to bind a secondary relay device (e.g., eth1) if available
 	ctx->relay_dev = dev_get_by_name(&init_net, "eth1");
 	if (!ctx->relay_dev)
-		pr_warn("QOS_ADAPTER: relay device 'eth1' not found\n");
+		pr_warn("STMMAC_ENET_QOS: relay device 'eth1' not found\n");
 #endif
 
-	pr_info("QOS_ADAPTER: registered on %s\n", dev->name);
+	pr_info("STMMAC_ENET_QOS: registered on %s\n", dev->name);
 
 	if (!debugfs_initialized) {
-		qos_adapter_debugfs_init();
+		stmmac_enet_qos_debugfs_init();
 		debugfs_initialized = true;
 	}
 
@@ -59,7 +59,7 @@ struct qos_adapter_context *qos_adapter_register(struct net_device *dev)
 }
 
 // Unregister and free the adapter context
-void qos_adapter_unregister(struct qos_adapter_context *ctx)
+void stmmac_enet_qos_unregister(struct stmmac_enet_qos_ctx *ctx)
 {
 	if (!ctx)
 		return;
@@ -69,7 +69,7 @@ void qos_adapter_unregister(struct qos_adapter_context *ctx)
 		dev_put(ctx->relay_dev);  // Release relay device reference
 #endif
 
-	pr_info("QOS_ADAPTER: unregistered from %s\n", ctx->dev->name);
+	pr_info("STMMAC_ENET_QOS: unregistered from %s\n", ctx->dev->name);
 	kfree(ctx);  // Free memory
 
 	if (debugfs_initialized) {
@@ -79,7 +79,7 @@ void qos_adapter_unregister(struct qos_adapter_context *ctx)
 }
 
 // Check if skb contains an AVTP packet
-bool qos_adapter_is_avtp(struct sk_buff *skb)
+bool stmmac_enet_qos_is_avtp(struct sk_buff *skb)
 {
 	struct ethhdr *eth;
 
@@ -95,7 +95,7 @@ bool qos_adapter_is_avtp(struct sk_buff *skb)
 }
 
 // Handle AVTP packet - log or relay, and drop original
-void qos_adapter_handle_tx(struct qos_adapter_context *ctx, struct sk_buff *skb)
+void stmmac_enet_qos_handle_tx(struct stmmac_enet_qos_ctx *ctx, struct sk_buff *skb)
 {
 	struct ethhdr *eth;
 
@@ -105,7 +105,7 @@ void qos_adapter_handle_tx(struct qos_adapter_context *ctx, struct sk_buff *skb)
 	eth = eth_hdr(skb);
 
 	// Log info about the AVTP packet
-	pr_info("QOS_ADAPTER: AVTP TX detected (len=%u, src=%pM, dst=%pM)\n",
+	pr_info("STMMAC_ENET_QOS: AVTP TX detected (len=%u, src=%pM, dst=%pM)\n",
 	        skb->len, eth->h_source, eth->h_dest);
 
 #ifdef CONFIG_QOS_RELAY
@@ -113,7 +113,7 @@ void qos_adapter_handle_tx(struct qos_adapter_context *ctx, struct sk_buff *skb)
 	if (ctx->relay_dev && netif_running(ctx->relay_dev)) {
 		struct sk_buff *skb_clone = skb_copy(skb, GFP_ATOMIC);
 		if (!skb_clone) {
-			pr_err("QOS_ADAPTER: TX relay clone failed\n");
+			pr_err("STMMAC_ENET_QOS: TX relay clone failed\n");
 			goto drop;
 		}
 
@@ -124,11 +124,11 @@ void qos_adapter_handle_tx(struct qos_adapter_context *ctx, struct sk_buff *skb)
 		skb_reset_mac_header(skb_clone);
 
 		if (dev_queue_xmit(skb_clone) != NET_XMIT_SUCCESS) {
-			pr_err("QOS_ADAPTER: TX relay failed\n");
+			pr_err("STMMAC_ENET_QOS: TX relay failed\n");
 			kfree_skb(skb_clone);
 		}
         else {
-			pr_info("QOS_ADAPTER: relayed TX AVTP packet to %s\n",
+			pr_info("STMMAC_ENET_QOS: relayed TX AVTP packet to %s\n",
 			        ctx->relay_dev->name);
 		}
 	}
@@ -140,7 +140,7 @@ drop:
 }
 
 // Handle AVTP packets during reception (RX)
-void qos_adapter_handle_rx(struct qos_adapter_context *ctx, struct sk_buff *skb)
+void stmmac_enet_qos_handle_rx(struct stmmac_enet_qos_ctx *ctx, struct sk_buff *skb)
 {
 	struct ethhdr *eth;
 
@@ -150,7 +150,7 @@ void qos_adapter_handle_rx(struct qos_adapter_context *ctx, struct sk_buff *skb)
 	eth = eth_hdr(skb);
 
 	// Log details about the AVTP RX packet
-	pr_info("QOS_ADAPTER: AVTP RX detected (len=%u, src=%pM, dst=%pM)\n",
+	pr_info("STMMAC_ENET_QOS: AVTP RX detected (len=%u, src=%pM, dst=%pM)\n",
 	        skb->len, eth->h_source, eth->h_dest);
 
 #ifdef CONFIG_QOS_RELAY
@@ -158,7 +158,7 @@ void qos_adapter_handle_rx(struct qos_adapter_context *ctx, struct sk_buff *skb)
 	if (ctx->relay_dev && netif_running(ctx->relay_dev)) {
 		struct sk_buff *skb_clone = skb_copy(skb, GFP_ATOMIC);
 		if (!skb_clone) {
-			pr_err("QOS_ADAPTER: RX relay clone failed\n");
+			pr_err("STMMAC_ENET_QOS: RX relay clone failed\n");
 			goto drop;
 		}
 
@@ -170,10 +170,10 @@ void qos_adapter_handle_rx(struct qos_adapter_context *ctx, struct sk_buff *skb)
 
 		// Transmit the relayed packet
 		if (dev_queue_xmit(skb_clone) != NET_XMIT_SUCCESS) {
-			pr_err("QOS_ADAPTER: RX relay failed\n");
+			pr_err("STMMAC_ENET_QOS: RX relay failed\n");
 			kfree_skb(skb_clone);
 		} else {
-			pr_info("QOS_ADAPTER: relayed RX AVTP to %s\n",
+			pr_info("STMMAC_ENET_QOS: relayed RX AVTP to %s\n",
 			        ctx->relay_dev->name);
 		}
 	}
@@ -191,10 +191,10 @@ drop:
 /**
  * qos_adapter_run_selftests - Simple placeholder self-test logic
  */
-static void qos_adapter_run_selftests(void)
+static void stmmac_enet_qos_run_selftests(void)
 {
-	pr_info("QOS_ADAPTER: Running self-tests...\n");
-	pr_info("QOS_ADAPTER: Self-tests completed.\n");
+	pr_info("STMMAC_ENET_QOS: Running self-tests...\n");
+	pr_info("STMMAC_ENET_QOS: Self-tests completed.\n");
 }
 
 /**
@@ -203,7 +203,7 @@ static void qos_adapter_run_selftests(void)
 static ssize_t run_selftest_write(struct file *file, const char __user *buf,
                                   size_t count, loff_t *ppos)
 {
-	qos_adapter_run_selftests();
+	stmmac_enet_qos_run_selftests();
 	return count;
 }
 
@@ -216,11 +216,11 @@ static const struct file_operations run_selftest_fops = {
 /**
  * qos_adapter_debugfs_init - Create debugfs entries
  */
-static void qos_adapter_debugfs_init(void)
+static void stmmac_enet_qos_debugfs_init(void)
 {
-	qos_debugfs_root = debugfs_create_dir("qos_adapter", NULL);
+	qos_debugfs_root = debugfs_create_dir("stmmac_enet_qos", NULL);
 	if (!qos_debugfs_root || IS_ERR(qos_debugfs_root)) {
-		pr_warn("QOS_ADAPTER: Failed to create debugfs directory\n");
+		pr_warn("STMMAC_ENET_QOS: Failed to create debugfs directory\n");
 		return;
 	}
 

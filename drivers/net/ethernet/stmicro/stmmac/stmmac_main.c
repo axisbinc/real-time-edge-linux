@@ -50,8 +50,8 @@
 #include "dwxgmac2.h"
 #include "hwif.h"
 #ifdef CONFIG_STMMAC_GENAVB
-#include "stmmac_qos_adapter.h"
-static struct qos_adapter_context *qos_ctx;
+#include "stmmac_enet_qos_adapter.h"
+static struct stmmac_enet_qos_ctx *qos_ctx;
 #endif
 
 /* As long as the interface is active, we keep the timestamping counter enabled
@@ -3897,20 +3897,20 @@ static int stmmac_open(struct net_device *dev)
 
 #ifdef CONFIG_STMMAC_GENAVB
 	// Register the QOS adapter (for AVTP interception)
-	qos_ctx = qos_adapter_register(dev);
+	qos_ctx = stmmac_enet_qos_register(dev);
 	if (!qos_ctx) {
-		netdev_err(dev, "QOS_ADAPTER registration failed\n");
+		netdev_err(dev, "STMMAC_ENET_QOS registration failed\n");
 		free_dma_desc_resources(priv, dma_conf);
 		kfree(dma_conf);
 		return -ENOMEM;
 	}
-	netdev_info(dev, "QOS_ADAPTER registered successfully\n");
+	netdev_info(dev, "STMMAC_ENET_QOS registered successfully\n");
 #endif
 
 	ret = __stmmac_open(dev, dma_conf);
 	if (ret) {
 #ifdef CONFIG_STMMAC_GENAVB
-		qos_adapter_unregister(qos_ctx);
+		stmmac_enet_qos_unregister(qos_ctx);
 		qos_ctx = NULL;
 #endif
 		free_dma_desc_resources(priv, dma_conf);
@@ -3943,7 +3943,7 @@ static int stmmac_release(struct net_device *dev)
 
 #ifdef CONFIG_STMMAC_GENAVB
 	if (qos_ctx) {
-		qos_adapter_unregister(qos_ctx);  // Unregister QOS relay/adapter
+		stmmac_enet_qos_unregister(qos_ctx);  // Unregister QOS relay/adapter
 		qos_ctx = NULL;
 	}
 #endif
@@ -4370,8 +4370,8 @@ static netdev_tx_t stmmac_xmit(struct sk_buff *skb, struct net_device *dev)
 	unsigned int first_entry, tx_packets, enh_desc;
 	struct stmmac_priv *priv = netdev_priv(dev);
 #ifdef CONFIG_STMMAC_GENAVB
-	if (qos_ctx && qos_adapter_is_avtp(skb)) {
-		qos_adapter_handle_tx(qos_ctx, skb);
+	if (qos_ctx && stmmac_enet_qos_is_avtp(skb)) {
+		stmmac_enet_qos_handle_tx(qos_ctx, skb);
 		return NETDEV_TX_OK;  // Handled by AVTP QOS adapter
 	}
 #endif
@@ -4967,8 +4967,8 @@ static void stmmac_dispatch_skb_zc(struct stmmac_priv *priv, u32 queue,
 	}
 
 #ifdef CONFIG_STMMAC_GENAVB
-	if (qos_ctx && qos_adapter_is_avtp(skb)) {
-		qos_adapter_handle_rx(qos_ctx, skb);  // loopback / drop / relay
+	if (qos_ctx && stmmac_enet_qos_is_avtp(skb)) {
+		stmmac_enet_qos_handle_rx(qos_ctx, skb);  // loopback / drop / relay
 		return;
 	}
 #endif
@@ -7405,7 +7405,7 @@ int stmmac_dvr_probe(struct device *device,
 	}
 
 #ifdef CONFIG_STMMAC_GENAVB
-	qos_adapter_debugfs_init();
+	stmmac_enet_qos_debugfs_init();
 #endif
 
 #ifdef CONFIG_DEBUG_FS
