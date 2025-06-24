@@ -20,7 +20,7 @@ struct stmmac_enet_qos_ctx {
 
 // Global debugfs root directory
 static struct dentry *qos_debugfs_root;
-static bool debugfs_initialized = false;
+static bool stmmac_qos_debugfs_ready = false;
 
 // Register the adapter on the specified net_device
 struct stmmac_enet_qos_ctx *stmmac_enet_qos_register(struct net_device *dev)
@@ -50,9 +50,9 @@ struct stmmac_enet_qos_ctx *stmmac_enet_qos_register(struct net_device *dev)
 
 	pr_info("STMMAC_ENET_QOS: registered on %s\n", dev->name);
 
-	if (!debugfs_initialized) {
+	if (!stmmac_qos_debugfs_ready) {
 		stmmac_enet_qos_debugfs_init();
-		debugfs_initialized = true;
+		stmmac_qos_debugfs_ready = true;
 	}
 
 	return ctx;
@@ -72,9 +72,9 @@ void stmmac_enet_qos_unregister(struct stmmac_enet_qos_ctx *ctx)
 	pr_info("STMMAC_ENET_QOS: unregistered from %s\n", ctx->dev->name);
 	kfree(ctx);  // Free memory
 
-	if (debugfs_initialized) {
+	if (stmmac_qos_debugfs_ready) {
 		debugfs_remove_recursive(qos_debugfs_root);
-		debugfs_initialized = false;
+		stmmac_qos_debugfs_ready = false;
 	}
 }
 
@@ -216,7 +216,7 @@ static const struct file_operations run_selftest_fops = {
 /**
  * qos_adapter_debugfs_init - Create debugfs entries
  */
-static void stmmac_enet_qos_debugfs_init(void)
+void stmmac_enet_qos_debugfs_init(void)
 {
 	qos_debugfs_root = debugfs_create_dir("stmmac_enet_qos", NULL);
 	if (!qos_debugfs_root || IS_ERR(qos_debugfs_root)) {
