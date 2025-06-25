@@ -39,7 +39,7 @@ config STMMAC_GENAVB
 
 	  If unsure, say N.
 
-config QOS_RELAY
+config STMMAC_ENET_QOS_RELAY
 	bool "Enable QOS Relay for AVTP packets"
 	depends on STMMAC_ETH
 	default n
