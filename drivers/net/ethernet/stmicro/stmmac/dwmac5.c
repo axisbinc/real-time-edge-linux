@@ -9,6 +9,7 @@
 #include "dwmac5.h"
 #include "stmmac.h"
 #include "stmmac_ptp.h"
+#include "stmmac_frp.h"
 
 struct dwmac5_error_desc {
 	bool valid;
@@ -428,6 +429,67 @@ dwmac5_rxp_get_next_entry(struct stmmac_tc_entry *entries, unsigned int count,
 	if (found)
 		return &entries[min_prio_idx];
 	return NULL;
+}
+
+int dwmac5_frp_update_num_entries(void __iomem *ioaddr, u32 num_entries)
+{
+	u32 val;
+
+	if (num_entries > 64)
+		return -EINVAL;
+
+	/* Set the number of FRP instructions */
+	val = readl(ioaddr + MTL_RXP_CONTROL_STATUS);
+	val &= ~0x7F;              // Clear bits 0-6 (instruction count)
+	val |= (num_entries & 0x7F);
+	writel(val, ioaddr + MTL_RXP_CONTROL_STATUS);
+
+	return 0;
+}
+
+int dwmac5_frp_update_single_entry(void __iomem *ioaddr,
+				   union frp_instruction *instr, int pos)
+{
+	int i;
+
+	if (!instr || pos < 0 || pos >= 64)
+		return -EINVAL;
+
+	for (i = 0; i < 4; i++)
+		writel(instr->as_array[i], ioaddr + 0x0cb0 + (pos * 16) + (i * 4));
+
+	return 0;
+}
+
+void dwmac5_frp_dump_stats(void __iomem *ioaddr)
+{
+	int i;
+	u32 val;
+
+	pr_info("FRP Statistics (per rule):\n");
+
+	for (i = 0; i < 64; i++) {
+		val = readl(ioaddr + 0x0db0 + (i * 4));  // Stats base addr
+		if (val)
+			pr_info("Rule[%02d]: %u packets matched\n", i, val);
+	}
+}
+
+int dwmac5_disable_rx(void __iomem *ioaddr, u32 *config)
+{
+	if (!config)
+		return -EINVAL;
+
+	*config = readl(ioaddr + MTL_RXP_CONTROL_STATUS);
+	writel(0, ioaddr + MTL_RXP_CONTROL_STATUS);
+
+	return 0;
+}
+
+int dwmac5_restore_rx(void __iomem *ioaddr, u32 config)
+{
+	writel(config, ioaddr + MTL_RXP_CONTROL_STATUS);
+	return 0;
 }
 
 int dwmac5_rxp_config(void __iomem *ioaddr, struct stmmac_tc_entry *entries,

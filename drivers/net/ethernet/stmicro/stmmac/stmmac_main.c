@@ -51,6 +51,7 @@
 #include "hwif.h"
 #ifdef CONFIG_STMMAC_GENAVB
 #include "stmmac_enet_qos_adapter.h"
+#include "stmmac_rxc.h"
 static struct stmmac_enet_qos_ctx *qos_ctx;
 #endif
 
@@ -7405,7 +7406,10 @@ int stmmac_dvr_probe(struct device *device,
 	}
 
 #ifdef CONFIG_STMMAC_GENAVB
-	stmmac_enet_qos_debugfs_init();
+	ret = stmmac_avb_test_rxp(priv);
+	if (ret)
+		dev_warn(priv->device, "FRP AVB test rule setup failed: %d\n", ret);
+	stmmac_enet_qos_debugfs_init();  // Already present
 #endif
 
 #ifdef CONFIG_DEBUG_FS
