@@ -1,5 +1,8 @@
-#ifndef STMMAC_RXC_H
-#define STMMAC_RXH_H
+/*
+ Copyright (c) 2025 AxisB Inc.
+*/
+#ifndef STMMAC_RXP_H
+#define STMMAC_RXP_H
 
 #include <linux/types.h>
 #include "stmmac.h"
@@ -49,4 +52,4 @@ int stmmac_avb_xmit_avb_tx_desc(struct stmmac_priv *priv, int queue,
  */
 int stmmac_avb_test_rxp(struct stmmac_priv *priv);
 
-#endif // STMMAC_RXC_H
+#endif // STMMAC_RXP_H

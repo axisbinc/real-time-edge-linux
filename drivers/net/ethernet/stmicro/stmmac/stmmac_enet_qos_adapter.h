@@ -1,6 +1,5 @@
 /*
  Copyright (c) 2025 AxisB Inc.
- All Rights Reserved. Confidential and Proprietary.
 */
 #ifndef STMMAC_ENET_QOS_ADAPTER_H
 #define STMMAC_ENET_QOS_ADAPTER_H

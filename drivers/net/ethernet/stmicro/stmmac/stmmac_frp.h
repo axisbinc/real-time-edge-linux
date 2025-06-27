@@ -1,3 +1,6 @@
+/*
+ Copyright (c) 2025 AxisB Inc.
+*/
 #ifndef STMMAC_FRP_H
 #define STMMAC_FRP_H
 #include <linux/types.h>

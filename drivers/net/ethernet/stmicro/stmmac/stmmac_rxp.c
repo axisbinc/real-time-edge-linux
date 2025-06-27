@@ -1,4 +1,7 @@
-#include "stmmac_rxc.h"
+/*
+ Copyright (c) 2025 AxisB Inc.
+*/
+#include "stmmac_rxp.h"
 #include "stmmac_frp.h"
 #include "stmmac.h"
 

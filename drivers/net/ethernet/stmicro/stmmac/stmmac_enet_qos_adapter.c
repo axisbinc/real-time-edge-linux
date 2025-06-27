@@ -1,6 +1,5 @@
 /*
  Copyright (c) 2025 AxisB Inc.
- All Rights Reserved. Confidential and Proprietary.
 */
 #include <linux/module.h>               // For kernel module macros
 #include <linux/netdevice.h>            // For net_device
@@ -9,6 +8,9 @@
 #include <linux/slab.h>                 // For kzalloc/kfree
 #include <linux/debugfs.h>              // For debugfs interface
 #include "stmmac_enet_qos_adapter.h"    // QOS Adapter header
+#include "stmmac.h"
+#include "stmmac_frp.h"
+#include "stmmac_rxp.h"
 
 // AVTP EtherType definition
 #define ETH_P_AVTP 0x22F0
@@ -25,6 +27,7 @@ struct stmmac_enet_qos_ctx {
 // Global debugfs root directory
 static struct dentry *qos_debugfs_root;
 static bool stmmac_qos_debugfs_ready = false;
+static struct stmmac_enet_qos_ctx *qos_ctx;
 
 /**
  * qos_adapter_run_selftests - Simple placeholder self-test logic
@@ -41,8 +44,45 @@ static void stmmac_enet_qos_run_selftests(void)
 static ssize_t run_selftest_write(struct file *file, const char __user *buf,
                                   size_t count, loff_t *ppos)
 {
-	stmmac_enet_qos_run_selftests();
-	return count;
+	char input;
+	struct stmmac_priv *priv;
+
+	if (!qos_ctx || !qos_ctx->dev)
+		return -ENODEV;
+
+	priv = netdev_priv(qos_ctx->dev);
+
+	if (copy_from_user(&input, buf, 1))
+		return -EFAULT;
+
+	switch (input) {
+		case 'D':
+			pr_info("Dump FRP stats...\n");
+			dwmac5_frp_dump_stats(priv->hw->pcsr);
+			break;
+
+		case 'Y': {
+			u16 eth_types[] = { ETH_P_1588, ETH_P_TSN, ETH_P_MVRP, 0x88F6, 0x22EA };
+			pr_info("Adding AVB filter...\n");
+			if (stmmac_rxp_setup(priv, eth_types, ARRAY_SIZE(eth_types)))
+				pr_err("Failed to add AVB filter\n");
+			break;
+		}
+
+		case 'N':
+			pr_info("Deleting AVB filter...\n");
+			if (stmmac_rxp_clear(priv))
+				pr_err("Failed to delete AVB filter\n");
+			break;
+
+		case 'T':
+			pr_info("Running AVB RXP test...\n");
+			stmmac_avb_test_rxp(priv);
+			break;
+		default:
+			stmmac_enet_qos_run_selftests();
+			break;
+	}
 }
 
 // File ops for debugfs "run_selftest"
