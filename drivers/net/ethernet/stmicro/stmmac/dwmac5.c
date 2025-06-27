@@ -328,27 +328,6 @@ int dwmac5_safety_feat_dump(struct stmmac_safety_stats *stats,
 	return 0;
 }
 
-static int dwmac5_rxp_disable(void __iomem *ioaddr)
-{
-	u32 val;
-
-	val = readl(ioaddr + MTL_OPERATION_MODE);
-	val &= ~MTL_FRPE;
-	writel(val, ioaddr + MTL_OPERATION_MODE);
-
-	return readl_poll_timeout(ioaddr + MTL_RXP_CONTROL_STATUS, val,
-			val & RXPI, 1, 10000);
-}
-
-static void dwmac5_rxp_enable(void __iomem *ioaddr)
-{
-	u32 val;
-
-	val = readl(ioaddr + MTL_OPERATION_MODE);
-	val |= MTL_FRPE;
-	writel(val, ioaddr + MTL_OPERATION_MODE);
-}
-
 static int dwmac5_rxp_update_single_entry(void __iomem *ioaddr,
 					  struct stmmac_tc_entry *entry,
 					  int pos)
@@ -429,6 +408,27 @@ dwmac5_rxp_get_next_entry(struct stmmac_tc_entry *entries, unsigned int count,
 	if (found)
 		return &entries[min_prio_idx];
 	return NULL;
+}
+
+int dwmac5_rxp_disable(void __iomem *ioaddr)
+{
+	u32 val;
+
+	val = readl(ioaddr + MTL_OPERATION_MODE);
+	val &= ~MTL_FRPE;
+	writel(val, ioaddr + MTL_OPERATION_MODE);
+
+	return readl_poll_timeout(ioaddr + MTL_RXP_CONTROL_STATUS, val,
+			val & RXPI, 1, 10000);
+}
+
+void dwmac5_rxp_enable(void __iomem *ioaddr)
+{
+	u32 val;
+
+	val = readl(ioaddr + MTL_OPERATION_MODE);
+	val |= MTL_FRPE;
+	writel(val, ioaddr + MTL_OPERATION_MODE);
 }
 
 int dwmac5_frp_update_num_entries(void __iomem *ioaddr, u32 num_entries)

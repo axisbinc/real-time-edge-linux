@@ -1,7 +1,6 @@
 #include "stmmac_frp.h"
 #include <linux/io.h>
 #include <linux/etherdevice.h>
-#include "dma_engine.h" // Adjust include as necessary
 
 // Utility: Bitmask for match_en field (field word selector)
 #define FRP_FIELD_WORD(n)   (1U << (n))
@@ -17,13 +16,13 @@
  * EtherType and route them to a specific DMA channel.
  */
 void stmmac_frp_set_ethertype_match(union frp_instruction *instr,
-				    uint16_t ethertype, bool is_vlan,
-				    uint8_t dma_channel)
+				    u16 ethertype, bool is_vlan,
+				    u8 dma_channel)
 {
 	memset(instr, 0, sizeof(*instr));
 
 	// EtherType is located in the second 4-byte word (offset 1)
-	instr->fields.match_data = cpu_to_be32((uint32_t)ethertype << 16);
+	instr->fields.match_data = cpu_to_be32((u32)ethertype << 16);
 	instr->fields.match_en = cpu_to_be32(FRP_FIELD_WORD(1)); // Match word 1
 	instr->fields.af = 1;           // Accept frame if matched
 	instr->fields.rf = 0;           // Do not reject

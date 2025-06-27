@@ -1,7 +1,6 @@
 #include "stmmac_rxc.h"
 #include "stmmac_frp.h"
 #include "stmmac.h"
-#include "stmmac_dv_mac.h"
 
 static bool avb_test_running;
 
