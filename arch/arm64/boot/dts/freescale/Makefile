@@ -106,9 +106,8 @@ dtb-$(CONFIG_ARCH_MXC) += imx8mm-evk-rpmsg-ca53.dtb \
 			  imx8mp-evk-virtio-perf-cm7.dtb \
 			  imx8mp-evk-multicore-rtos.dtb \
 			  imx8mp-evk-multicore-lwip.dtb \
-			  imx8mp-evk-multicore-rpmsg.dtb
-
-imx8mp-var-som-avb-dtbs := imx8mp-var-som-avb.dtb
+			  imx8mp-evk-multicore-rpmsg.dtb \
+				imx8mp-var-som-avb.dtb
 
 dtb-$(CONFIG_ARCH_MXC) += imx8mm-evk-ak4497.dtb imx8mm-evk-ak5558.dtb imx8mm-evk-audio-tdm.dtb
 dtb-$(CONFIG_ARCH_MXC) += imx8mm-evk-8mic-revE.dtb imx8mm-evk-8mic-swpdm.dtb \
