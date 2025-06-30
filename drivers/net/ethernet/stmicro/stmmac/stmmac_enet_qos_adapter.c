@@ -61,20 +61,6 @@ static ssize_t run_selftest_write(struct file *file, const char __user *buf,
 			dwmac5_frp_dump_stats(priv->hw->pcsr);
 			break;
 
-		case 'Y': {
-			u16 eth_types[] = { ETH_P_1588, ETH_P_TSN, ETH_P_MVRP, 0x88F6, 0x22EA };
-			pr_info("Adding AVB filter...\n");
-			if (stmmac_rxp_setup(priv, eth_types, ARRAY_SIZE(eth_types)))
-				pr_err("Failed to add AVB filter\n");
-			break;
-		}
-
-		case 'N':
-			pr_info("Deleting AVB filter...\n");
-			if (stmmac_rxp_clear(priv))
-				pr_err("Failed to delete AVB filter\n");
-			break;
-
 		case 'T':
 			pr_info("Running AVB RXP test...\n");
 			stmmac_avb_test_rxp(priv);
