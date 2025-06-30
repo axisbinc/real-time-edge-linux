@@ -116,6 +116,41 @@ struct stmmac_rx_queue {
 	} state;
 };
 
+#define STMMAC_AVB_DESC_NUM 256
+#define AVB_RX_DESC_NUM 128
+#define AVB_TX_DESC_NUM 128
+
+struct stmmac_avb_buffer {
+    dma_addr_t dma_addr;
+    void *cpu_addr;
+	void *data;
+    size_t size;
+};
+
+struct stmmac_avb_rx_queue {
+    struct dma_desc *dma_rx;
+    dma_addr_t dma_rx_phy;
+    struct stmmac_avb_buffer *buf_pool;
+    dma_addr_t rx_tail_addr;
+    u32 avb_chan;
+};
+
+struct stmmac_avb_tx_queue {
+    struct dma_desc *dma_tx;
+    dma_addr_t dma_tx_phy;
+    dma_addr_t tx_tail_addr;
+	u32 cur_tx;
+	u32 dirty_tx;
+    u32 avb_chan;
+};
+
+struct stmmac_dma_avb_conf {
+    struct stmmac_avb_rx_queue rx_queue;
+    struct stmmac_avb_tx_queue tx_queue;
+    u32 dma_rx_size;
+    u32 dma_tx_size;
+};
+
 struct stmmac_channel {
 	struct napi_struct rx_napi ____cacheline_aligned_in_smp;
 	struct napi_struct tx_napi ____cacheline_aligned_in_smp;
@@ -226,6 +261,13 @@ struct stmmac_priv {
 
 	struct stmmac_dma_conf dma_conf;
 
+#ifdef CONFIG_STMMAC_GENAVB
+	struct stmmac_dma_avb_conf *dma_avb_conf;
+	bool avb_enabled;
+	struct stmmac_avb_op *avb;
+	void *avb_data;
+#endif
+
 	/* Generic channel for NAPI */
 	struct stmmac_channel channel[STMMAC_CH_MAX];
 
@@ -326,6 +368,12 @@ struct stmmac_priv {
 	unsigned long *af_xdp_zc_qps;
 	struct bpf_prog *xdp_prog;
 	bool fp_enabled_admin;
+};
+
+struct stmmac_avb_op {
+	int (*open)(void *avb_data, struct stmmac_priv *priv, int speed);
+	int (*stop)(void *avb_data, struct stmmac_priv *priv);
+	int (*xmit)(void *avb_data, struct stmmac_priv *priv, struct sk_buff *skb);
 };
 
 enum stmmac_state {

@@ -66,31 +66,6 @@ int stmmac_rxp_clear(struct stmmac_priv *priv)
 }
 
 /**
- * stmmac_avb_xmit_avb_tx_desc - Send AVB packet using channel 4
- * @priv: Driver private data
- * @queue: Not used (DMA queue 4 is hardcoded in FRP)
- * @avb_desc: Data and size to send
- */
-int stmmac_avb_xmit_avb_tx_desc(struct stmmac_priv *priv, int queue,
-				struct avb_tx_desc *avb_desc)
-{
-	struct sk_buff *skb;
-
-	skb = netdev_alloc_skb_ip_align(priv->dev, avb_desc->len);
-	if (!skb)
-		return -ENOMEM;
-
-	memcpy(skb_put(skb, avb_desc->len), avb_desc->data, avb_desc->len);
-
-	skb->dev = priv->dev;
-	skb->priority = 7; // Use high priority
-	skb->queue_mapping = STMMAC_AVB_CHANNEL; // Ensure it maps to DMA channel 4
-
-	// Use the registered network transmit callback
-	return priv->dev->netdev_ops->ndo_start_xmit(skb, priv->dev);
-}
-
-/**
  * stmmac_avb_test_rxp - Sample test function to configure AVB FRP rules
  * @priv: Driver private data
  */

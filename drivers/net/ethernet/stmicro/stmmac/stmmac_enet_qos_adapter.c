@@ -56,19 +56,22 @@ static ssize_t run_selftest_write(struct file *file, const char __user *buf,
 		return -EFAULT;
 
 	switch (input) {
-		case 'D':
-			pr_info("Dump FRP stats...\n");
-			dwmac5_frp_dump_stats(priv->hw->pcsr);
-			break;
+	case 'D':
+		pr_info("Dump FRP stats...\n");
+		dwmac5_frp_dump_stats(priv->hw->pcsr);
+		break;
 
-		case 'T':
-			pr_info("Running AVB RXP test...\n");
-			stmmac_avb_test_rxp(priv);
-			break;
-		default:
-			stmmac_enet_qos_run_selftests();
-			break;
+	case 'T':
+		pr_info("Running AVB RXP test...\n");
+		stmmac_avb_test_rxp(priv);
+		break;
+
+	default:
+		stmmac_enet_qos_run_selftests();
+		break;
 	}
+
+	return count;
 }
 
 // File ops for debugfs "run_selftest"

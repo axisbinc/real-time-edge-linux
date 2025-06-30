@@ -49,6 +49,7 @@
 #include "stmmac_xdp.h"
 #include <linux/reset.h>
 #include <linux/of_mdio.h>
+#include <linux/moduleparam.h>
 #include "dwmac1000.h"
 #include "dwxgmac2.h"
 #include "hwif.h"
@@ -57,6 +58,15 @@
 #include "stmmac_rxp.h"
 static struct stmmac_enet_qos_ctx *qos_ctx;
 #endif
+
+/* Verbose logging for AVB DMA engine setup */
+static int stmmac_avb_verbose = 0;
+module_param(stmmac_avb_verbose, int, 0644);
+MODULE_PARM_DESC(stmmac_avb_verbose, "Enable verbose logging for STMMAC AVB setup");
+
+static bool stmmac_avb_enabled = true;
+module_param(stmmac_avb_enabled, bool, 0644);
+MODULE_PARM_DESC(stmmac_avb_enabled, "Enable AVB support in STMMAC driver");
 
 /* As long as the interface is active, we keep the timestamping counter enabled
  * with fine resolution and binary rollover. This avoid non-monotonic behavior
@@ -2551,6 +2561,12 @@ static netdev_tx_t stmmac_avb_xmit_avb_tx_desc(struct stmmac_priv *priv,
 	struct dma_desc *desc;
 	dma_addr_t dma_addr;
 	int entry;
+	int is_fs = 1;                     // First segment
+    bool csum_flag = true;            // Enable checksum
+    int mode = priv->mode;            // Descriptor mode
+    bool tx_own = true;               // DMA owns it
+    bool end_tx_desc = true;          // End of packet
+    int buffer1_size = skb->len;
 
 	if (!tx_q || !skb)
 		return NETDEV_TX_BUSY;
@@ -2565,7 +2581,10 @@ static netdev_tx_t stmmac_avb_xmit_avb_tx_desc(struct stmmac_priv *priv,
 	}
 
 	stmmac_set_desc_addr(priv, desc, dma_addr);
-	stmmac_prepare_tx_desc(priv, desc, skb->len, true, STMMAC_AVB_CHANNEL);
+
+    stmmac_prepare_tx_desc(priv, desc, is_fs, skb->len,
+                           csum_flag, mode, tx_own, end_tx_desc,
+                           buffer1_size);
 
 	dma_wmb(); // ensure all writes visible before setting OWN
 	stmmac_set_tx_owner(priv, desc);
@@ -4591,7 +4610,7 @@ static netdev_tx_t stmmac_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	/* Fallback: use AVB TX ring directly */
 	if (stmmac_avb_enabled && priv->avb_enabled) {
-		return stmmac_avb_xmit_avb_tx_desc(priv, skb, queue);
+		return stmmac_avb_xmit_avb_tx_desc(priv, skb, STMMAC_AVB_CHANNEL);
 	}
 #endif
 	unsigned int nopaged_len = skb_headlen(skb);

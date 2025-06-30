@@ -37,15 +37,6 @@ int stmmac_rxp_setup(struct stmmac_priv *priv, u16 eth_types[], u16 count);
 int stmmac_rxp_clear(struct stmmac_priv *priv);
 
 /**
- * stmmac_avb_xmit_avb_tx_desc - Transmit AVB frame using DMA channel 4
- * @priv: stmmac private structure
- * @queue: not used (reserved for future use)
- * @avb_desc: structure with AVB data pointer and size
- */
-int stmmac_avb_xmit_avb_tx_desc(struct stmmac_priv *priv, int queue,
-				struct avb_tx_desc *avb_desc);
-
-/**
  * stmmac_avb_test_rxp - Example test to program FRP rules for AVTP traffic
  * @priv: stmmac private structure
  * Returns: 0 on success or error code
