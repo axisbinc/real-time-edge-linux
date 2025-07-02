@@ -23,25 +23,38 @@ int stmmac_rxp_setup(struct stmmac_priv *priv, u16 eth_types[], u16 count)
 	union frp_instruction instr;
 	int ret, i;
 
-	if (count > 64)
+	pr_info("STMMAC_RXP: Starting RXP setup with %u ethertype entries\n", count);
+	
+	if (count > 64) {
+		pr_err("STMMAC_RXP: Too many ethertype entries (%u > 64)\n", count);
 		return -EINVAL;
-
+	}
 	ret = dwmac5_rxp_disable(priv->ioaddr);
-	if (ret)
+	if (ret) {
+		pr_err("STMMAC_RXP: Failed to disable RXP (ret=%d)\n", ret);
 		return ret;
+	}
+	pr_info("STMMAC_RXP: Disabled RXP successfully\n");
 
 	ret = dwmac5_frp_update_num_entries(priv->ioaddr, count);
-	if (ret)
+	if (ret) {
+		pr_err("STMMAC_RXP: Failed to update number of entries (ret=%d)\n", ret);
 		return ret;
+	}
+	pr_info("STMMAC_RXP: Updated number of RXP entries to %u\n", count);
 
 	for (i = 0; i < count; i++) {
+		pr_info("STMMAC_RXP: Setting entry %d with ethertype 0x%04X\n", i, eth_types[i]);
 		stmmac_frp_set_ethertype_match(&instr, eth_types[i], false, STMMAC_AVB_CHANNEL);
 		ret = dwmac5_frp_update_single_entry(priv->ioaddr, &instr, i);
-		if (ret)
+		if (ret) {
+			pr_err("STMMAC_RXP: Failed to set RXP entry %d (ret=%d)\n", i, ret);
 			return ret;
+		}
 	}
 
 	dwmac5_rxp_enable(priv->ioaddr);
+	pr_info("STMMAC_RXP: RXP enabled successfully\n");
 	return 0;
 }
 

@@ -121,6 +121,7 @@ struct stmmac_enet_qos_ctx *stmmac_enet_qos_register(struct net_device *dev)
 		pr_warn("STMMAC_ENET_QOS: relay device 'eth1' not found\n");
 #endif
 
+	qos_ctx = ctx;
 	pr_info("STMMAC_ENET_QOS: registered on %s\n", dev->name);
 
 	if (!stmmac_qos_debugfs_ready) {
