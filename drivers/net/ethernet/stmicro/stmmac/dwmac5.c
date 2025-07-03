@@ -10,6 +10,7 @@
 #include "stmmac.h"
 #include "stmmac_ptp.h"
 #include "stmmac_frp.h"
+#include "dwmac4_dma.h"
 
 struct dwmac5_error_desc {
 	bool valid;
@@ -435,14 +436,9 @@ int dwmac5_frp_update_num_entries(void __iomem *ioaddr, u32 num_entries)
 {
 	u32 val;
 
-	if (num_entries > 64)
-		return -EINVAL;
-
-	/* Set the number of FRP instructions */
 	val = readl(ioaddr + MTL_RXP_CONTROL_STATUS);
-	val &= ~0x7F;              // Clear bits 0-6 (instruction count)
-	val |= (num_entries & 0x7F);
-	writel(val, ioaddr + MTL_RXP_CONTROL_STATUS);
+    val |= num_entries & NVE;
+    writel(val, ioaddr + MTL_RXP_CONTROL_STATUS);
 
 	return 0;
 }
@@ -450,45 +446,114 @@ int dwmac5_frp_update_num_entries(void __iomem *ioaddr, u32 num_entries)
 int dwmac5_frp_update_single_entry(void __iomem *ioaddr,
 				   union frp_instruction *instr, int pos)
 {
-	int i;
+	int i, ret;
 
+	/* Validate input parameters */
 	if (!instr || pos < 0 || pos >= 64)
 		return -EINVAL;
 
-	for (i = 0; i < 4; i++)
-		writel(instr->as_array[i], ioaddr + 0x0cb0 + (pos * 16) + (i * 4));
+	/* Write each of the 4 words of the instruction (128 bits total) */
+	for (i = 0; i < 4; i++) {
+		int real_pos = pos * 4 + i;
+		u32 val;
 
-	return 0;
+		/* Wait until hardware is ready */
+		ret = readl_poll_timeout(ioaddr + MTL_RXP_IACC_CTRL_STATUS,
+		                         val, !(val & STARTBUSY), 1, 10000);
+		if (ret)
+			return ret;
+
+		/* Write instruction word */
+		val = instr->as_array[i];
+		writel(val, ioaddr + MTL_RXP_IACC_DATA);
+		pr_info("FRP: Writing 0x%08x at index %d\n", val, real_pos);
+
+		/* Set address field */
+		val = real_pos & ADDR;
+		writel(val, ioaddr + MTL_RXP_IACC_CTRL_STATUS);
+
+		/* Set write operation */
+		val |= WRRDN;
+		writel(val, ioaddr + MTL_RXP_IACC_CTRL_STATUS);
+
+		/* Start the write */
+		val |= STARTBUSY;
+		writel(val, ioaddr + MTL_RXP_IACC_CTRL_STATUS);
+
+		/* Wait for hardware to complete the write */
+		ret = readl_poll_timeout(ioaddr + MTL_RXP_IACC_CTRL_STATUS,
+		                         val, !(val & STARTBUSY), 1, 10000);
+		if (ret)
+			return ret;
+	}
+
+	return 0; /* Success */
+}
+
+static void _dwmac4_dump_dma_regs(void __iomem *ioaddr, u32 channel)
+{
+    pr_info("DMA_CHANNEL(%d) Registers\n", channel);
+
+    pr_info("    DMA_CHAN_CONTROL: 0x%x\n", readl(ioaddr + DMA_CHAN_CONTROL(channel)));
+    pr_info("    DMA_CHAN_TX_CONTROL: 0x%x\n", readl(ioaddr + DMA_CHAN_TX_CONTROL(channel)));
+    pr_info("    DMA_CHAN_RX_CONTROL: 0x%x\n", readl(ioaddr + DMA_CHAN_RX_CONTROL(channel)));
+    pr_info("    DMA_CHAN_TX_BASE_ADDR: 0x%x\n", readl(ioaddr + DMA_CHAN_TX_BASE_ADDR(channel)));
+    pr_info("    DMA_CHAN_RX_BASE_ADDR: 0x%x\n", readl(ioaddr + DMA_CHAN_RX_BASE_ADDR(channel)));
+    pr_info("    DMA_CHAN_TX_END_ADDR: 0x%x\n", readl(ioaddr + DMA_CHAN_TX_END_ADDR(channel)));
+    pr_info("    DMA_CHAN_RX_END_ADDR: 0x%x\n", readl(ioaddr + DMA_CHAN_RX_END_ADDR(channel)));
+    pr_info("    DMA_CHAN_TX_RING_LEN: 0x%x\n", readl(ioaddr + DMA_CHAN_TX_RING_LEN(channel)));
+    pr_info("    DMA_CHAN_RX_RING_LEN: 0x%x\n", readl(ioaddr + DMA_CHAN_RX_RING_LEN(channel)));
+    pr_info("    DMA_CHAN_INTR_ENA: 0x%x\n", readl(ioaddr + DMA_CHAN_INTR_ENA(channel)));
+    pr_info("    DMA_CHAN_RX_WATCHDOG: 0x%x\n", readl(ioaddr + DMA_CHAN_RX_WATCHDOG(channel)));
+    pr_info("    DMA_CHAN_SLOT_CTRL_STATUS: 0x%x\n", readl(ioaddr + DMA_CHAN_SLOT_CTRL_STATUS(channel)));
+    pr_info("    DMA_CHAN_CUR_TX_DESC: 0x%x\n", readl(ioaddr + DMA_CHAN_CUR_TX_DESC(channel)));
+    pr_info("    DMA_CHAN_CUR_RX_DESC: 0x%x\n", readl(ioaddr + DMA_CHAN_CUR_RX_DESC(channel)));
+    pr_info("    DMA_CHAN_CUR_TX_BUF_ADDR: 0x%x\n", readl(ioaddr + DMA_CHAN_CUR_TX_BUF_ADDR(channel)));
+    pr_info("    DMA_CHAN_CUR_RX_BUF_ADDR: 0x%x\n", readl(ioaddr + DMA_CHAN_CUR_RX_BUF_ADDR(channel)));
+    pr_info("    DMA_CHAN_STATUS: 0x%x\n", readl(ioaddr + DMA_CHAN_STATUS(channel)));
 }
 
 void dwmac5_frp_dump_stats(void __iomem *ioaddr)
 {
-	int i;
-	u32 val;
+    int i;
 
-	pr_info("FRP Statistics (per rule):\n");
+    pr_info("=== FRP Hardware & DMA Stats ===\n");
 
-	for (i = 0; i < 64; i++) {
-		val = readl(ioaddr + 0x0db0 + (i * 4));  // Stats base addr
-		if (val)
-			pr_info("Rule[%02d]: %u packets matched\n", i, val);
-	}
+    // Print key registers
+    pr_info("GMAC_CONFIG: 0x%x\n", readl(ioaddr + GMAC_CONFIG));
+    pr_info("MTL_RXQ_DMA_MAP0: 0x%x\n", readl(ioaddr + MTL_RXQ_DMA_MAP0));
+    pr_info("MTL_RXQ_DMA_MAP1: 0x%x\n", readl(ioaddr + MTL_RXQ_DMA_MAP1));
+    pr_info("MTL_RXP_CONTROL_STATUS: 0x%x\n", readl(ioaddr + MTL_RXP_CONTROL_STATUS));
+    pr_info("MTL_OPERATION_MODE: 0x%x\n", readl(ioaddr + MTL_OPERATION_MODE));
+    pr_info("MTL_RXP_DROP_CNT: 0x%x\n", readl(ioaddr + MTL_RXP_DROP_CNT));
+    pr_info("MTL_RXP_ERROR_CNT: 0x%x\n", readl(ioaddr + MTL_RXP_ERROR_CNT));
+    pr_info("DMA_CH1_RXP_ACCEPT_CNT: 0x%x\n", readl(ioaddr + DMA_CH1_RXP_ACCEPT_CNT));
+    pr_info("DMA_CH2_RXP_ACCEPT_CNT: 0x%x\n", readl(ioaddr + DMA_CH2_RXP_ACCEPT_CNT));
+    pr_info("DMA_CH3_RXP_ACCEPT_CNT: 0x%x\n", readl(ioaddr + DMA_CH3_RXP_ACCEPT_CNT));
+    pr_info("DMA_CH4_RXP_ACCEPT_CNT: 0x%x\n", readl(ioaddr + DMA_CH4_RXP_ACCEPT_CNT));
+
+    // Dump all DMA channel registers
+    for (i = 0; i < 5; i++) {
+        _dwmac4_dump_dma_regs(ioaddr, i);
+        pr_info("    MTL_CHAN_TX_OP_MODE(%d): 0x%x\n", i, readl(ioaddr + MTL_CHAN_TX_OP_MODE(i)));
+        pr_info("    MTL_CHAN_TX_DEBUG(%d): 0x%x\n", i, readl(ioaddr + MTL_CHAN_TX_DEBUG(i)));
+    }
 }
 
 int dwmac5_disable_rx(void __iomem *ioaddr, u32 *config)
 {
-	if (!config)
-		return -EINVAL;
+	u32 old_val, val;
 
-	*config = readl(ioaddr + MTL_RXP_CONTROL_STATUS);
-	writel(0, ioaddr + MTL_RXP_CONTROL_STATUS);
-
-	return 0;
+	/* Force disable RX */
+	*config = old_val = readl(ioaddr + GMAC_CONFIG);
+	val = old_val & ~GMAC_CONFIG_RE;
+	writel(val, ioaddr + GMAC_CONFIG);
+    return 0;
 }
 
 int dwmac5_restore_rx(void __iomem *ioaddr, u32 config)
 {
-	writel(config, ioaddr + MTL_RXP_CONTROL_STATUS);
+	writel(config, ioaddr + GMAC_CONFIG);
 	return 0;
 }
 
