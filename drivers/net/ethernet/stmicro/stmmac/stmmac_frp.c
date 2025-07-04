@@ -22,16 +22,27 @@ void stmmac_frp_set_ethertype_match(union frp_instruction *instr,
 				    u16 ethertype, bool is_vlan,
 				    u8 dma_channel)
 {
+	if (!instr)
+		return;
+
 	memset(instr, 0, sizeof(*instr));
+
+	/* 
+	 * EtherType field:
+	 *   - For normal: starts at byte offset 12 → word offset 3
+	 *   - For VLAN: starts at byte offset 16 → word offset 4
+	 */
+	u8 offset = is_vlan ? 4 : 3;
 
 	// EtherType is located in the second 4-byte word (offset 1)
 	instr->fields.match_data = cpu_to_be32((u32)ethertype << 16);
-	instr->fields.match_en = cpu_to_be32(FRP_FIELD_WORD(1)); // Match word 1
+	instr->fields.match_en = cpu_to_be32(FRP_FIELD_WORD(offset));
+	instr->fields.frame_offset = offset;  // Offset in 32-bit units
+
 	instr->fields.af = 1;           // Accept frame if matched
 	instr->fields.rf = 0;           // Do not reject
 	instr->fields.im = 0;           // Normal match (not inverse)
 	instr->fields.nc = 0;           // No next instruction (end)
-	instr->fields.frame_offset = 1; // Offset in 4-byte units
 	instr->fields.ok_index = 0xFF;  // No next instruction
 	instr->fields.dma_ch_no = dma_channel;
 }
@@ -45,10 +56,14 @@ void stmmac_frp_set_ethertype_match(union frp_instruction *instr,
  */
 void stmmac_frp_accept_all(union frp_instruction *instr)
 {
+	if (!instr)
+		return;
+
 	memset(instr, 0, sizeof(*instr));
 
 	instr->fields.af = 1;                 // Accept all frames
 	instr->fields.rf = 0;                 // Do not reject
+	instr->fields.im = 0;
 	instr->fields.nc = 0;                 // No next instruction
 	instr->fields.ok_index = 0xFF;        // No chaining
 	instr->fields.dma_ch_no = STMMAC_AVB_CHANNEL; // Route to AVB channel (e.g., 4)

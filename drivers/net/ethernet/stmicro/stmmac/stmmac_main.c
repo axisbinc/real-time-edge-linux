@@ -2561,7 +2561,7 @@ static netdev_tx_t stmmac_avb_xmit_avb_tx_desc(struct stmmac_priv *priv,
 	struct dma_desc *desc;
 	dma_addr_t dma_addr;
 	int entry;
-	int is_fs = 1;                     // First segment
+	int is_fs = 1;                    // First segment
     bool csum_flag = true;            // Enable checksum
     int mode = priv->mode;            // Descriptor mode
     bool tx_own = true;               // DMA owns it

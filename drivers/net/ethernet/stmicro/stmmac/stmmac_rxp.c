@@ -21,40 +21,70 @@ bool stmmac_avb_test_is_in_progress(void)
 int stmmac_rxp_setup(struct stmmac_priv *priv, u16 eth_types[], u16 count)
 {
 	union frp_instruction instr;
-	int ret, i;
-
-	pr_info("STMMAC_RXP: Starting RXP setup with %u ethertype entries\n", count);
+	uint32_t config = 0;
+	int ret = 0, i, entry = 0;
 	
-	if (count > 64) {
-		pr_err("STMMAC_RXP: Too many ethertype entries (%u > 64)\n", count);
+	pr_info("STMMAC_RXP: Starting RXP setup for %u ethertypes\n", count);
+	
+	if (count * 2 + 1 > 64) {
+		pr_err("STMMAC_RXP: Too many entries. Max supported: 64, requested: %u\n", count * 2 + 1);
 		return -EINVAL;
 	}
-	ret = dwmac5_rxp_disable(priv->ioaddr);
-	if (ret) {
-		pr_err("STMMAC_RXP: Failed to disable RXP (ret=%d)\n", ret);
-		return ret;
-	}
-	pr_info("STMMAC_RXP: Disabled RXP successfully\n");
 
-	ret = dwmac5_frp_update_num_entries(priv->ioaddr, count);
-	if (ret) {
-		pr_err("STMMAC_RXP: Failed to update number of entries (ret=%d)\n", ret);
-		return ret;
-	}
-	pr_info("STMMAC_RXP: Updated number of RXP entries to %u\n", count);
+	// Disable RX and RXP
+	dwmac5_disable_rx(priv->ioaddr, &config);
+	ret = dwmac5_rxp_disable(priv->ioaddr);
+	if (ret)
+		pr_warn("STMMAC_RXP: Failed to disable RXP (ret=%d)\n", ret);
+	else
+		pr_info("STMMAC_RXP: RXP disabled\n");
 
 	for (i = 0; i < count; i++) {
-		pr_info("STMMAC_RXP: Setting entry %d with ethertype 0x%04X\n", i, eth_types[i]);
-		stmmac_frp_set_ethertype_match(&instr, eth_types[i], false, STMMAC_AVB_CHANNEL);
-		ret = dwmac5_frp_update_single_entry(priv->ioaddr, &instr, i);
+		u16 eth_type = eth_types[i];
+
+		// Add rule for untagged frame
+		stmmac_frp_set_ethertype_match(&instr, eth_type, false, STMMAC_AVB_CHANNEL);
+		ret = dwmac5_frp_update_single_entry(priv->ioaddr, &instr, entry++);
 		if (ret) {
-			pr_err("STMMAC_RXP: Failed to set RXP entry %d (ret=%d)\n", i, ret);
+			pr_err("STMMAC_RXP: Failed to add rule (eth=0x%04X, vlan=0) at entry %d\n", eth_type, entry - 1);
+			dwmac5_restore_rx(priv->ioaddr, config);
 			return ret;
 		}
+
+		// Add rule for VLAN-tagged frame
+		stmmac_frp_set_ethertype_match(&instr, eth_type, true, STMMAC_AVB_CHANNEL);
+		ret = dwmac5_frp_update_single_entry(priv->ioaddr, &instr, entry++);
+		if (ret) {
+			pr_err("STMMAC_RXP: Failed to add rule (eth=0x%04X, vlan=1) at entry %d\n", eth_type, entry - 1);
+			dwmac5_restore_rx(priv->ioaddr, config);
+			return ret;
+		}
+
+		pr_info("STMMAC_RXP: Added ethertype 0x%04X (vlan & non-vlan)\n", eth_type);
+	}
+
+	// Add final "accept all" rule
+	stmmac_frp_accept_all(&instr);
+	ret = dwmac5_frp_update_single_entry(priv->ioaddr, &instr, entry++);
+	if (ret) {
+		pr_err("STMMAC_RXP: Failed to add 'accept all' rule\n");
+		dwmac5_restore_rx(priv->ioaddr, config);
+		return ret;
+	}
+	pr_info("STMMAC_RXP: Added fallback accept-all rule at entry %d\n", entry - 1);
+
+	// Update the number of active entries
+	ret = dwmac5_frp_update_num_entries(priv->ioaddr, entry);
+	if (ret) {
+		pr_err("STMMAC_RXP: Failed to update entry count to %d\n", entry);
+		dwmac5_restore_rx(priv->ioaddr, config);
+		return ret;
 	}
 
 	dwmac5_rxp_enable(priv->ioaddr);
-	pr_info("STMMAC_RXP: RXP enabled successfully\n");
+	pr_info("STMMAC_RXP: RXP enabled with %d total entries\n", entry);
+
+	dwmac5_restore_rx(priv->ioaddr, config);
 	return 0;
 }
 
@@ -64,18 +94,23 @@ int stmmac_rxp_setup(struct stmmac_priv *priv, u16 eth_types[], u16 count)
  */
 int stmmac_rxp_clear(struct stmmac_priv *priv)
 {
+	int32_t config = 0;
 	int ret;
 
+	dwmac5_disable_rx(priv->ioaddr, &config);
 	ret = dwmac5_rxp_disable(priv->ioaddr);
 	if (ret)
-		return ret;
+		pr_warn("STMMAC_RXP: Failed to disable RXP (ret=%d)\n", ret);
 
 	ret = dwmac5_frp_update_num_entries(priv->ioaddr, 0);
 	if (ret)
-		return ret;
+		pr_err("STMMAC_RXP: Failed to clear FRP entries (ret=%d)\n", ret);
+	else
+		pr_info("STMMAC_RXP: Cleared FRP entries\n");
 
-	dwmac5_rxp_enable(priv->ioaddr);
-	return 0;
+	dwmac5_restore_rx(priv->ioaddr, config);
+
+	return ret;
 }
 
 /**
