@@ -131,6 +131,7 @@ struct stmmac_enet_qos_ctx *stmmac_enet_qos_register(struct net_device *dev)
 
 	return ctx;
 }
+EXPORT_SYMBOL(stmmac_enet_qos_register);
 
 // Unregister and free the adapter context
 void stmmac_enet_qos_unregister(struct stmmac_enet_qos_ctx *ctx)
@@ -151,6 +152,7 @@ void stmmac_enet_qos_unregister(struct stmmac_enet_qos_ctx *ctx)
 		stmmac_qos_debugfs_ready = false;
 	}
 }
+EXPORT_SYMBOL(stmmac_enet_qos_unregister);
 
 // Check if skb contains an AVTP packet
 bool stmmac_enet_qos_is_avtp(struct sk_buff *skb)
