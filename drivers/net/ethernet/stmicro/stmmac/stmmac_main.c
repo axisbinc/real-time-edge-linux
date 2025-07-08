@@ -2597,6 +2597,141 @@ static netdev_tx_t stmmac_avb_xmit_avb_tx_desc(struct stmmac_priv *priv,
 
 	return NETDEV_TX_OK;
 }
+
+int fec_enet_rx_poll_avb(void *data)
+{
+    struct stmmac_priv *priv = data;
+    struct stmmac_avb_rx_queue *rx_q = &priv->dma_avb_conf->rx_queue;
+    struct dma_desc *desc;
+    struct stmmac_avb_buffer *buf;
+    struct avb_rx_desc *avb_pkt_desc;
+    int status, len;
+    void *new_buf;
+    int entry = rx_q->cur_rx;
+    int rc = 0;
+
+    for (int count = 0; count < 20; count++) {
+        entry = rx_q->cur_rx;
+        desc = &rx_q->dma_rx[entry];
+        buf = &rx_q->buf_pool[entry];
+
+        status = stmmac_rx_status(priv, &priv->dev->stats, &priv->xstats, desc);
+        if (status & dma_own)
+            break;
+
+        len = stmmac_rx_buf1_len(priv, desc, status, 0);
+
+        prefetch(buf->data + buf->offset);
+        dma_sync_single_for_cpu(priv->device, buf->dma_addr, len, DMA_FROM_DEVICE);
+
+        avb_pkt_desc = (struct avb_rx_desc*)buf->data;
+        avb_pkt_desc->common.len = len;
+        avb_pkt_desc->common.ts = stmmac_get_rx_hwtstamp(priv, desc, &rx_q->dma_rx[entry]);
+
+        new_buf = priv->avb->alloc(priv->avb_data);
+        if (!new_buf) {
+            netdev_err(priv->dev, "Failed to alloc rx buffer\n");
+            break;
+        }
+
+        buf->data = new_buf;
+        buf->dma_addr = ((struct avb_rx_desc*)new_buf)->dma_addr;
+        buf->offset = ((struct avb_rx_desc*)new_buf)->common.offset;
+        stmmac_set_desc_addr(priv, desc, buf->dma_addr);
+        dma_wmb();
+        stmmac_set_rx_owner(priv, desc, true);
+
+        rx_q->rx_count_frames++;
+        rx_q->rx_count_bytes += len;
+        rc |= priv->avb->rx(priv->avb_data, avb_pkt_desc);
+
+        rx_q->cur_rx = STMMAC_GET_ENTRY(rx_q->cur_rx, priv->dma_avb_conf->dma_rx_size);
+    }
+
+    return rc;
+}
+EXPORT_SYMBOL(fec_enet_rx_poll_avb);
+
+static int fec_enet_start_xmit_avb(void *data, struct avb_tx_desc *avb_desc)
+{
+	struct stmmac_priv *priv = data;
+	struct stmmac_avb_tx_queue *tx_q = &priv->dma_avb_conf->tx_queue;
+	struct dma_desc *desc;
+	unsigned int entry = tx_q->cur_tx;
+
+	if (!tx_q || !avb_desc)
+		return -EINVAL;
+
+	desc = &tx_q->dma_tx[entry];
+	dma_sync_single_for_device(priv->device, avb_desc->dma_addr,
+	                           avb_desc->common.len, DMA_TO_DEVICE);
+
+	tx_q->buf_pool[entry].vaddr = avb_desc;
+	tx_q->buf_pool[entry].dma_addr = avb_desc->dma_addr;
+	tx_q->buf_pool[entry].offset = avb_desc->common.offset;
+
+	stmmac_set_desc_addr(priv, desc, avb_desc->dma_addr);
+
+	if (avb_desc->common.flags & AVB_TX_FLAG_HW_TS)
+		stmmac_enable_tx_timestamp(priv, desc);
+
+	stmmac_prepare_tx_desc(priv, desc, 1, avb_desc->common.len,
+	                       false, priv->mode, true, true, avb_desc->common.len);
+
+	tx_q->tx_count_frames++;
+	stmmac_enable_dma_transmission(priv, priv->ioaddr);
+
+	entry = STMMAC_GET_ENTRY(entry, priv->dma_avb_conf->dma_tx_size);
+	tx_q->cur_tx = entry;
+
+	tx_q->tx_tail_addr = tx_q->dma_tx_phy + (entry * sizeof(struct dma_desc));
+	stmmac_set_tx_tail_ptr(priv, priv->ioaddr, tx_q->tx_tail_addr, STMMAC_AVB_CHANNEL);
+
+	return 0;
+}
+EXPORT_SYMBOL(fec_enet_start_xmit_avb);
+
+int fec_enet_tx_avb(void *data)
+{
+    struct stmmac_priv *priv = data;
+    struct stmmac_avb_tx_queue *tx_q = &priv->dma_avb_conf->tx_queue;
+    unsigned int entry = tx_q->dirty_tx;
+    struct dma_desc *tx_desc;
+    struct avb_tx_desc *avb_buff;
+    int status;
+    int rc = 0;
+
+    while (entry != tx_q->cur_tx) {
+        tx_desc = &tx_q->dma_tx[entry];
+        status = stmmac_tx_status(priv, &priv->dev->stats, &priv->xstats, tx_desc, priv->ioaddr);
+        if (status & dma_own)
+            break;
+
+        dma_rmb();
+
+        avb_buff = tx_q->buf_pool[entry].vaddr;
+        dma_unmap_single(priv->device, avb_buff->dma_addr, avb_buff->common.len, DMA_TO_DEVICE);
+
+        if (avb_buff->common.flags & AVB_TX_FLAG_HW_TS) {
+            avb_buff->common.ts = __stmmac_get_tx_hwstamp(priv, tx_desc);
+            rc |= priv->avb->tx_ts(priv->avb_data, &avb_buff->common);
+        } else {
+            priv->avb->free(priv->avb_data, &avb_buff->common);
+        }
+
+        stmmac_release_tx_desc(priv, tx_desc, priv->mode);
+
+        tx_q->buf_pool[entry].vaddr = NULL;
+        tx_q->buf_pool[entry].dma_addr = 0;
+        tx_q->buf_pool[entry].offset = 0;
+
+        entry = STMMAC_GET_ENTRY(entry, priv->dma_avb_conf->dma_tx_size);
+    }
+
+    tx_q->dirty_tx = entry;
+    return rc;
+}
+EXPORT_SYMBOL(fec_enet_tx_avb);
 #endif
 
 static bool stmmac_xdp_xmit_zc(struct stmmac_priv *priv, u32 queue, u32 budget)
@@ -4608,9 +4743,32 @@ static netdev_tx_t stmmac_xmit(struct sk_buff *skb, struct net_device *dev)
 		return NETDEV_TX_OK;
 	}
 
-	/* Fallback: use AVB TX ring directly */
+	// /* Fallback: use AVB TX ring directly */
+	// if (stmmac_avb_enabled && priv->avb_enabled) {
+	// 	return stmmac_avb_xmit_avb_tx_desc(priv, skb, STMMAC_AVB_CHANNEL);
+	// }
 	if (stmmac_avb_enabled && priv->avb_enabled) {
-		return stmmac_avb_xmit_avb_tx_desc(priv, skb, STMMAC_AVB_CHANNEL);
+		struct avb_tx_desc *avb_desc = priv->avb->alloc(priv->avb_data);
+		if (!avb_desc) {
+			dev_kfree_skb(skb);
+			return NETDEV_TX_OK;
+		}
+
+		/* Fill descriptor */
+		avb_desc->dma_addr = dma_map_single(priv->device, skb->data, skb->len, DMA_TO_DEVICE);
+		if (dma_mapping_error(priv->device, avb_desc->dma_addr)) {
+			priv->avb->free(priv->avb_data, &avb_desc->common);
+			dev_kfree_skb(skb);
+			return NETDEV_TX_OK;
+		}
+
+		avb_desc->common.len = skb->len;
+		avb_desc->common.offset = 0;
+		avb_desc->common.flags = 0;
+		avb_desc->skb = skb;
+
+		fec_enet_start_xmit_avb(priv, avb_desc);
+		return NETDEV_TX_OK;
 	}
 #endif
 	unsigned int nopaged_len = skb_headlen(skb);
