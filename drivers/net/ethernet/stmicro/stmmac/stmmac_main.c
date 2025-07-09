@@ -155,6 +155,9 @@ static void stmmac_tx_timer_arm(struct stmmac_priv *priv, u32 queue);
 static void stmmac_flush_tx_descriptors(struct stmmac_priv *priv, int queue);
 static void stmmac_set_dma_operation_mode(struct stmmac_priv *priv, u32 txmode,
 					  u32 rxmode, u32 chan);
+static unsigned int stmmac_rx_buf1_len(struct stmmac_priv *priv,
+				       struct dma_desc *p,
+				       int status, unsigned int len);
 
 #ifdef CONFIG_DEBUG_FS
 static const struct net_device_ops stmmac_netdev_ops;
@@ -540,6 +543,32 @@ bool stmmac_eee_init(struct stmmac_priv *priv)
 	mutex_unlock(&priv->lock);
 	netdev_dbg(priv->dev, "Energy-Efficient Ethernet initialized\n");
 	return true;
+}
+
+/* 
+ * Get hardware transmit timestamp (in nanoseconds) for a given descriptor.
+ * This function checks whether TX timestamping is enabled and retrieves the
+ * timestamp from the descriptor or MAC hardware if available.
+ */
+static inline
+u64 __stmmac_get_tx_hwstamp(struct stmmac_priv *priv, struct dma_desc *p)
+{
+    u64 ns = 0;
+
+    /* Check if TX timestamping is enabled */
+    if (priv->hwts_tx_en) {
+        /* Try to get timestamp from the descriptor */
+        if (stmmac_get_tx_timestamp_status(priv, p)) {
+            stmmac_get_timestamp(priv, p, priv->adv_ts, &ns);
+            ns -= priv->plat->cdc_error_adj; // Adjust for CDC error
+        }
+        /* If descriptor timestamp is not available, fallback to MAC timestamp */
+        else if (!stmmac_get_mac_tx_timestamp(priv, priv->hw, &ns)) {
+            ns = 0; // Fallback failed, set timestamp to zero
+        }
+    }
+
+    return ns;
 }
 
 /* stmmac_get_tx_hwtstamp - get HW TX timestamps
@@ -2598,21 +2627,23 @@ static netdev_tx_t stmmac_avb_xmit_avb_tx_desc(struct stmmac_priv *priv,
 	return NETDEV_TX_OK;
 }
 
-int fec_enet_rx_poll_avb(void *data)
+int stmmac_avb_rx_poll(void *data)
 {
     struct stmmac_priv *priv = data;
     struct stmmac_avb_rx_queue *rx_q = &priv->dma_avb_conf->rx_queue;
     struct dma_desc *desc;
     struct stmmac_avb_buffer *buf;
-    struct avb_rx_desc *avb_pkt_desc;
+	struct dma_desc *ts_desc;
     int status, len;
     void *new_buf;
     int entry = rx_q->cur_rx;
     int rc = 0;
+	u64 ns;
 
     for (int count = 0; count < 20; count++) {
         entry = rx_q->cur_rx;
         desc = &rx_q->dma_rx[entry];
+		ts_desc = desc;
         buf = &rx_q->buf_pool[entry];
 
         status = stmmac_rx_status(priv, &priv->dev->stats, &priv->xstats, desc);
@@ -2624,9 +2655,20 @@ int fec_enet_rx_poll_avb(void *data)
         prefetch(buf->data + buf->offset);
         dma_sync_single_for_cpu(priv->device, buf->dma_addr, len, DMA_FROM_DEVICE);
 
-        avb_pkt_desc = (struct avb_rx_desc*)buf->data;
-        avb_pkt_desc->common.len = len;
-        avb_pkt_desc->common.ts = stmmac_get_rx_hwtstamp(priv, desc, &rx_q->dma_rx[entry]);
+        buf->size = len;
+
+        // Use next descriptor for GMAC4/XGMAC
+        if (priv->plat->has_gmac4 || priv->plat->has_xgmac)
+            ts_desc = &rx_q->dma_rx[STMMAC_GET_ENTRY(entry, priv->dma_avb_conf->dma_rx_size)];
+
+        if (stmmac_get_rx_timestamp_status(priv, desc, ts_desc, priv->adv_ts)) {
+            stmmac_get_timestamp(priv, ts_desc, priv->adv_ts, &ns);
+            ns -= priv->plat->cdc_error_adj;
+            buf->ts = ns_to_ktime(ns);  // save into AVB buffer
+        }
+		else {
+            buf->ts = ktime_set(0, 0);
+        }
 
         new_buf = priv->avb->alloc(priv->avb_data);
         if (!new_buf) {
@@ -2635,24 +2677,24 @@ int fec_enet_rx_poll_avb(void *data)
         }
 
         buf->data = new_buf;
-        buf->dma_addr = ((struct avb_rx_desc*)new_buf)->dma_addr;
-        buf->offset = ((struct avb_rx_desc*)new_buf)->common.offset;
+        buf->dma_addr = ((struct stmmac_avb_buffer *)new_buf)->dma_addr;
+        buf->offset = ((struct stmmac_avb_buffer *)new_buf)->offset;
         stmmac_set_desc_addr(priv, desc, buf->dma_addr);
         dma_wmb();
         stmmac_set_rx_owner(priv, desc, true);
 
         rx_q->rx_count_frames++;
         rx_q->rx_count_bytes += len;
-        rc |= priv->avb->rx(priv->avb_data, avb_pkt_desc);
+        rc |= priv->avb->rx(priv->avb_data, buf);
 
         rx_q->cur_rx = STMMAC_GET_ENTRY(rx_q->cur_rx, priv->dma_avb_conf->dma_rx_size);
     }
 
     return rc;
 }
-EXPORT_SYMBOL(fec_enet_rx_poll_avb);
+EXPORT_SYMBOL(stmmac_avb_rx_poll);
 
-static int fec_enet_start_xmit_avb(void *data, struct avb_tx_desc *avb_desc)
+int stmmac_avb_start_xmit(void *data, struct stmmac_avb_buffer *avb_desc)
 {
 	struct stmmac_priv *priv = data;
 	struct stmmac_avb_tx_queue *tx_q = &priv->dma_avb_conf->tx_queue;
@@ -2664,19 +2706,19 @@ static int fec_enet_start_xmit_avb(void *data, struct avb_tx_desc *avb_desc)
 
 	desc = &tx_q->dma_tx[entry];
 	dma_sync_single_for_device(priv->device, avb_desc->dma_addr,
-	                           avb_desc->common.len, DMA_TO_DEVICE);
+	                           avb_desc->size, DMA_TO_DEVICE);
 
 	tx_q->buf_pool[entry].vaddr = avb_desc;
 	tx_q->buf_pool[entry].dma_addr = avb_desc->dma_addr;
-	tx_q->buf_pool[entry].offset = avb_desc->common.offset;
+	tx_q->buf_pool[entry].offset = avb_desc->offset;
 
 	stmmac_set_desc_addr(priv, desc, avb_desc->dma_addr);
 
-	if (avb_desc->common.flags & AVB_TX_FLAG_HW_TS)
+	if (avb_desc->flags & AVB_TX_FLAG_HW_TS)
 		stmmac_enable_tx_timestamp(priv, desc);
 
-	stmmac_prepare_tx_desc(priv, desc, 1, avb_desc->common.len,
-	                       false, priv->mode, true, true, avb_desc->common.len);
+	stmmac_prepare_tx_desc(priv, desc, 1, avb_desc->size,
+	                       false, priv->mode, true, true, avb_desc->size);
 
 	tx_q->tx_count_frames++;
 	stmmac_enable_dma_transmission(priv, priv->ioaddr);
@@ -2689,15 +2731,15 @@ static int fec_enet_start_xmit_avb(void *data, struct avb_tx_desc *avb_desc)
 
 	return 0;
 }
-EXPORT_SYMBOL(fec_enet_start_xmit_avb);
+EXPORT_SYMBOL(stmmac_avb_start_xmit);
 
-int fec_enet_tx_avb(void *data)
+int stmmac_avb_tx_complete(void *data)
 {
     struct stmmac_priv *priv = data;
     struct stmmac_avb_tx_queue *tx_q = &priv->dma_avb_conf->tx_queue;
     unsigned int entry = tx_q->dirty_tx;
     struct dma_desc *tx_desc;
-    struct avb_tx_desc *avb_buff;
+    struct stmmac_avb_buffer *avb_buff;
     int status;
     int rc = 0;
 
@@ -2710,13 +2752,14 @@ int fec_enet_tx_avb(void *data)
         dma_rmb();
 
         avb_buff = tx_q->buf_pool[entry].vaddr;
-        dma_unmap_single(priv->device, avb_buff->dma_addr, avb_buff->common.len, DMA_TO_DEVICE);
+        dma_unmap_single(priv->device, avb_buff->dma_addr, avb_buff->size, DMA_TO_DEVICE);
 
-        if (avb_buff->common.flags & AVB_TX_FLAG_HW_TS) {
-            avb_buff->common.ts = __stmmac_get_tx_hwstamp(priv, tx_desc);
-            rc |= priv->avb->tx_ts(priv->avb_data, &avb_buff->common);
-        } else {
-            priv->avb->free(priv->avb_data, &avb_buff->common);
+        if (avb_buff->flags & AVB_TX_FLAG_HW_TS) {
+            avb_buff->ts = __stmmac_get_tx_hwstamp(priv, tx_desc);
+            rc |= priv->avb->tx_ts(priv->avb_data, avb_buff);
+        }
+		else {
+            priv->avb->free(priv->avb_data, avb_buff);
         }
 
         stmmac_release_tx_desc(priv, tx_desc, priv->mode);
@@ -2731,7 +2774,7 @@ int fec_enet_tx_avb(void *data)
     tx_q->dirty_tx = entry;
     return rc;
 }
-EXPORT_SYMBOL(fec_enet_tx_avb);
+EXPORT_SYMBOL(stmmac_avb_tx_complete);
 #endif
 
 static bool stmmac_xdp_xmit_zc(struct stmmac_priv *priv, u32 queue, u32 budget)
@@ -4736,41 +4779,6 @@ static netdev_tx_t stmmac_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	unsigned int first_entry, tx_packets, enh_desc;
 	struct stmmac_priv *priv = netdev_priv(dev);
-#ifdef CONFIG_STMMAC_GENAVB
-	/* Priority: QOS Adapter (if present) */
-	if (qos_ctx && stmmac_enet_qos_is_avtp(skb)) {
-		stmmac_enet_qos_handle_tx(qos_ctx, skb);
-		return NETDEV_TX_OK;
-	}
-
-	// /* Fallback: use AVB TX ring directly */
-	// if (stmmac_avb_enabled && priv->avb_enabled) {
-	// 	return stmmac_avb_xmit_avb_tx_desc(priv, skb, STMMAC_AVB_CHANNEL);
-	// }
-	if (stmmac_avb_enabled && priv->avb_enabled) {
-		struct avb_tx_desc *avb_desc = priv->avb->alloc(priv->avb_data);
-		if (!avb_desc) {
-			dev_kfree_skb(skb);
-			return NETDEV_TX_OK;
-		}
-
-		/* Fill descriptor */
-		avb_desc->dma_addr = dma_map_single(priv->device, skb->data, skb->len, DMA_TO_DEVICE);
-		if (dma_mapping_error(priv->device, avb_desc->dma_addr)) {
-			priv->avb->free(priv->avb_data, &avb_desc->common);
-			dev_kfree_skb(skb);
-			return NETDEV_TX_OK;
-		}
-
-		avb_desc->common.len = skb->len;
-		avb_desc->common.offset = 0;
-		avb_desc->common.flags = 0;
-		avb_desc->skb = skb;
-
-		fec_enet_start_xmit_avb(priv, avb_desc);
-		return NETDEV_TX_OK;
-	}
-#endif
 	unsigned int nopaged_len = skb_headlen(skb);
 	int i, csum_insertion = 0, is_jumbo = 0;
 	u32 queue = skb_get_queue_mapping(skb);
@@ -4782,6 +4790,46 @@ static netdev_tx_t stmmac_xmit(struct sk_buff *skb, struct net_device *dev)
 	bool has_vlan, set_ic;
 	int entry, first_tx;
 	dma_addr_t des;
+
+#ifdef CONFIG_STMMAC_GENAVB
+	/* Priority: QOS Adapter (if present) */
+	if (qos_ctx && stmmac_enet_qos_is_avtp(skb)) {
+		stmmac_enet_qos_handle_tx(qos_ctx, skb);
+		return NETDEV_TX_OK;
+	}
+
+	// /* Fallback: use AVB TX ring directly */
+	// if (stmmac_avb_enabled && priv->avb_enabled) {
+	// 	return stmmac_avb_xmit_stmmac_avb_buffer(priv, skb, STMMAC_AVB_CHANNEL);
+	// }
+	if (stmmac_avb_enabled && priv->avb_enabled) {
+		struct stmmac_avb_buffer *avb_desc = priv->avb->alloc(priv->avb_data);
+		if (!avb_desc) {
+			dev_kfree_skb(skb);
+			return NETDEV_TX_OK;
+		}
+
+		/* Fill descriptor */
+		avb_desc->dma_addr = dma_map_single(priv->device, skb->data, skb->len, DMA_TO_DEVICE);
+		if (dma_mapping_error(priv->device, avb_desc->dma_addr)) {
+			priv->avb->free(priv->avb_data, avb_desc);
+			dev_kfree_skb(skb);
+			return NETDEV_TX_OK;
+		}
+
+		/* Fill descriptor fields */
+		avb_desc->size = skb->len;
+		avb_desc->offset = 0;
+		avb_desc->flags = 0;
+		avb_desc->ts = 0;
+		avb_desc->data = skb->data;
+		avb_desc->cpu_addr = skb->data;
+		avb_desc->skb = skb;
+
+		stmmac_avb_start_xmit(priv, avb_desc);
+		return NETDEV_TX_OK;
+	}
+#endif
 
 	tx_q = &priv->dma_conf.tx_queue[queue];
 	first_tx = tx_q->cur_tx;

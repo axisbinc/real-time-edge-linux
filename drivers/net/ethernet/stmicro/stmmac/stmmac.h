@@ -23,6 +23,7 @@
 #include <linux/reset.h>
 #include <net/page_pool.h>
 #include <uapi/linux/bpf.h>
+#include <linux/fec.h>
 
 struct stmmac_resources {
 	void __iomem *addr;
@@ -125,6 +126,16 @@ struct stmmac_avb_buffer {
     void *cpu_addr;
 	void *data;
     size_t size;
+	u64 ts;
+    u32 offset;
+    u32 flags;
+	struct sk_buff *skb;
+};
+
+struct stmmac_avb_tx_entry {
+    struct stmmac_avb_buffer *vaddr;
+    dma_addr_t dma_addr;
+    u32 offset;
 };
 
 struct stmmac_avb_rx_queue {
@@ -133,6 +144,9 @@ struct stmmac_avb_rx_queue {
     struct stmmac_avb_buffer *buf_pool;
     dma_addr_t rx_tail_addr;
     u32 avb_chan;
+	u32 cur_rx;
+    u32 rx_count_frames;
+    u32 rx_count_bytes;
 };
 
 struct stmmac_avb_tx_queue {
@@ -142,6 +156,8 @@ struct stmmac_avb_tx_queue {
 	u32 cur_tx;
 	u32 dirty_tx;
     u32 avb_chan;
+	u32 tx_count_frames;
+	struct stmmac_avb_tx_entry *buf_pool;
 };
 
 struct stmmac_dma_avb_conf {
@@ -374,6 +390,10 @@ struct stmmac_avb_op {
 	int (*open)(void *avb_data, struct stmmac_priv *priv, int speed);
 	int (*stop)(void *avb_data, struct stmmac_priv *priv);
 	int (*xmit)(void *avb_data, struct stmmac_priv *priv, struct sk_buff *skb);
+	struct stmmac_avb_buffer *(*alloc)(void *avb_data);
+	void (*free)(void *avb_data, struct stmmac_avb_buffer *buf);
+	int (*tx_ts)(void *avb_data, struct stmmac_avb_buffer *buf);
+	int (*rx)(void *avb_data, struct stmmac_avb_buffer *buf);
 };
 
 enum stmmac_state {

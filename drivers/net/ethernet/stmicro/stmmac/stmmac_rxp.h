@@ -10,12 +10,6 @@
 // DMA Channel to use for AVB (FRP rules will direct AVTP traffic here)
 #define STMMAC_AVB_CHANNEL 4
 
-// Generic structure for AVB TX data
-struct avb_tx_desc {
-	const u8 *data;  // Pointer to raw packet data
-	u32 len;         // Length of the packet data
-};
-
 /**
  * stmmac_avb_test_is_in_progress - Check if AVB self-test is running
  * Returns: true if test is active, false otherwise
