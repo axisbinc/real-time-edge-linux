@@ -343,13 +343,13 @@ void stmmac_ptp_unregister(struct stmmac_priv *priv)
 
 #ifdef CONFIG_STMMAC_GENAVB
 /**
- * fec_ptp_read
+ * stmmac_ptp_read
  * @data: fec private context ptr
  * @cnt: data pointer for counter value
  *
  * Returns status
  */
-int fec_ptp_read_cnt(void *data, u32 *cnt)
+int stmmac_ptp_read_cnt(void *data, u32 *cnt)
 {
     struct stmmac_priv *priv = data;
 	unsigned long flags;
@@ -364,10 +364,10 @@ int fec_ptp_read_cnt(void *data, u32 *cnt)
 
 	return 0;
 }
-EXPORT_SYMBOL(fec_ptp_read_cnt);
+EXPORT_SYMBOL(stmmac_ptp_read_cnt);
 
 /**
- * fec_ptp_tc_start
+ * stmmac_ptp_tc_start
  * @data: fec private context ptr
  * @id: TC register ID
  * @ts_0: First timestamp
@@ -377,26 +377,26 @@ EXPORT_SYMBOL(fec_ptp_read_cnt);
  * Returns 0 on success, -1 if PTP counter is not
  * enabled.
  */
-int fec_ptp_tc_start(void *data, u8 id, u32 ts_0, u32 ts_1, u32 tcsr_val)
+int stmmac_ptp_tc_start(void *data, u8 id, u32 ts_0, u32 ts_1, u32 tcsr_val)
 {
 	return 0;
 }
-EXPORT_SYMBOL(fec_ptp_tc_start);
+EXPORT_SYMBOL(stmmac_ptp_tc_start);
 
 /**
- * fec_ptp_tc_stop
+ * stmmac_ptp_tc_stop
  * @data: fec private context ptr
  * @id: TC register ID
  *
  * Returns none
  */
-void fec_ptp_tc_stop(void *data, u8 id)
+void stmmac_ptp_tc_stop(void *data, u8 id)
 {
 }
-EXPORT_SYMBOL(fec_ptp_tc_stop);
+EXPORT_SYMBOL(stmmac_ptp_tc_stop);
 
 /**
- * fec_ptp_tc_reload
+ * stmmac_ptp_tc_reload
  * @data: fec private context ptr
  * @id: TC register ID
  * @ts: New timestamp to load
@@ -404,9 +404,9 @@ EXPORT_SYMBOL(fec_ptp_tc_stop);
  * Returns 0 if success, -1 if compare has not occured
  * or if PTP counter is not enabled.
  */
-int fec_ptp_tc_reload(void *data, u8 id, u32 ts)
+int stmmac_ptp_tc_reload(void *data, u8 id, u32 ts)
 {
 	return 0;
 }
-EXPORT_SYMBOL(fec_ptp_tc_reload);
+EXPORT_SYMBOL(stmmac_ptp_tc_reload);
 #endif /* CONFIG_STMMAC_GENAVB */

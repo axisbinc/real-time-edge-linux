@@ -8086,14 +8086,14 @@ alloc_error:
 	return ERR_PTR(ret);
 }
 
-int fec_enet_set_idle_slope(void *data, unsigned int queue_id, u32 idle_slope)
+int stmmac_enet_set_idle_slope(void *data, unsigned int queue_id, u32 idle_slope)
 {
 	pr_info("[%d] %s\n", __LINE__, __func__);
 	return 0;
 }
-EXPORT_SYMBOL(fec_enet_set_idle_slope);
+EXPORT_SYMBOL(stmmac_enet_set_idle_slope);
 
-int fec_enet_rx_poll_avb(void *data)
+int stmmac_enet_rx_poll_avb(void *data)
 {
     int entry, status = 0, len = 0;
     struct stmmac_avb_buffer *buf;
@@ -8120,7 +8120,7 @@ int fec_enet_rx_poll_avb(void *data)
         len = stmmac_rx_buf1_len(priv, desc, status, 0);
 
         if (stmmac_avb_verbose & STMMAC_AVB_VERBOSE_RX)
-	        pr_info("fec_enet_rx_poll_avb [%d, %d, 0x%x] "
+	        pr_info("stmmac_enet_rx_poll_avb [%d, %d, 0x%x] "
                     ": 0x%x 0x%x | 0x%x 0x%x\n",
                     entry, len, status,
                     desc->des0, desc->des1, desc->des2, desc->des3);
@@ -8174,7 +8174,7 @@ int fec_enet_rx_poll_avb(void *data)
 
 	return rc;
 }
-EXPORT_SYMBOL(fec_enet_rx_poll_avb);
+EXPORT_SYMBOL(stmmac_enet_rx_poll_avb);
 
 /* todo: lock queue */
 int stmmac_avb_xmit_avb_tx_desc(struct stmmac_priv *priv, int queue,
@@ -8228,7 +8228,7 @@ int stmmac_avb_xmit_avb_tx_desc(struct stmmac_priv *priv, int queue,
 	return 0;
 }
 
-int fec_enet_start_xmit_avb(void *data, struct avb_tx_desc *avb_buff)
+int stmmac_enet_start_xmit_avb(void *data, struct avb_tx_desc *avb_buff)
 {
     struct stmmac_priv* priv = data;
     struct stmmac_avb_tx_queue *tx_q = &priv->dma_avb_conf->tx_queue;
@@ -8270,15 +8270,15 @@ int fec_enet_start_xmit_avb(void *data, struct avb_tx_desc *avb_buff)
 
 	return 0;
 }
-EXPORT_SYMBOL(fec_enet_start_xmit_avb);
+EXPORT_SYMBOL(stmmac_enet_start_xmit_avb);
 
-void fec_enet_finish_xmit_avb(void *data, unsigned int queue_id)
+void stmmac_enet_finish_xmit_avb(void *data, unsigned int queue_id)
 {
 	//pr_info("[%d] %s\n", __LINE__, __func__);
 }
-EXPORT_SYMBOL(fec_enet_finish_xmit_avb);
+EXPORT_SYMBOL(stmmac_enet_finish_xmit_avb);
 
-int fec_enet_tx_avb(void *data)
+int stmmac_enet_tx_avb(void *data)
 {
     struct stmmac_priv* priv = data;
     struct stmmac_avb_tx_queue *tx_q = &priv->dma_avb_conf->tx_queue;
@@ -8302,11 +8302,11 @@ int fec_enet_tx_avb(void *data)
 
         avb_buff = tx_q->buf_pool[entry].vaddr;
         if (stmmac_avb_verbose & STMMAC_AVB_VERBOSE_TX)
-            pr_info("fec_enet_tx_avb [%d] : 0x%x 0x%x | 0x%x 0x%x\n", entry,
+            pr_info("stmmac_enet_tx_avb [%d] : 0x%x 0x%x | 0x%x 0x%x\n", entry,
                     tx_desc->des0, tx_desc->des1, tx_desc->des2, tx_desc->des3);
         if ((stmmac_avb_verbose & STMMAC_AVB_VERBOSE_TX) || stmmac_avb_test_is_in_progress()) {
             // print the hwts_tx_en and hwts_rx_en
-            pr_info("fec_enet_tx_avb [%d] : hwts_tx_en: %d, hwts_rx_en: %d\n",
+            pr_info("stmmac_enet_tx_avb [%d] : hwts_tx_en: %d, hwts_rx_en: %d\n",
                     entry, priv->hwts_tx_en, priv->hwts_rx_en);
 
             stmmac_avb_print_hex_dump(
@@ -8323,7 +8323,7 @@ int fec_enet_tx_avb(void *data)
         /* free or return the tx buffer */
         if (ns && (avb_buff->common.flags & AVB_TX_FLAG_HW_TS)) {
             if (stmmac_avb_verbose & STMMAC_AVB_VERBOSE_TX)
-                pr_info("fec_enet_tx_avb [%d] : ts: %llu\n", entry, ns);
+                pr_info("stmmac_enet_tx_avb [%d] : ts: %llu\n", entry, ns);
             avb_buff->common.ts = ns;
             rc |= priv->avb->tx_ts(priv->avb_data, &avb_buff->common);
         }
@@ -8344,7 +8344,7 @@ int fec_enet_tx_avb(void *data)
 
 	return rc;
 }
-EXPORT_SYMBOL(fec_enet_tx_avb);
+EXPORT_SYMBOL(stmmac_enet_tx_avb);
 
 #endif  /* CONFIG_STMMAC_GENAVB */
 
