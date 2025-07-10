@@ -463,7 +463,7 @@ static bool __is_fec_net_device(struct net_device *ndev)
 		return false;
 }
 
-struct device *fec_enet_avb_get_device(const char *ifname)
+struct device *stmmac_enet_avb_get_device(const char *ifname)
 {
 	struct net_device *ndev;
 	struct stmmac_priv *priv;
@@ -487,9 +487,9 @@ err_ndev:
 err_dev_get:
 	return NULL;
 }
-EXPORT_SYMBOL(fec_enet_avb_get_device);
+EXPORT_SYMBOL(stmmac_enet_avb_get_device);
 
-int fec_enet_avb_register(const char *ifname, const struct avb_ops *avb, void *data)
+int stmmac_enet_avb_register(const char *ifname, const struct avb_ops *avb, void *data)
 {
 	struct net_device *ndev;
 	struct stmmac_priv *priv;
@@ -536,9 +536,9 @@ err_ndev:
 err_dev_get:
 	return -1;
 }
-EXPORT_SYMBOL(fec_enet_avb_register);
+EXPORT_SYMBOL(stmmac_enet_avb_register);
 
-int fec_enet_avb_unregister(int ifindex, const struct avb_ops *avb)
+int stmmac_enet_avb_unregister(int ifindex, const struct avb_ops *avb)
 {
 	struct net_device *ndev;
 	struct stmmac_priv *priv;
@@ -581,9 +581,9 @@ err_ndev:
 err_dev_get:
 	return -1;
 }
-EXPORT_SYMBOL(fec_enet_avb_unregister);
+EXPORT_SYMBOL(stmmac_enet_avb_unregister);
 
-int fec_enet_get_tx_queue_properties(int ifindex, struct tx_queue_properties *prop)
+int stmmac_enet_get_tx_queue_properties(int ifindex, struct tx_queue_properties *prop)
 {
 	struct net_device *ndev;
 	struct stmmac_priv *priv;
@@ -604,14 +604,13 @@ int fec_enet_get_tx_queue_properties(int ifindex, struct tx_queue_properties *pr
 
 	return 0;
 
-err_queues:
 err_ndev:
 	dev_put(ndev);
 
 err_dev_get:
 	return -1;
 }
-EXPORT_SYMBOL(fec_enet_get_tx_queue_properties);
+EXPORT_SYMBOL(stmmac_enet_get_tx_queue_properties);
 #endif /* CONFIG_STMMAC_GENAVB */
 
 static struct imx_dwmac_ops imx8mp_dwmac_data = {
