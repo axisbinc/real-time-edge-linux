@@ -4798,36 +4798,9 @@ static netdev_tx_t stmmac_xmit(struct sk_buff *skb, struct net_device *dev)
 		return NETDEV_TX_OK;
 	}
 
-	// /* Fallback: use AVB TX ring directly */
-	// if (stmmac_avb_enabled && priv->avb_enabled) {
-	// 	return stmmac_avb_xmit_stmmac_avb_buffer(priv, skb, STMMAC_AVB_CHANNEL);
-	// }
+	/* Fallback: use AVB TX ring directly */
 	if (stmmac_avb_enabled && priv->avb_enabled) {
-		struct stmmac_avb_buffer *avb_desc = priv->avb->alloc(priv->avb_data);
-		if (!avb_desc) {
-			dev_kfree_skb(skb);
-			return NETDEV_TX_OK;
-		}
-
-		/* Fill descriptor */
-		avb_desc->dma_addr = dma_map_single(priv->device, skb->data, skb->len, DMA_TO_DEVICE);
-		if (dma_mapping_error(priv->device, avb_desc->dma_addr)) {
-			priv->avb->free(priv->avb_data, avb_desc);
-			dev_kfree_skb(skb);
-			return NETDEV_TX_OK;
-		}
-
-		/* Fill descriptor fields */
-		avb_desc->size = skb->len;
-		avb_desc->offset = 0;
-		avb_desc->flags = 0;
-		avb_desc->ts = 0;
-		avb_desc->data = skb->data;
-		avb_desc->cpu_addr = skb->data;
-		avb_desc->skb = skb;
-
-		stmmac_avb_start_xmit(priv, avb_desc);
-		return NETDEV_TX_OK;
+		return stmmac_avb_xmit_avb_tx_desc(priv, skb, STMMAC_AVB_CHANNEL);
 	}
 #endif
 
