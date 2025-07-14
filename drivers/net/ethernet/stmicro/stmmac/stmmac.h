@@ -23,6 +23,7 @@
 #include <linux/reset.h>
 #include <net/page_pool.h>
 #include <uapi/linux/bpf.h>
+#include <linux/fec.h>
 
 struct stmmac_resources {
 	void __iomem *addr;
@@ -114,6 +115,56 @@ struct stmmac_rx_queue {
 		unsigned int len;
 		unsigned int error;
 	} state;
+};
+
+#define STMMAC_AVB_DESC_NUM 256
+#define AVB_RX_DESC_NUM 128
+#define AVB_TX_DESC_NUM 128
+
+struct stmmac_avb_buffer {
+    dma_addr_t dma_addr;
+    void *cpu_addr;
+	void *data;
+    size_t size;
+	u64 ts;
+    u32 offset;
+    u32 flags;
+	struct sk_buff *skb;
+};
+
+struct stmmac_avb_tx_entry {
+    struct stmmac_avb_buffer *vaddr;
+    dma_addr_t dma_addr;
+    u32 offset;
+};
+
+struct stmmac_avb_rx_queue {
+    struct dma_desc *dma_rx;
+    dma_addr_t dma_rx_phy;
+    struct stmmac_avb_buffer *buf_pool;
+    dma_addr_t rx_tail_addr;
+    u32 avb_chan;
+	u32 cur_rx;
+    u32 rx_count_frames;
+    u32 rx_count_bytes;
+};
+
+struct stmmac_avb_tx_queue {
+    struct dma_desc *dma_tx;
+    dma_addr_t dma_tx_phy;
+    dma_addr_t tx_tail_addr;
+	u32 cur_tx;
+	u32 dirty_tx;
+    u32 avb_chan;
+	u32 tx_count_frames;
+	struct stmmac_avb_tx_entry *buf_pool;
+};
+
+struct stmmac_dma_avb_conf {
+    struct stmmac_avb_rx_queue rx_queue;
+    struct stmmac_avb_tx_queue tx_queue;
+    u32 dma_rx_size;
+    u32 dma_tx_size;
 };
 
 struct stmmac_channel {
@@ -226,6 +277,13 @@ struct stmmac_priv {
 
 	struct stmmac_dma_conf dma_conf;
 
+#ifdef CONFIG_STMMAC_GENAVB
+	struct stmmac_dma_avb_conf *dma_avb_conf;
+	bool avb_enabled;
+	struct stmmac_avb_op *avb;
+	void *avb_data;
+#endif
+
 	/* Generic channel for NAPI */
 	struct stmmac_channel channel[STMMAC_CH_MAX];
 
@@ -326,6 +384,16 @@ struct stmmac_priv {
 	unsigned long *af_xdp_zc_qps;
 	struct bpf_prog *xdp_prog;
 	bool fp_enabled_admin;
+};
+
+struct stmmac_avb_op {
+	int (*open)(void *avb_data, struct stmmac_priv *priv, int speed);
+	int (*stop)(void *avb_data, struct stmmac_priv *priv);
+	int (*xmit)(void *avb_data, struct stmmac_priv *priv, struct sk_buff *skb);
+	struct stmmac_avb_buffer *(*alloc)(void *avb_data);
+	void (*free)(void *avb_data, struct stmmac_avb_buffer *buf);
+	int (*tx_ts)(void *avb_data, struct stmmac_avb_buffer *buf);
+	int (*rx)(void *avb_data, struct stmmac_avb_buffer *buf);
 };
 
 enum stmmac_state {
