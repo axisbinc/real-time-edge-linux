@@ -6444,6 +6444,22 @@ static ssize_t stmmac_avb_filter_write(struct file *file, const char __user *buf
             }
             break;
         }
+		case 'L': { // Enable MAC loopback
+            pr_info("Enabling MAC loopback mode...\n");
+            if (stmmac_set_mac_loopback(priv, priv->ioaddr, true))
+                pr_err("Failed to enable MAC loopback\n");
+            else
+                pr_info("MAC loopback mode enabled\n");
+            break;
+        }
+        case 'l': { // Disable MAC loopback
+            pr_info("Disabling MAC loopback mode...\n");
+            if (stmmac_set_mac_loopback(priv, priv->ioaddr, false))
+                pr_err("Failed to disable MAC loopback\n");
+            else
+                pr_info("MAC loopback mode disabled\n");
+            break;
+        }
         default:
             pr_err("Invalid input: Use 'Y' to add filter, 'N' to delete filter\n");
             return -EINVAL;
