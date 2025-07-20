@@ -177,6 +177,8 @@ static u32 stmmac_avb_verbose = 0;
 #ifdef CONFIG_STMMAC_GENAVB
 static struct stmmac_avb_dma_conf* stmmac_avb_init_dma_desc(struct stmmac_priv *priv);
 static int stmmac_avb_init_dma_engine(struct stmmac_priv *priv);
+static void stmmac_avb_free_dma_desc(struct stmmac_priv *priv,
+		struct stmmac_avb_dma_conf *dma_conf);
 #endif
 
 #define STMMAC_COAL_TIMER(x) (ns_to_ktime((x) * NSEC_PER_USEC))
@@ -4045,12 +4047,6 @@ static int stmmac_release(struct net_device *dev)
 
 	netif_tx_disable(dev);
 
-#ifdef CONFIG_STMMAC_GENAVB
-    if (stmmac_avb_enabled && priv->avb_enabled) {
-        priv->avb->close(priv->avb_data);
-    }
-#endif
-
 	/* Free the IRQ lines */
 	stmmac_free_irq(dev, REQ_IRQ_ERR_ALL, 0);
 
@@ -4058,6 +4054,18 @@ static int stmmac_release(struct net_device *dev)
 		priv->tx_path_in_lpi_mode = false;
 		del_timer_sync(&priv->eee_ctrl_timer);
 	}
+
+#ifdef CONFIG_STMMAC_GENAVB
+    if (stmmac_avb_enabled && priv->avb_enabled) {
+        /* Stop AVB DMA and free the descriptors */
+        stmmac_stop_rx_dma(priv, STMMAC_AVB_CHANNEL);
+        stmmac_stop_tx_dma(priv, STMMAC_AVB_CHANNEL);
+        stmmac_avb_free_dma_desc(priv, priv->dma_avb_conf);
+        kfree(priv->dma_avb_conf);
+        priv->dma_avb_conf = NULL;
+        priv->avb->close(priv->avb_data);
+    }
+#endif
 
 	/* Stop TX/RX DMA and clear the descriptors */
 	stmmac_stop_all_dma(priv);
