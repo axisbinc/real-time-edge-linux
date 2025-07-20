@@ -283,7 +283,7 @@ static int stmmac_send_avtp_packet(struct stmmac_priv *priv,  unsigned int queue
     /* print the device MAC address */
     pr_info("Destination MAC: %pM\n", priv->dev->dev_addr);
 
-    ret = (queue_id == STMMAC_AVB_CHANNEL) ? fec_enet_start_xmit_avb(priv, desc)
+    ret = (queue_id == STMMAC_AVB_CHANNEL) ? stmmac_enet_start_xmit_avb(priv, desc)
             : stmmac_avb_xmit_avb_tx_desc(priv, queue_id, desc);
     if (ret < 0) {
         netdev_err(priv->dev, "Failed to start xmit\n");
@@ -297,6 +297,7 @@ static int stmmac_avb_test_avtp_packet_as_avb_desc(struct stmmac_priv *priv)
 {
     int ret;
 
+#if 0
     pr_info("Testing AVB packet ... queue 0\n");
 
     /* send an AVTP Discovery packet */
@@ -304,7 +305,7 @@ static int stmmac_avb_test_avtp_packet_as_avb_desc(struct stmmac_priv *priv)
     if (ret) {
         pr_err("Failed to send AVTP packet\n");
     }
-
+#endif
     pr_info("Testing AVB packet ... avb channel\n");
 
     /* send an AVTP Discovery packet */

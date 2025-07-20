@@ -23,4 +23,6 @@ int stmmac_rxp_clear(struct stmmac_priv *priv);
 int stmmac_avb_xmit_avb_tx_desc(struct stmmac_priv *priv, int queue,
         struct avb_tx_desc *avb_desc);
 
+int stmmac_enet_start_xmit_avb(void *data, struct avb_tx_desc *avb_buff);
+
 #endif //__STMMAC_GENAVB_H__
