@@ -516,6 +516,7 @@ int stmmac_enet_avb_register(const char *ifname, const struct avb_ops *avb, void
 	priv->avb = avb;
 	priv->avb_data = data;
 	priv->avb_enabled = 1;
+	priv->avb_rx_packets = 0;
 	ifindex = ndev->ifindex;
 
 	if (up) {

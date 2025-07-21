@@ -367,6 +367,8 @@ void dwmac5_rxp_enable(void __iomem *ioaddr)
 }
 
 #include "dwmac4_dma.h"
+#define DWC_EQOS_NUM_DMA_RX_CH 5
+#define DWC_EQOS_NUM_DMA_TX_CH 5
 
 static void _dwmac4_dump_dma_regs(void __iomem *ioaddr, u32 channel)
 {
@@ -406,6 +408,20 @@ static void _dwmac4_dump_dma_regs(void __iomem *ioaddr, u32 channel)
         readl(ioaddr + DMA_CHAN_STATUS(channel)));
 }
 
+void dwmac5_frp_get_stats(void __iomem *ioaddr, uint8_t dma_channel,
+        uint32_t *accept_count)
+{
+    u32 val;
+    if (dma_channel >= DWC_EQOS_NUM_DMA_RX_CH) {
+        pr_err("Invalid DMA channel: %d\n", dma_channel);
+        return;
+    }
+
+    val = readl(ioaddr + DMA_CHAN_RXP_ACCEPT_CNT(dma_channel));
+    if (accept_count)
+        *accept_count = val;
+}
+
 void dwmac5_frp_dump_stats(void __iomem *ioaddr)
 {
     u32 val;
@@ -437,8 +453,6 @@ void dwmac5_frp_dump_stats(void __iomem *ioaddr)
     val = readl(ioaddr + DMA_CH4_RXP_ACCEPT_CNT);
     pr_info("DMA_CH4_RXP_ACCEPT_CNT: 0x%x\n", val);
 
-#define DWC_EQOS_NUM_DMA_RX_CH 5
-#define DWC_EQOS_NUM_DMA_TX_CH 5
     for (int i = 0; i < 5; i++) {
         pr_info("DMA_CHANNEL(%d) Registers\n", i);
         _dwmac4_dump_dma_regs(ioaddr, i);
