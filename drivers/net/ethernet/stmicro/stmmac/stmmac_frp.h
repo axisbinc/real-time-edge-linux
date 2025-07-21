@@ -37,6 +37,9 @@ int dwmac5_frp_update_single_entry(void __iomem *ioaddr,
 
 void dwmac5_frp_dump_stats(void __iomem *ioaddr);
 
+void dwmac5_frp_get_stats(void __iomem *ioaddr, uint8_t dma_channel,
+        uint32_t *accept_count);
+
 int dwmac5_restore_rx(void __iomem *ioaddr, uint32_t config);
 int dwmac5_disable_rx(void __iomem *ioaddr, uint32_t *config);
 

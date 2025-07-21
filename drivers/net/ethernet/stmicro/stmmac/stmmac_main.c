@@ -8133,6 +8133,15 @@ int stmmac_enet_rx_poll_avb(void *data)
 
 	/* 20 packets per 125us > 64 bytes packets @ 100Mbps */
     for (count = 0; count < 20; count++) {
+        uint32_t accept_count = 0;
+
+        dwmac5_frp_get_stats(priv->hw->pcsr, STMMAC_AVB_CHANNEL, &accept_count);
+        if (accept_count > 0) {
+            if (stmmac_avb_verbose & STMMAC_AVB_VERBOSE_RX)
+                pr_info("stmmac_enet_rx_poll_avb: accept_count: %d\n",
+                        accept_count);
+            priv->avb_rx_packets += accept_count;
+        }
         entry = rx_q->cur_rx;
         desc  = &rx_q->dma_rx[entry];
         buf   = &rx_q->buf_pool[entry];
