@@ -1,7 +1,7 @@
 #include "stmmac.h"
 #ifdef CONFIG_STMMAC_GENAVB
 #include "stmmac_genavb.h"
-#define STMMAC_AVB_TX_ROOT_CAUSE_TESTS 0
+#define STMMAC_AVB_TX_ROOT_CAUSE_TESTS 1
 
 static bool stmmac_avb_test_in_progress = false;
 
@@ -340,7 +340,7 @@ int stmmac_avb_test_rxp(struct stmmac_priv *priv)
 #if STMMAC_AVB_TX_ROOT_CAUSE_TESTS
     ret |= stmmac_avb_test_udp_packet_as_skb(priv);
     ret |= stmmac_avb_test_avtp_packet_as_skb(priv);
-#endif    
+#endif
     ret |= stmmac_avb_test_avtp_packet_as_avb_desc(priv);
 
 	/* Sleep to allow loopback to show packets */
