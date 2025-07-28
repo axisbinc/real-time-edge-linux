@@ -4,6 +4,7 @@
 
 #include <linux/bitops.h>
 #include <linux/iopoll.h>
+#include <linux/types.h>
 #include "common.h"
 #include "dwmac4.h"
 #include "dwmac5.h"
@@ -532,42 +533,65 @@ static int dwmac5_rxp_update_single_entry(void __iomem *ioaddr,
 					  int pos)
 {
 	int ret, i;
+	const int entry_size_words = sizeof(entry->val) / sizeof(u32);
 
-    pr_info("dwmac5_rxp_update_single_entry... pos: %d\n", pos);
-	for (i = 0; i < (sizeof(entry->val) / sizeof(u32)); i++) {
-		int real_pos = pos * (sizeof(entry->val) / sizeof(u32)) + i;
+	pr_debug("dwmac5_rxp_update_single_entry: pos=%d, entry_size=%d words\n", 
+		 pos, entry_size_words);
+
+	/* Validate inputs */
+	if (!ioaddr || !entry || pos < 0) {
+		pr_err("dwmac5_rxp_update_single_entry: invalid parameters\n");
+		return -EINVAL;
+	}
+
+	for (i = 0; i < entry_size_words; i++) {
+		int real_pos = pos * entry_size_words + i;
 		u32 val;
+		u32 *data_ptr = (u32 *)&entry->val + i;
 
-		/* Wait for ready */
+		/* Validate position is within valid range */
+		if (real_pos > ADDR) {
+			pr_err("dwmac5_rxp_update_single_entry: position %d exceeds maximum %lu\n",
+			       real_pos, ADDR);
+			return -EINVAL;
+		}
+
+		/* Wait for hardware to be ready */
 		ret = readl_poll_timeout(ioaddr + MTL_RXP_IACC_CTRL_STATUS,
-				val, !(val & STARTBUSY), 1, 10000);
-		if (ret)
+					val, !(val & STARTBUSY), 1, 10000);
+		if (ret) {
+			pr_err("dwmac5_rxp_update_single_entry: timeout waiting for ready, word %d\n", i);
 			return ret;
+		}
 
 		/* Write data */
-        pr_info("data: 0x%x\n", *((u32 *)&entry->val + i));
-		val = *((u32 *)&entry->val + i);
+		val = *data_ptr;
+		pr_debug("dwmac5_rxp_update_single_entry: writing data[%d]=0x%08x to pos=%d\n", 
+			 i, val, real_pos);
 		writel(val, ioaddr + MTL_RXP_IACC_DATA);
 
-		/* Write pos */
+		/* Write position */
 		val = real_pos & ADDR;
 		writel(val, ioaddr + MTL_RXP_IACC_CTRL_STATUS);
 
-		/* Write OP */
+		/* Set write operation flag */
 		val |= WRRDN;
 		writel(val, ioaddr + MTL_RXP_IACC_CTRL_STATUS);
 
-		/* Start Write */
+		/* Start the write operation */
 		val |= STARTBUSY;
 		writel(val, ioaddr + MTL_RXP_IACC_CTRL_STATUS);
 
-		/* Wait for done */
+		/* Wait for operation completion */
 		ret = readl_poll_timeout(ioaddr + MTL_RXP_IACC_CTRL_STATUS,
-				val, !(val & STARTBUSY), 1, 10000);
-		if (ret)
+					val, !(val & STARTBUSY), 1, 10000);
+		if (ret) {
+			pr_err("dwmac5_rxp_update_single_entry: timeout waiting for completion, word %d\n", i);
 			return ret;
+		}
 	}
 
+	pr_debug("dwmac5_rxp_update_single_entry: successfully updated entry at pos %d\n", pos);
 	return 0;
 }
 
