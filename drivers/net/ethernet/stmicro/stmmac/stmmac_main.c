@@ -172,6 +172,11 @@ static bool stmmac_avb_enabled = false;
 #define STMMAC_AVB_VERBOSE_RX   0x1
 #define STMMAC_AVB_VERBOSE_TX   0x2
 #define STMMAC_AVB_VERBOSE_ALL  0x3
+
+#define STMMAC_SKB_VERBOSE_RX   0x10
+#define STMMAC_SKB_VERBOSE_TX   0x20
+#define STMMAC_SKB_VERBOSE_ALL  0x30
+
 static u32 stmmac_avb_verbose = 0;
 #endif
 #ifdef CONFIG_STMMAC_GENAVB
@@ -2635,9 +2640,12 @@ static int stmmac_tx_clean(struct stmmac_priv *priv, int budget, u32 queue)
 			xdpf = NULL;
             avb_desc = NULL;
 			skb = tx_q->tx_skbuff[entry];
-            //if (stmmac_avb_test_is_in_progress()) {
-            //    stmmac_avb_print_hex_dump(skb->data, skb->len, "TX skb cleanup");
-            //}
+            if (stmmac_avb_test_is_in_progress() && (stmmac_avb_verbose & STMMAC_SKB_VERBOSE_TX)) {
+                uint32_t accept_count = 0;
+                dwmac5_frp_get_stats(priv->hw->pcsr, STMMAC_AVB_CHANNEL, &accept_count);
+                pr_info("TX skb cleanup: AVB accept_count=%d\n", accept_count);
+                stmmac_avb_print_hex_dump(skb->data, skb->len, "TX skb cleanup");
+            }
         }
 #ifdef CONFIG_STMMAC_GENAVB
         else if (tx_q->tx_skbuff_dma[entry].buf_type == STMMAC_TXBUF_T_AVB_POOL) {
@@ -4993,9 +5001,12 @@ static struct sk_buff *stmmac_xdp_run_prog(struct stmmac_priv *priv,
 	struct bpf_prog *prog;
 	int res;
 
-    //if (stmmac_avb_test_is_in_progress()) {
-    //    stmmac_avb_print_hex_dump(xdp->data, xdp->data_end - xdp->data, "RX pkt");
-    //}
+    if (stmmac_avb_test_is_in_progress() && (stmmac_avb_verbose & STMMAC_SKB_VERBOSE_RX)) {
+        uint32_t accept_count = 0;
+        dwmac5_frp_get_stats(priv->hw->pcsr, STMMAC_AVB_CHANNEL, &accept_count);
+        pr_info("RX: AVB accept_count=%d\n", accept_count);
+        stmmac_avb_print_hex_dump(xdp->data, xdp->data_end - xdp->data, "RX pkt");
+    }
 	prog = READ_ONCE(priv->xdp_prog);
 	if (!prog) {
 		res = STMMAC_XDP_PASS;
@@ -5391,6 +5402,11 @@ read_again:
 		if (unlikely(status & dma_own))
 			break;
 
+        if (stmmac_avb_verbose & STMMAC_SKB_VERBOSE_RX) {
+    		/* Packet received - log basic info */
+    		pr_info("RX: Queue %d, status=0x%x\n", queue, status);
+		}
+
 		rx_q->cur_rx = STMMAC_GET_ENTRY(rx_q->cur_rx,
 						priv->dma_conf.dma_rx_size);
 		next_entry = rx_q->cur_rx;
@@ -5559,11 +5575,25 @@ drain_data:
 			skb_set_hash(skb, hash, hash_type);
 
 		skb_record_rx_queue(skb, queue);
+
+        if (stmmac_avb_verbose & STMMAC_SKB_VERBOSE_RX) {
+		    /* Packet ready for delivery to network stack */
+		    pr_info("RX: Delivering - len=%d, protocol=0x%04x, queue=%d\n", 
+			    len, ntohs(skb->protocol), queue);
+        }
+		
 		napi_gro_receive(&ch->rx_napi, skb);
 		skb = NULL;
 
 		priv->dev->stats.rx_packets++;
 		priv->dev->stats.rx_bytes += len;
+
+        if (stmmac_avb_verbose & STMMAC_SKB_VERBOSE_RX) {
+		    /* Packet receive completed */
+		    pr_info("RX: Processed - packets=%lu, bytes=%lu\n", 
+			    priv->dev->stats.rx_packets, priv->dev->stats.rx_bytes);
+        }
+		
 		count++;
 	}
 
