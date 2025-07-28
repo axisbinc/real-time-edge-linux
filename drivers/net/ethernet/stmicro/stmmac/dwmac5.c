@@ -445,6 +445,8 @@ void dwmac5_frp_dump_stats(void __iomem *ioaddr)
     val = readl(ioaddr + MTL_RXP_ERROR_CNT);
     pr_info("MTL_RXP_ERROR_CNT: 0x%x\n", val);
 
+    val = readl(ioaddr + DMA_CH0_RXP_ACCEPT_CNT);
+    pr_info("DMA_CH0_RXP_ACCEPT_CNT: 0x%x\n", val);
     val = readl(ioaddr + DMA_CH1_RXP_ACCEPT_CNT);
     pr_info("DMA_CH1_RXP_ACCEPT_CNT: 0x%x\n", val);
     val = readl(ioaddr + DMA_CH2_RXP_ACCEPT_CNT);
