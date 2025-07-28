@@ -1092,8 +1092,8 @@ static int stmmac_test_rxp(struct stmmac_priv *priv)
 	int ret, i, nk = 1;
 
 	/* Dump hardware stats before test */
-    pr_info("stmmac_test_rxp: Dumping FRP stats before test...\n");
-    dwmac5_frp_dump_stats(priv->ioaddr);
+	pr_info("stmmac_test_rxp: Dumping FRP stats before test...\n");
+	dwmac5_frp_dump_stats(priv->ioaddr);
 
 	pr_info("stmmac_test_rxp: Starting RXP test\n");
 	
