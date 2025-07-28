@@ -1,4 +1,7 @@
+#include <net/pkt_cls.h>
+#include <net/tc_act/tc_gact.h>
 #include "stmmac.h"
+#include "stmmac_frp.h"
 #ifdef CONFIG_STMMAC_GENAVB
 #include "stmmac_genavb.h"
 #define STMMAC_AVB_TX_ROOT_CAUSE_TESTS 1
@@ -402,7 +405,7 @@ static int stmmac_avb_test_avtp_packet_as_avb_desc(struct stmmac_priv *priv)
 
     return ret;
 }
-
+#if 0
 int stmmac_avb_test_rxp(struct stmmac_priv *priv)
 {
     int ret = 0;
@@ -446,4 +449,153 @@ error:
     stmmac_avb_test_in_progress = false;
     return ret;
 }
+#endif
+int stmmac_avb_test_rxp(struct stmmac_priv *priv)
+{
+	int ret = 0;
+	u16 eth_types[] = { ETH_P_TSN };  // AVTP EtherType
+	unsigned char addr[ETH_ALEN] = {0xde, 0xad, 0xbe, 0xef, 0x00, 0x00};
+	struct tc_cls_u32_offload cls_u32 = { };
+	struct stmmac_packet_attrs attr = { };
+	struct tc_action **actions;
+	struct tc_u32_sel *sel;
+	struct tcf_gact *gact;
+	struct tcf_exts *exts;
+	int i, nk = 1;
+
+	stmmac_avb_test_in_progress = true;
+	pr_info("stmmac_avb_test_rxp() Started...\n");
+
+	/* Dump FRP stats before the test */
+	pr_info("stmmac_avb_test_rxp: Dumping FRP stats before test...\n");
+	dwmac5_frp_dump_stats(priv->ioaddr);
+
+	/* Set up RX Parser for AVTP type */
+	if (stmmac_rxp_setup(priv, eth_types, ARRAY_SIZE(eth_types))) {
+		pr_err("Failed to add AVB filter\n");
+		ret = -1;
+		goto error;
+	}
+
+	/* Enable MAC loopback */
+	if (stmmac_set_mac_loopback(priv, priv->ioaddr, true)) {
+		pr_err("Failed to set MAC loopback\n");
+		ret = -1;
+		goto error_clear_rxp;
+	}
+
+#if STMMAC_AVB_TX_ROOT_CAUSE_TESTS
+	ret |= stmmac_avb_test_udp_packet_as_skb(priv);
+	ret |= stmmac_avb_test_avtp_packet_as_skb(priv);
+#endif
+	ret |= stmmac_avb_test_avtp_packet_as_avb_desc(priv);
+
+	/* Install TC rule to drop packets from a specific MAC address */
+	sel = kzalloc(struct_size(sel, keys, nk), GFP_KERNEL);
+	if (!sel) {
+		pr_err("Failed to allocate sel\n");
+		ret = -ENOMEM;
+		goto loopback_clear;
+	}
+
+	exts = kzalloc(sizeof(*exts), GFP_KERNEL);
+	if (!exts) {
+		pr_err("Failed to allocate exts\n");
+		ret = -ENOMEM;
+		goto cleanup_sel;
+	}
+
+	actions = kcalloc(nk, sizeof(*actions), GFP_KERNEL);
+	if (!actions) {
+		pr_err("Failed to allocate actions\n");
+		ret = -ENOMEM;
+		goto cleanup_exts;
+	}
+
+	gact = kcalloc(nk, sizeof(*gact), GFP_KERNEL);
+	if (!gact) {
+		pr_err("Failed to allocate gact\n");
+		ret = -ENOMEM;
+		goto cleanup_actions;
+	}
+
+	pr_info("Installing TC rule to drop packets from 0xdeadbeef\n");
+
+	cls_u32.command = TC_CLSU32_NEW_KNODE;
+	cls_u32.common.chain_index = 0;
+	cls_u32.common.protocol = htons(ETH_P_ALL);
+	cls_u32.knode.exts = exts;
+	cls_u32.knode.sel = sel;
+	cls_u32.knode.handle = 0x123;
+
+	exts->nr_actions = nk;
+	exts->actions = actions;
+	for (i = 0; i < nk; i++) {
+		actions[i] = (struct tc_action *)&gact[i];
+		gact->tcf_action = TC_ACT_SHOT;
+	}
+
+	sel->nkeys = nk;
+	sel->offshift = 0;
+	sel->keys[0].off = 6;
+	sel->keys[0].val = htonl(0xdeadbeef);
+	sel->keys[0].mask = ~0x0;
+
+	ret = stmmac_tc_setup_cls_u32(priv, priv, &cls_u32);
+	if (ret) {
+		pr_err("Failed to install TC rule, ret=%d\n", ret);
+		goto cleanup_act;
+	}
+
+	/* Send test packet */
+	attr.dst = priv->dev->dev_addr;
+	attr.src = addr;
+
+	pr_info("Sending test packet to verify drop rule\n");
+	ret = stmmac_test_mac_loopback(priv);
+	if (ret)
+		pr_info("Packet dropped as expected (PASS)\n");
+	else
+		pr_warn("Packet received (FAIL)\n");
+
+	ret = ret ? 0 : -EINVAL;  // Fail if packet was received
+
+	/* Dump FRP stats after test */
+	pr_info("Dumping FRP stats after test...\n");
+	dwmac5_frp_dump_stats(priv->ioaddr);
+
+	/* Delete TC rule */
+	pr_info("Cleaning up TC rule\n");
+	cls_u32.command = TC_CLSU32_DELETE_KNODE;
+	stmmac_tc_setup_cls_u32(priv, priv, &cls_u32);
+
+cleanup_act:
+	kfree(gact);
+cleanup_actions:
+	kfree(actions);
+cleanup_exts:
+	kfree(exts);
+cleanup_sel:
+	kfree(sel);
+
+loopback_clear:
+	/* Sleep to allow loopback to show packets */
+	msleep(500);
+
+	/* Disable loopback */
+	if (stmmac_set_mac_loopback(priv, priv->ioaddr, false)) {
+		pr_err("Failed to clear MAC loopback\n");
+	}
+
+error_clear_rxp:
+	if (stmmac_rxp_clear(priv)) {
+		pr_err("Failed to delete AVB filter\n");
+	}
+
+error:
+	pr_info("stmmac_avb_test_rxp() ...Ended\n");
+	stmmac_avb_test_in_progress = false;
+	return ret;
+}
+
 #endif  // CONFIG_STMMAC_AVB
