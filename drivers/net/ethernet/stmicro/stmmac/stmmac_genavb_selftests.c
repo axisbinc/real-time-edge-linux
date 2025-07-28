@@ -74,7 +74,22 @@ struct stmmac_avb_test_priv {
 	int double_vlan;
 	int vlan_id;
 	int ok;
+	int payload_checksum;
+	int payload_length;
+	int payload_offset;
 };
+
+/* Simple checksum calculation for payload validation */
+static int calculate_payload_checksum(const unsigned char *data, int length)
+{
+	int checksum = 0;
+	int i;
+	
+	for (i = 0; i < length; i++) {
+		checksum += data[i];
+	}
+	return checksum;
+}
 
 static int stmmac_avb_test_loopback_validate(struct sk_buff *skb,
 					 struct net_device *ndev,
@@ -109,6 +124,39 @@ static int stmmac_avb_test_loopback_validate(struct sk_buff *skb,
 		goto out;
     }
 
+	/* Validate payload checksum if payload is present */
+	if (tpriv->payload_length > 0) {
+		const unsigned char *payload_data;
+		int computed_checksum;
+		int full_packet_len;
+		
+		/* The MAC header contains the Ethernet header, and skb->data points to IP header.
+		 * To access the full packet with Ethernet header, we use skb_mac_header().
+		 * Calculate the payload offset from the MAC header. */
+		
+		full_packet_len = skb->len + ETH_HLEN;
+		
+		/* Check if packet has enough data for the payload */
+		if (full_packet_len < tpriv->payload_offset + tpriv->payload_length) {
+			netdev_err(ndev, "Packet too short for payload validation (got %d, need %d)\n",
+				   full_packet_len, tpriv->payload_offset + tpriv->payload_length);
+			goto out;
+		}
+		
+		/* Access payload from MAC header base + offset */
+		payload_data = skb_mac_header(skb) + tpriv->payload_offset;
+		computed_checksum = calculate_payload_checksum(payload_data, tpriv->payload_length);
+		
+		if (computed_checksum != tpriv->payload_checksum) {
+			netdev_err(ndev, "Payload checksum mismatch (expected %d, got %d)\n",
+				   tpriv->payload_checksum, computed_checksum);
+			goto out;
+		}
+		
+		pr_info("Payload validation passed (%d bytes, checksum %d)\n",
+			tpriv->payload_length, computed_checksum);
+	}
+
 	tpriv->ok = true;
 	complete(&tpriv->comp);
 out:
@@ -117,7 +165,7 @@ out:
 }
 
 static int stmmac_avb_test_mac_loopback(struct stmmac_priv *priv,
-        struct sk_buff *skb, u16 eth_type)
+        struct sk_buff *skb, u16 eth_type, int payload_checksum, int payload_length, int payload_offset)
 {
 	struct stmmac_avb_test_priv *tpriv;
 	int ret = 0;
@@ -134,6 +182,9 @@ static int stmmac_avb_test_mac_loopback(struct stmmac_priv *priv,
 	tpriv->pt.dev = priv->dev;
 	tpriv->pt.af_packet_priv = tpriv;
     tpriv->dst = priv->dev->dev_addr;
+    tpriv->payload_checksum = payload_checksum;
+    tpriv->payload_length = payload_length;
+    tpriv->payload_offset = payload_offset;
 
     dev_add_pack(&tpriv->pt);
 
@@ -188,6 +239,18 @@ static int stmmac_avb_test_udp_packet_as_skb(struct stmmac_priv *priv)
     struct stmmac_packet_attrs attr = {};
     struct sk_buff *skb;
     int ret;
+    int payload_offset;
+    /* 64-byte test payload */
+    static const unsigned char test_payload[64] = {
+        0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF,
+        0xFE, 0xDC, 0xBA, 0x98, 0x76, 0x54, 0x32, 0x10,
+        0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+        0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF,
+        0xFF, 0xEE, 0xDD, 0xCC, 0xBB, 0xAA, 0x99, 0x88,
+        0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11, 0x00,
+        0x10, 0x32, 0x54, 0x76, 0x98, 0xBA, 0xDC, 0xFE,
+        0xEF, 0xCD, 0xAB, 0x89, 0x67, 0x45, 0x23, 0x01
+    };
 
     attr.src = attr.dst = priv->dev->dev_addr;
 
@@ -197,12 +260,34 @@ static int stmmac_avb_test_udp_packet_as_skb(struct stmmac_priv *priv)
         return -ENOMEM;
     }
 
-    ret = stmmac_avb_test_mac_loopback(priv, skb, ETH_P_IP);
+    pr_info("stmmac_avb_test_udp_packet_as_skb\n");
+
+    /* Add our test payload to the UDP packet */
+    if (skb_tailroom(skb) >= sizeof(test_payload)) {
+        int payload_checksum;
+        
+        /* The payload will be at the end of the received packet */
+        /* Calculate where it will be: received packet length - payload length */
+        
+        memcpy(skb_put(skb, sizeof(test_payload)), test_payload, sizeof(test_payload));
+        payload_checksum = calculate_payload_checksum(test_payload, sizeof(test_payload));
+        
+        /* The payload will be at the end of the received packet */
+        payload_offset = skb->len - sizeof(test_payload);
+        
+        pr_info("Added %lu-byte test payload. Total packet length: %d, checksum: %d\n", 
+                sizeof(test_payload), skb->len, payload_checksum);
+        
+        ret = stmmac_avb_test_mac_loopback(priv, skb, ETH_P_IP, payload_checksum, sizeof(test_payload), payload_offset);
+    } else {
+        pr_warn("Not enough tailroom for test payload\n");
+        ret = stmmac_avb_test_mac_loopback(priv, skb, ETH_P_IP, 0, 0, 0);
+    }
     if (0 == ret) {
-        pr_info("UDP loopback test passed\n");
+        pr_info("stmmac_avb_test_udp_packet_as_skb passed\n");
     }
     else {
-        pr_err("UDP loopback test failed\n");
+        pr_err("stmmac_avb_test_udp_packet_as_skb failed\n");
     }
     return ret;
 }
@@ -212,18 +297,20 @@ static int stmmac_avb_test_avtp_packet_as_skb(struct stmmac_priv *priv)
     struct sk_buff *skb;
     int ret = 0;
 
+    pr_info("stmmac_avb_test_avtp_packet_as_skb\n");
+
     skb = stmmac_avb_create_adp(priv);
     if (!skb) {
         pr_err("Failed to create ADP packet\n");
         return -ENOMEM;
     }
 
-    ret = stmmac_avb_test_mac_loopback(priv, skb, ETH_P_TSN);
+    ret = stmmac_avb_test_mac_loopback(priv, skb, ETH_P_TSN, 0, 0, 0);
     if (0 == ret) {
-        pr_info("AVB loopback test passed\n");
+        pr_info("stmmac_avb_test_avtp_packet_as_skb passed\n");
     }
     else {
-        pr_err("AVB loopback testing check the packet on avb_channel \n");
+        pr_err("stmmac_avb_test_avtp_packet_as_skb failed\n");
     }
 
     return ret;
@@ -306,10 +393,10 @@ static int stmmac_avb_test_avtp_packet_as_avb_desc(struct stmmac_priv *priv)
         pr_err("Failed to send AVTP packet\n");
     }
 #endif
-    pr_info("Testing AVB packet ... avb channel\n");
+    pr_info("stmmac_avb_test_avtp_packet_as_avb_desc ... STMMAC_AVB_CHANNEL\n");
 
     /* send an AVTP Discovery packet */
-    ret = stmmac_send_avtp_packet(priv, 4);
+    ret = stmmac_send_avtp_packet(priv, STMMAC_AVB_CHANNEL);
     if (ret) {
         pr_err("Failed to send AVTP packet\n");
     }
