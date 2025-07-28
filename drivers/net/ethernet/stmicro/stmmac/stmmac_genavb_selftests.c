@@ -384,7 +384,6 @@ static int stmmac_avb_test_avtp_packet_as_avb_desc(struct stmmac_priv *priv)
 {
     int ret;
 
-#if 0
     pr_info("Testing AVB packet ... queue 0\n");
 
     /* send an AVTP Discovery packet */
@@ -392,7 +391,7 @@ static int stmmac_avb_test_avtp_packet_as_avb_desc(struct stmmac_priv *priv)
     if (ret) {
         pr_err("Failed to send AVTP packet\n");
     }
-#endif
+
     pr_info("stmmac_avb_test_avtp_packet_as_avb_desc ... STMMAC_AVB_CHANNEL\n");
 
     /* send an AVTP Discovery packet */
