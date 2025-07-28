@@ -6431,86 +6431,86 @@ DEFINE_SHOW_ATTRIBUTE(stmmac_avb_status);
 static ssize_t stmmac_avb_filter_write(struct file *file, const char __user *buf,
                                        size_t count, loff_t *ppos)
 {
-    struct stmmac_priv *priv = file->private_data;
-    char input;
+	struct stmmac_priv *priv = file->private_data;
+	char input;
 
-    if (copy_from_user(&input, buf, 1))
-        return -EFAULT;
+	if (copy_from_user(&input, buf, 1))
+		return -EFAULT;
 
-    switch (input) {
-        case 'D':
-            pr_info("Dump FRP stats...\n");
-            dwmac5_frp_dump_stats(priv->hw->pcsr);
-            break;
-        case 'Y': {
-            u16 eth_types[] = {ETH_P_1588, ETH_P_TSN, ETH_P_MVRP, 0x88F6, 0x22ea};  // avb ether types
+	switch (input) {
+		case 'D':
+			pr_info("Dump FRP stats...\n");
+			dwmac5_frp_dump_stats(priv->hw->pcsr);
+			break;
+		case 'Y': {
+				u16 eth_types[] = {ETH_P_1588, ETH_P_TSN, ETH_P_MVRP, 0x88F6, 0x22ea};  // avb ether types
 
-            pr_info("Adding AVB filter...\n");
-            if (stmmac_rxp_setup(priv, eth_types, ARRAY_SIZE(eth_types)))
-                pr_err("Failed to add AVB filter\n");
-            break;
-        }
-        case 'N':
-            pr_info("Deleting AVB filter...\n");
-            if (stmmac_rxp_clear(priv))
-                pr_err("Failed to delete AVB filter\n");
-            break;
-        case 'T':
-            stmmac_avb_test_rxp(priv);
-            break;
-        case '9': { // open AVB
-        	if (priv->avb_enabled) {
-                priv->dma_avb_conf = stmmac_avb_init_dma_desc(priv);
-                if (IS_ERR(priv->dma_avb_conf)) {
-                    netdev_err(priv->dev, "%s: AVB DMA descriptors allocation failed\n",
-                               __func__);
-                    priv->dma_avb_conf = NULL;
-                }
-                else {
-                    stmmac_avb_init_dma_engine(priv);
-            		priv->avb->open(priv->avb_data, priv, priv->speed);
-                }
-            }
-            break;
-        }
-        case '0': { // close AVB
-        	if (priv->avb_enabled) {
-           		priv->avb->close(priv->avb_data);
-                // todo:
-                //stmmac_avb_disable(priv);
-                //stmmac_avb_free_dma_desc(priv);
-            }
-            break;
-        }
+				pr_info("Adding AVB filter...\n");
+				if (stmmac_rxp_setup(priv, eth_types, ARRAY_SIZE(eth_types)))
+					pr_err("Failed to add AVB filter\n");
+				break;
+			}
+		case 'N':
+			pr_info("Deleting AVB filter...\n");
+			if (stmmac_rxp_clear(priv))
+				pr_err("Failed to delete AVB filter\n");
+			break;
+		case 'T':
+			stmmac_avb_test_rxp(priv);
+			break;
+		case '9': { // open AVB
+				if (priv->avb_enabled) {
+				priv->dma_avb_conf = stmmac_avb_init_dma_desc(priv);
+					if (IS_ERR(priv->dma_avb_conf)) {
+						netdev_err(priv->dev, "%s: AVB DMA descriptors allocation failed\n",
+								__func__);
+						priv->dma_avb_conf = NULL;
+					}
+					else {
+						stmmac_avb_init_dma_engine(priv);
+						priv->avb->open(priv->avb_data, priv, priv->speed);
+					}
+				}
+				break;
+			}
+		case '0': { // close AVB
+				if (priv->avb_enabled) {
+					priv->avb->close(priv->avb_data);
+					// todo:
+					//stmmac_avb_disable(priv);
+					//stmmac_avb_free_dma_desc(priv);
+				}
+				break;
+			}
 		case 'L': { // Enable MAC loopback
-            pr_info("Enabling MAC loopback mode...\n");
-            if (stmmac_set_mac_loopback(priv, priv->ioaddr, true))
-                pr_err("Failed to enable MAC loopback\n");
-            else
-                pr_info("MAC loopback mode enabled\n");
-            break;
-        }
-        case 'l': { // Disable MAC loopback
-            pr_info("Disabling MAC loopback mode...\n");
-            if (stmmac_set_mac_loopback(priv, priv->ioaddr, false))
-                pr_err("Failed to disable MAC loopback\n");
-            else
-                pr_info("MAC loopback mode disabled\n");
-            break;
-        }
-        default:
-            pr_err("Invalid input: Use 'Y' to add filter, 'N' to delete filter\n");
-            return -EINVAL;
-    }
+				pr_info("Enabling MAC loopback mode...\n");
+				if (stmmac_set_mac_loopback(priv, priv->ioaddr, true))
+					pr_err("Failed to enable MAC loopback\n");
+				else
+					pr_info("MAC loopback mode enabled\n");
+				break;
+			}
+		case 'l': { // Disable MAC loopback
+				pr_info("Disabling MAC loopback mode...\n");
+				if (stmmac_set_mac_loopback(priv, priv->ioaddr, false))
+					pr_err("Failed to disable MAC loopback\n");
+				else
+					pr_info("MAC loopback mode disabled\n");
+				break;
+			}
+		default:
+			pr_err("Invalid input: Use 'Y' to add filter, 'N' to delete filter\n");
+			return -EINVAL;
+	}
 
-    return count;
+	return count;
 }
 
 static const struct file_operations stmmac_avb_filter_fops = {
-    .owner = THIS_MODULE,
-    .write = stmmac_avb_filter_write,
-    .open = simple_open,
-    .llseek = default_llseek,
+	.owner = THIS_MODULE,
+	.write = stmmac_avb_filter_write,
+	.open = simple_open,
+	.llseek = default_llseek,
 };
 #endif
 
