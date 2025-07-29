@@ -268,6 +268,8 @@ static int stmmac_test_loopback_validate(struct sk_buff *skb,
 		goto out;
 
 	ehdr = (struct ethhdr *)skb_mac_header(skb);
+	print_hex_dump(KERN_INFO, "EHDR: ", DUMP_PREFIX_OFFSET, 16, 1, 
+               ehdr, 16, true);
 	if (dst) {
 		if (!ether_addr_equal_unaligned(ehdr->h_dest, dst))
 			goto out;
@@ -1082,7 +1084,7 @@ static int stmmac_test_dvlanfilt_perfect(struct stmmac_priv *priv)
 #ifdef CONFIG_NET_CLS_ACT
 
 static int stmmac_test_rxp_setup_new(
-    struct tc_cls_u32_offload *cls_u32, __be32 val, int offset, int tcfa)
+    struct tc_cls_u32_offload *cls_u32, __be16 val, int offset, int tcfa)
 {
     struct tc_u32_sel *sel;
 	struct tcf_exts *exts;
@@ -1103,8 +1105,8 @@ static int stmmac_test_rxp_setup_new(
 	sel->nkeys = 1;
 	sel->offshift = 0;
 	sel->keys[0].off = offset;
-	sel->keys[0].val = val;
-	sel->keys[0].mask = ~0x0;
+	sel->keys[0].val = val << 16;
+	sel->keys[0].mask = 0xffff0000;
 
 	exts = kzalloc(sizeof(*exts), GFP_KERNEL);
 	if (!exts) {
@@ -1290,7 +1292,7 @@ static int stmmac_test_rxp2(struct stmmac_priv *priv)
 		return -EOPNOTSUPP;
 	}
 
-    ret = stmmac_test_rxp_setup_new(&cls_u32, htonl(0xdeadbeef), 6, TC_ACT_SHOT);
+    ret = stmmac_test_rxp_setup_new(&cls_u32, htons(ETH_P_IP), 12, TC_ACT_SHOT);
     if (ret) {
         pr_err("stmmac_test_rxp: Failed to setup TC rule, ret=%d\n", ret);
         return ret;
@@ -2057,7 +2059,7 @@ static const struct stmmac_test {
 	{
 		.name = "Flexible RX Parser         ",
 		.lb = STMMAC_LOOPBACK_MAC,
-		.fn = stmmac_test_rxp,
+		.fn = stmmac_test_rxp2,
 	}, 
 	// {
 	// 	.name = "SA Insertion (desc)        ",
