@@ -603,37 +603,53 @@ dwmac5_rxp_get_next_entry(struct stmmac_tc_entry *entries, unsigned int count,
 {
 	struct stmmac_tc_entry *entry;
 	u32 min_prio = ~0x0;
-	int i, min_prio_idx;
+	int i, min_prio_idx = -1;
 	bool found = false;
+
+	pr_info("==> %s: Searching for next RXP entry (count = %u, curr_prio = %u)\n", __func__, count, curr_prio);
 
 	for (i = count - 1; i >= 0; i--) {
 		entry = &entries[i];
 
 		/* Do not update unused entries */
-		if (!entry->in_use)
+		if (!entry->in_use) {
+			pr_info(" -> Skipping entry[%d]: Not in use\n", i);
 			continue;
+		}
 		/* Do not update already updated entries (i.e. fragments) */
-		if (entry->in_hw)
+		if (entry->in_hw) {
+			pr_info(" -> Skipping entry[%d]: Already in hardware\n", i);
 			continue;
+		}
 		/* Let last entry be updated last */
-		if (entry->is_last)
+		if (entry->is_last) {
+			pr_info(" -> Skipping entry[%d]: Is last entry\n", i);
 			continue;
+		}
 		/* Do not return fragments */
-		if (entry->is_frag)
+		if (entry->is_frag) {
+			pr_info(" -> Skipping entry[%d]: Is fragment\n", i);
 			continue;
+		}
 		/* Check if we already checked this prio */
-		if (entry->prio < curr_prio)
+		if (entry->prio < curr_prio) {
+			pr_info(" -> Skipping entry[%d]: Priority (%u) < curr_prio (%u)\n", i, entry->prio, curr_prio);
 			continue;
+		}
 		/* Check if this is the minimum prio */
 		if (entry->prio < min_prio) {
+			pr_info(" -> New candidate entry[%d] with priority %u\n", i, entry->prio);
 			min_prio = entry->prio;
 			min_prio_idx = i;
 			found = true;
 		}
 	}
 
-	if (found)
+	if (found) {
+		pr_info("<== %s: Selected entry[%d] with min_prio = %u\n", __func__, min_prio_idx, min_prio);
 		return &entries[min_prio_idx];
+	}
+
 	return NULL;
 }
 
@@ -644,30 +660,47 @@ int dwmac5_rxp_config(void __iomem *ioaddr, struct stmmac_tc_entry *entries,
 	int i, ret, nve = 0;
 	u32 curr_prio = 0;
 	u32 old_val, val;
+	bool has_valid_entry = false;
 
     pr_info("dwmac5_rxp_config... %d entries\n", count);
 	/* Force disable RX */
 	old_val = readl(ioaddr + GMAC_CONFIG);
 	val = old_val & ~GMAC_CONFIG_RE;
 	writel(val, ioaddr + GMAC_CONFIG);
+	pr_info("dwmac5_rxp_config: RX disabled (GMAC_CONFIG)\n");
 
 	/* Disable RX Parser */
 	ret = dwmac5_rxp_disable(ioaddr);
-	if (ret)
+	if (ret) {
+		pr_err("dwmac5_rxp_config: Failed to disable RX parser\n");
 		goto re_enable;
+	}
+	/* Clear all entries in_hw flags */
+	for (i = 0; i < count; i++)
+		entries[i].in_hw = false;
 
-	/* Set all entries as NOT in HW */
+	/* Check for at least one valid entry (excluding last entry) */
 	for (i = 0; i < count; i++) {
 		entry = &entries[i];
-		entry->in_hw = false;
+		if (entry->in_use && !entry->is_last && !entry->is_frag)
+			has_valid_entry = true;
+	}
+
+	if (!has_valid_entry) {
+		pr_warn("dwmac5_rxp_config: No valid RXP entries to configure.\n");
+		ret = -EINVAL;
+		goto re_enable;
 	}
 
 	/* Update entries by reverse order */
 	while (1) {
 		entry = dwmac5_rxp_get_next_entry(entries, count, curr_prio);
-		if (!entry)
+		pr_info("Checking for next RX entry: prio=%d, count=%d\n", curr_prio, count);
+		if (!entry) {
+			pr_info("No RX entry found for priority %d. Exiting loop.\n", curr_prio);
 			break;
-
+		}
+		
 		curr_prio = entry->prio;
 		frag = entry->frag_ptr;
 
