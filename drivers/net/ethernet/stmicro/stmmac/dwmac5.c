@@ -603,52 +603,37 @@ dwmac5_rxp_get_next_entry(struct stmmac_tc_entry *entries, unsigned int count,
 {
 	struct stmmac_tc_entry *entry;
 	u32 min_prio = ~0x0;
-	int i, min_prio_idx = -1;
+	int i, min_prio_idx;
 	bool found = false;
-
-	pr_info("==> %s: Searching for next RXP entry (count = %u, curr_prio = %u)\n", __func__, count, curr_prio);
 
 	for (i = count - 1; i >= 0; i--) {
 		entry = &entries[i];
 
 		/* Do not update unused entries */
-		if (!entry->in_use) {
-			pr_info(" -> Skipping entry[%d]: Not in use\n", i);
+		if (!entry->in_use)
 			continue;
-		}
 		/* Do not update already updated entries (i.e. fragments) */
-		if (entry->in_hw) {
-			pr_info(" -> Skipping entry[%d]: Already in hardware\n", i);
+		if (entry->in_hw)
 			continue;
-		}
 		/* Let last entry be updated last */
-		if (entry->is_last) {
-			pr_info(" -> Skipping entry[%d]: Is last entry\n", i);
+		if (entry->is_last)
 			continue;
-		}
 		/* Do not return fragments */
-		if (entry->is_frag) {
-			pr_info(" -> Skipping entry[%d]: Is fragment\n", i);
+		if (entry->is_frag)
 			continue;
-		}
 		/* Check if we already checked this prio */
-		if (entry->prio < curr_prio) {
-			pr_info(" -> Skipping entry[%d]: Priority (%u) < curr_prio (%u)\n", i, entry->prio, curr_prio);
+		if (entry->prio < curr_prio)
 			continue;
-		}
 		/* Check if this is the minimum prio */
 		if (entry->prio < min_prio) {
-			pr_info(" -> New candidate entry[%d] with priority %u\n", i, entry->prio);
 			min_prio = entry->prio;
 			min_prio_idx = i;
 			found = true;
 		}
 	}
 
-	if (found) {
-		pr_info("<== %s: Selected entry[%d] with min_prio = %u\n", __func__, min_prio_idx, min_prio);
+	if (found)
 		return &entries[min_prio_idx];
-	}
 
 	return NULL;
 }
