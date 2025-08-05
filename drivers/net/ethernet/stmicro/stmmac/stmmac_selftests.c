@@ -1171,8 +1171,6 @@ static int stmmac_test_rxp(struct stmmac_priv *priv)
 	/* Dump hardware stats before test */
 	pr_info("stmmac_test_rxp: Dumping FRP stats before test...\n");
 	dwmac5_frp_dump_stats(priv->ioaddr);
-
-	pr_info("stmmac_test_rxp: Starting RXP test\n");
 	
 	if (!tc_can_offload(priv->dev)) {
 		pr_warn("stmmac_test_rxp: TC offload not supported on this device\n");
@@ -1261,8 +1259,6 @@ static int stmmac_test_rxp(struct stmmac_priv *priv)
 	cls_u32.command = TC_CLSU32_DELETE_KNODE;
 	stmmac_tc_setup_cls_u32(priv, priv, &cls_u32);
 
-	pr_info("stmmac_test_rxp: Rxp test completed\n");
-
 cleanup_act:
 	kfree(gact);
 cleanup_actions:
@@ -1284,15 +1280,11 @@ static int stmmac_test_rxp2(struct stmmac_priv *priv)
 	/* Dump hardware stats before test */
 	pr_info("stmmac_test_rxp: Dumping FRP stats before test...\n");
 	dwmac5_frp_dump_stats(priv->ioaddr);
-
-	pr_info("stmmac_test_rxp: Starting RXP test\n");
 	
 	if (!tc_can_offload(priv->dev)) {
-		pr_warn("stmmac_test_rxp: TC offload not supported on this device\n");
 		return -EOPNOTSUPP;
 	}
 	if (!priv->dma_cap.frpsel) {
-		pr_warn("stmmac_test_rxp: Flexible RX parser not supported\n");
 		return -EOPNOTSUPP;
 	}
 
@@ -1330,8 +1322,6 @@ static int stmmac_test_rxp2(struct stmmac_priv *priv)
 	pr_info("stmmac_test_rxp: Cleaning up TC rule\n");
 	cls_u32.command = TC_CLSU32_DELETE_KNODE;
 	stmmac_tc_setup_cls_u32(priv, priv, &cls_u32);
-
-	pr_info("stmmac_test_rxp: Rxp test completed\n");
 
 cleanup_act:
     stmmac_test_rxp_setup_delete(&cls_u32);
@@ -2006,134 +1996,131 @@ static const struct stmmac_test {
 		.name = "MAC Loopback               ",
 		.lb = STMMAC_LOOPBACK_MAC,
 		.fn = stmmac_test_mac_loopback,
-	}, // {
-	// 	.name = "PHY Loopback               ",
-	// 	.lb = STMMAC_LOOPBACK_NONE, /* Test will handle it */
-	// 	.fn = stmmac_test_phy_loopback,
-	// }, 
-	// {
-	// 	.name = "MMC Counters               ",
-	// 	.lb = STMMAC_LOOPBACK_PHY,
-	// 	.fn = stmmac_test_mmc,
-	// }, {
-	// 	.name = "EEE                        ",
-	// 	.lb = STMMAC_LOOPBACK_PHY,
-	// 	.fn = stmmac_test_eee,
-	// }, {
-	// 	.name = "Hash Filter MC             ",
-	// 	.lb = STMMAC_LOOPBACK_PHY,
-	// 	.fn = stmmac_test_hfilt,
-	// }, {
-	// 	.name = "Perfect Filter UC          ",
-	// 	.lb = STMMAC_LOOPBACK_PHY,
-	// 	.fn = stmmac_test_pfilt,
-	// }, {
-	// 	.name = "MC Filter                  ",
-	// 	.lb = STMMAC_LOOPBACK_PHY,
-	// 	.fn = stmmac_test_mcfilt,
-	// }, {
-	// 	.name = "UC Filter                  ",
-	// 	.lb = STMMAC_LOOPBACK_PHY,
-	// 	.fn = stmmac_test_ucfilt,
-	// }, {
-	// 	.name = "Flow Control               ",
-	// 	.lb = STMMAC_LOOPBACK_PHY,
-	// 	.fn = stmmac_test_flowctrl,
-	// }, {
-	// 	.name = "RSS                        ",
-	// 	.lb = STMMAC_LOOPBACK_PHY,
-	// 	.fn = stmmac_test_rss,
-	// }, {
-	// 	.name = "VLAN Filtering             ",
-	// 	.lb = STMMAC_LOOPBACK_PHY,
-	// 	.fn = stmmac_test_vlanfilt,
-	// }, {
-	// 	.name = "VLAN Filtering (perf)      ",
-	// 	.lb = STMMAC_LOOPBACK_PHY,
-	// 	.fn = stmmac_test_vlanfilt_perfect,
-	// }, {
-	// 	.name = "Double VLAN Filter         ",
-	// 	.lb = STMMAC_LOOPBACK_PHY,
-	// 	.fn = stmmac_test_dvlanfilt,
-	// }, {
-	// 	.name = "Double VLAN Filter (perf)  ",
-	// 	.lb = STMMAC_LOOPBACK_PHY,
-	// 	.fn = stmmac_test_dvlanfilt_perfect,
-	// },
-	{
+	}, {
+		.name = "PHY Loopback               ",
+		.lb = STMMAC_LOOPBACK_NONE, /* Test will handle it */
+		.fn = stmmac_test_phy_loopback,
+	}, {
+		.name = "MMC Counters               ",
+		.lb = STMMAC_LOOPBACK_PHY,
+		.fn = stmmac_test_mmc,
+	}, {
+		.name = "EEE                        ",
+		.lb = STMMAC_LOOPBACK_PHY,
+		.fn = stmmac_test_eee,
+	}, {
+		.name = "Hash Filter MC             ",
+		.lb = STMMAC_LOOPBACK_PHY,
+		.fn = stmmac_test_hfilt,
+	}, {
+		.name = "Perfect Filter UC          ",
+		.lb = STMMAC_LOOPBACK_PHY,
+		.fn = stmmac_test_pfilt,
+	}, {
+		.name = "MC Filter                  ",
+		.lb = STMMAC_LOOPBACK_PHY,
+		.fn = stmmac_test_mcfilt,
+	}, {
+		.name = "UC Filter                  ",
+		.lb = STMMAC_LOOPBACK_PHY,
+		.fn = stmmac_test_ucfilt,
+	}, {
+		.name = "Flow Control               ",
+		.lb = STMMAC_LOOPBACK_PHY,
+		.fn = stmmac_test_flowctrl,
+	}, {
+		.name = "RSS                        ",
+		.lb = STMMAC_LOOPBACK_PHY,
+		.fn = stmmac_test_rss,
+	}, {
+		.name = "VLAN Filtering             ",
+		.lb = STMMAC_LOOPBACK_PHY,
+		.fn = stmmac_test_vlanfilt,
+	}, {
+		.name = "VLAN Filtering (perf)      ",
+		.lb = STMMAC_LOOPBACK_PHY,
+		.fn = stmmac_test_vlanfilt_perfect,
+	}, {
+		.name = "Double VLAN Filter         ",
+		.lb = STMMAC_LOOPBACK_PHY,
+		.fn = stmmac_test_dvlanfilt,
+	}, {
+		.name = "Double VLAN Filter (perf)  ",
+		.lb = STMMAC_LOOPBACK_PHY,
+		.fn = stmmac_test_dvlanfilt_perfect,
+	}, {
 		.name = "Flexible RX Parser2         ",
 		.lb = STMMAC_LOOPBACK_MAC,
 		.fn = stmmac_test_rxp2,
-	}, 
-	// {
-	// 	.name = "SA Insertion (desc)        ",
-	// 	.lb = STMMAC_LOOPBACK_PHY,
-	// 	.fn = stmmac_test_desc_sai,
-	// }, {
-	// 	.name = "SA Replacement (desc)      ",
-	// 	.lb = STMMAC_LOOPBACK_PHY,
-	// 	.fn = stmmac_test_desc_sar,
-	// }, {
-	// 	.name = "SA Insertion (reg)         ",
-	// 	.lb = STMMAC_LOOPBACK_PHY,
-	// 	.fn = stmmac_test_reg_sai,
-	// }, {
-	// 	.name = "SA Replacement (reg)       ",
-	// 	.lb = STMMAC_LOOPBACK_PHY,
-	// 	.fn = stmmac_test_reg_sar,
-	// }, {
-	// 	.name = "VLAN TX Insertion          ",
-	// 	.lb = STMMAC_LOOPBACK_PHY,
-	// 	.fn = stmmac_test_vlanoff,
-	// }, {
-	// 	.name = "SVLAN TX Insertion         ",
-	// 	.lb = STMMAC_LOOPBACK_PHY,
-	// 	.fn = stmmac_test_svlanoff,
-	// }, {
-	// 	.name = "L3 DA Filtering            ",
-	// 	.lb = STMMAC_LOOPBACK_PHY,
-	// 	.fn = stmmac_test_l3filt_da,
-	// }, {
-	// 	.name = "L3 SA Filtering            ",
-	// 	.lb = STMMAC_LOOPBACK_PHY,
-	// 	.fn = stmmac_test_l3filt_sa,
-	// }, {
-	// 	.name = "L4 DA TCP Filtering        ",
-	// 	.lb = STMMAC_LOOPBACK_PHY,
-	// 	.fn = stmmac_test_l4filt_da_tcp,
-	// }, {
-	// 	.name = "L4 SA TCP Filtering        ",
-	// 	.lb = STMMAC_LOOPBACK_PHY,
-	// 	.fn = stmmac_test_l4filt_sa_tcp,
-	// }, {
-	// 	.name = "L4 DA UDP Filtering        ",
-	// 	.lb = STMMAC_LOOPBACK_PHY,
-	// 	.fn = stmmac_test_l4filt_da_udp,
-	// }, {
-	// 	.name = "L4 SA UDP Filtering        ",
-	// 	.lb = STMMAC_LOOPBACK_PHY,
-	// 	.fn = stmmac_test_l4filt_sa_udp,
-	// }, {
-	// 	.name = "ARP Offload                ",
-	// 	.lb = STMMAC_LOOPBACK_PHY,
-	// 	.fn = stmmac_test_arpoffload,
-	// }, {
-	// 	.name = "Jumbo Frame                ",
-	// 	.lb = STMMAC_LOOPBACK_PHY,
-	// 	.fn = stmmac_test_jumbo,
-	// }, {
-	// 	.name = "Multichannel Jumbo         ",
-	// 	.lb = STMMAC_LOOPBACK_PHY,
-	// 	.fn = stmmac_test_mjumbo,
-	// }, {
-	// 	.name = "Split Header               ",
-	// 	.lb = STMMAC_LOOPBACK_PHY,
-	// 	.fn = stmmac_test_sph,
-	// }, {
-	// 	.name = "TBS (ETF Scheduler)        ",
-	// 	.lb = STMMAC_LOOPBACK_PHY,
-	// 	.fn = stmmac_test_tbs,
-	// },
+	}, {
+		.name = "SA Insertion (desc)        ",
+		.lb = STMMAC_LOOPBACK_PHY,
+		.fn = stmmac_test_desc_sai,
+	}, {
+		.name = "SA Replacement (desc)      ",
+		.lb = STMMAC_LOOPBACK_PHY,
+		.fn = stmmac_test_desc_sar,
+	}, {
+		.name = "SA Insertion (reg)         ",
+		.lb = STMMAC_LOOPBACK_PHY,
+		.fn = stmmac_test_reg_sai,
+	}, {
+		.name = "SA Replacement (reg)       ",
+		.lb = STMMAC_LOOPBACK_PHY,
+		.fn = stmmac_test_reg_sar,
+	}, {
+		.name = "VLAN TX Insertion          ",
+		.lb = STMMAC_LOOPBACK_PHY,
+		.fn = stmmac_test_vlanoff,
+	}, {
+		.name = "SVLAN TX Insertion         ",
+		.lb = STMMAC_LOOPBACK_PHY,
+		.fn = stmmac_test_svlanoff,
+	}, {
+		.name = "L3 DA Filtering            ",
+		.lb = STMMAC_LOOPBACK_PHY,
+		.fn = stmmac_test_l3filt_da,
+	}, {
+		.name = "L3 SA Filtering            ",
+		.lb = STMMAC_LOOPBACK_PHY,
+		.fn = stmmac_test_l3filt_sa,
+	}, {
+		.name = "L4 DA TCP Filtering        ",
+		.lb = STMMAC_LOOPBACK_PHY,
+		.fn = stmmac_test_l4filt_da_tcp,
+	}, {
+		.name = "L4 SA TCP Filtering        ",
+		.lb = STMMAC_LOOPBACK_PHY,
+		.fn = stmmac_test_l4filt_sa_tcp,
+	}, {
+		.name = "L4 DA UDP Filtering        ",
+		.lb = STMMAC_LOOPBACK_PHY,
+		.fn = stmmac_test_l4filt_da_udp,
+	}, {
+		.name = "L4 SA UDP Filtering        ",
+		.lb = STMMAC_LOOPBACK_PHY,
+		.fn = stmmac_test_l4filt_sa_udp,
+	}, {
+		.name = "ARP Offload                ",
+		.lb = STMMAC_LOOPBACK_PHY,
+		.fn = stmmac_test_arpoffload,
+	}, {
+		.name = "Jumbo Frame                ",
+		.lb = STMMAC_LOOPBACK_PHY,
+		.fn = stmmac_test_jumbo,
+	}, {
+		.name = "Multichannel Jumbo         ",
+		.lb = STMMAC_LOOPBACK_PHY,
+		.fn = stmmac_test_mjumbo,
+	}, {
+		.name = "Split Header               ",
+		.lb = STMMAC_LOOPBACK_PHY,
+		.fn = stmmac_test_sph,
+	}, {
+		.name = "TBS (ETF Scheduler)        ",
+		.lb = STMMAC_LOOPBACK_PHY,
+		.fn = stmmac_test_tbs,
+	},
 };
 
 void stmmac_selftest_run(struct net_device *dev,
