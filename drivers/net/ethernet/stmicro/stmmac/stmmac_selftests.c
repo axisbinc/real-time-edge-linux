@@ -19,7 +19,6 @@
 #include <net/udp.h>
 #include <net/tc_act/tc_gact.h>
 #include "stmmac.h"
-#include "stmmac_frp.h"
 
 struct stmmachdr {
 	__be32 version;
@@ -214,10 +213,6 @@ struct sk_buff *stmmac_test_get_udp_skb(struct stmmac_priv *priv,
 	if (attr->timestamp)
 		skb->tstamp = ns_to_ktime(attr->timestamp);
 
-	pr_info("Printing from get skb function.\n");
-	ehdr = (struct ethhdr *)skb_mac_header(skb);
-	print_hex_dump(KERN_INFO, "EHDR: ", DUMP_PREFIX_OFFSET, 16, 1, 
-               ehdr, 16, true);
 	return skb;
 }
 
@@ -272,8 +267,6 @@ static int stmmac_test_loopback_validate(struct sk_buff *skb,
 		goto out;
 
 	ehdr = (struct ethhdr *)skb_mac_header(skb);
-	print_hex_dump(KERN_INFO, "EHDR: ", DUMP_PREFIX_OFFSET, 16, 1, 
-               ehdr, 16, true);
 	if (dst) {
 		if (!ether_addr_equal_unaligned(ehdr->h_dest, dst))
 			goto out;
@@ -1168,47 +1161,32 @@ static int stmmac_test_rxp(struct stmmac_priv *priv)
 	struct tcf_exts *exts;
 	int ret, i, nk = 1;
 
-	/* Dump hardware stats before test */
-	pr_info("stmmac_test_rxp: Dumping FRP stats before test...\n");
-	dwmac5_frp_dump_stats(priv->ioaddr);
-	
-	if (!tc_can_offload(priv->dev)) {
-		pr_warn("stmmac_test_rxp: TC offload not supported on this device\n");
+	if (!tc_can_offload(priv->dev))
 		return -EOPNOTSUPP;
-	}
-	if (!priv->dma_cap.frpsel) {
-		pr_warn("stmmac_test_rxp: Flexible RX parser not supported\n");
+	if (!priv->dma_cap.frpsel)
 		return -EOPNOTSUPP;
-	}
 
 	sel = kzalloc(struct_size(sel, keys, nk), GFP_KERNEL);
-	if (!sel) {
-		pr_err("stmmac_test_rxp: Failed to allocate sel\n");
+	if (!sel)
 		return -ENOMEM;
-	}
 
 	exts = kzalloc(sizeof(*exts), GFP_KERNEL);
 	if (!exts) {
-		pr_err("stmmac_test_rxp: Failed to allocate exts\n");
 		ret = -ENOMEM;
 		goto cleanup_sel;
 	}
 
 	actions = kcalloc(nk, sizeof(*actions), GFP_KERNEL);
 	if (!actions) {
-		pr_err("stmmac_test_rxp: Failed to allocate actions\n");
 		ret = -ENOMEM;
 		goto cleanup_exts;
 	}
 
 	gact = kcalloc(nk, sizeof(*gact), GFP_KERNEL);
 	if (!gact) {
-		pr_err("stmmac_test_rxp: Failed to allocate gact\n");
 		ret = -ENOMEM;
 		goto cleanup_actions;
 	}
-
-	pr_info("stmmac_test_rxp: Setting up TC filter\n");
 
 	cls_u32.command = TC_CLSU32_NEW_KNODE;
 	cls_u32.common.chain_index = 0;
@@ -1230,32 +1208,16 @@ static int stmmac_test_rxp(struct stmmac_priv *priv)
 	sel->keys[0].val = htonl(0xdeadbeef);
 	sel->keys[0].mask = ~0x0;
 
-	pr_info("stmmac_test_rxp: Installing TC rule to drop packets from 0xdeadbeef\n");
-
 	ret = stmmac_tc_setup_cls_u32(priv, priv, &cls_u32);
-	if (ret) {
-		pr_err("stmmac_test_rxp: Failed to install TC rule, ret=%d\n", ret);
+	if (ret)
 		goto cleanup_act;
-	}
 
 	attr.dst = priv->dev->dev_addr;
 	attr.src = addr;
 
-	pr_info("stmmac_test_rxp: Sending test packet\n");
 	ret = __stmmac_test_loopback(priv, &attr);
-
-	if (ret)
-		pr_info("stmmac_test_rxp: Packet was dropped as expected (PASS)\n");
-	else
-		pr_warn("stmmac_test_rxp: Packet was received (FAIL)\n");
-
-	/* Dump hardware stats after test */
-    pr_info("stmmac_test_rxp: Dumping FRP stats...\n");
-    dwmac5_frp_dump_stats(priv->ioaddr);
-
 	ret = ret ? 0 : -EINVAL; /* Shall NOT receive packet */
 
-	pr_info("stmmac_test_rxp: Cleaning up TC rule\n");
 	cls_u32.command = TC_CLSU32_DELETE_KNODE;
 	stmmac_tc_setup_cls_u32(priv, priv, &cls_u32);
 
@@ -1277,10 +1239,6 @@ static int stmmac_test_rxp2(struct stmmac_priv *priv)
 	struct tc_cls_u32_offload cls_u32 = { };
 	int ret;
 
-	/* Dump hardware stats before test */
-	pr_info("stmmac_test_rxp: Dumping FRP stats before test...\n");
-	dwmac5_frp_dump_stats(priv->ioaddr);
-	
 	if (!tc_can_offload(priv->dev)) {
 		return -EOPNOTSUPP;
 	}
@@ -1290,11 +1248,8 @@ static int stmmac_test_rxp2(struct stmmac_priv *priv)
 
 	ret = stmmac_test_rxp_setup_new(&cls_u32, htonl(ETH_P_IP << 16), 12, TC_ACT_SHOT);
 		if (ret) {
-		pr_err("stmmac_test_rxp: Failed to setup TC rule, ret=%d\n", ret);
 		return ret;
 	}
-
-	pr_info("stmmac_test_rxp: Installing TC rule to drop packets from 0xdeadbeef\n");
 
 	ret = stmmac_tc_setup_cls_u32(priv, priv, &cls_u32);
 	if (ret) {
@@ -1305,21 +1260,10 @@ static int stmmac_test_rxp2(struct stmmac_priv *priv)
 	attr.dst = priv->dev->dev_addr;
 	attr.src = addr;
 
-	pr_info("stmmac_test_rxp: Sending test packet\n");
 	ret = __stmmac_test_loopback(priv, &attr);
-
-	if (ret)
-		pr_info("stmmac_test_rxp: Packet was dropped as expected (PASS)\n");
-	else
-		pr_warn("stmmac_test_rxp: Packet was received (FAIL)\n");
-
-	/* Dump hardware stats after test */
-	pr_info("stmmac_test_rxp: Dumping FRP stats...\n");
-	dwmac5_frp_dump_stats(priv->ioaddr);
 
 	ret = ret ? 0 : -EINVAL; /* Shall NOT receive packet */
 
-	pr_info("stmmac_test_rxp: Cleaning up TC rule\n");
 	cls_u32.command = TC_CLSU32_DELETE_KNODE;
 	stmmac_tc_setup_cls_u32(priv, priv, &cls_u32);
 
@@ -2048,6 +1992,10 @@ static const struct stmmac_test {
 		.name = "Double VLAN Filter (perf)  ",
 		.lb = STMMAC_LOOPBACK_PHY,
 		.fn = stmmac_test_dvlanfilt_perfect,
+	}, {
+		.name = "Flexible RX Parser         ",
+		.lb = STMMAC_LOOPBACK_PHY,
+		.fn = stmmac_test_rxp,
 	}, {
 		.name = "Flexible RX Parser2         ",
 		.lb = STMMAC_LOOPBACK_MAC,
