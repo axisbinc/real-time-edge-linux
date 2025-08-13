@@ -6,7 +6,7 @@
 
 #define IMX8MP_EVK 1
 #define EDC_BRD01 2
-#define BRD_REV IMX8MP_EVK
+#define BRD_REV EDC_BRD01
 
 #if BRD_REV == IMX8MP_EVK
 #include "imx8mp-evk-pinmux.dtsi"
