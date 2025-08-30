@@ -113,6 +113,8 @@ static void dwmac4_dma_init_channel(void __iomem *ioaddr,
 {
 	u32 value;
 
+    pr_info("dwmac4_dma_init_channel... %d [%d]\n", chan, dma_cfg->pblx8);
+
 	/* common channel control register config */
 	value = readl(ioaddr + DMA_CHAN_CONTROL(chan));
 	if (dma_cfg->pblx8)

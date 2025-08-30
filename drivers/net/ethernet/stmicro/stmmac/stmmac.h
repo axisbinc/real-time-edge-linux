@@ -23,6 +23,10 @@
 #include <linux/reset.h>
 #include <net/page_pool.h>
 #include <uapi/linux/bpf.h>
+#include <linux/fec.h>
+
+/* STMMAC adapter for GenAVB */
+#define CONFIG_STMMAC_GENAVB
 
 struct stmmac_resources {
 	void __iomem *addr;
@@ -41,6 +45,9 @@ enum stmmac_txbuf_type {
 	STMMAC_TXBUF_T_XDP_TX,
 	STMMAC_TXBUF_T_XDP_NDO,
 	STMMAC_TXBUF_T_XSK_TX,
+#ifdef CONFIG_STMMAC_GENAVB
+    STMMAC_TXBUF_T_AVB_POOL,
+#endif
 };
 
 struct stmmac_tx_info {
@@ -68,10 +75,12 @@ struct stmmac_tx_queue {
 	union {
 		struct sk_buff **tx_skbuff;
 		struct xdp_frame **xdpf;
+        struct avb_tx_desc **avb_desc;
 	};
 	struct stmmac_tx_info *tx_skbuff_dma;
 	struct xsk_buff_pool *xsk_pool;
 	u32 xsk_frames_done;
+    u32 avb_frames_done;
 	unsigned int cur_tx;
 	unsigned int dirty_tx;
 	dma_addr_t dma_tx_phy;
@@ -200,6 +209,52 @@ struct stmmac_dma_conf {
 	unsigned int dma_tx_size;
 };
 
+#ifdef CONFIG_STMMAC_GENAVB
+struct stmmac_avb_buffer {
+	void *vaddr;
+    __u32 offset; /* Offset from vaddr for rx data */
+	dma_addr_t dma_addr; /* DMA address for vaddr + offset */
+};
+
+struct stmmac_avb_rx_queue {
+	u32 rx_count_frames;
+    u32 rx_count_bytes;
+	u32 avb_chan;
+	struct stmmac_priv *priv_data;
+	struct dma_desc *dma_rx ____cacheline_aligned_in_smp;
+	unsigned int cur_rx;
+    struct stmmac_avb_buffer *buf_pool;
+	dma_addr_t dma_rx_phy;
+	u32 rx_tail_addr;
+};
+
+struct stmmac_avb_tx_queue {
+	u32 tx_count_frames;
+	int tbs;
+	u32 avb_chan;
+	struct stmmac_priv *priv_data;
+	struct dma_desc *dma_tx ____cacheline_aligned_in_smp;
+	unsigned int cur_tx;
+	unsigned int dirty_tx;
+    struct stmmac_avb_buffer *buf_pool;
+	dma_addr_t dma_tx_phy;
+	dma_addr_t tx_tail_addr;
+	u32 mss;
+};
+
+struct stmmac_avb_dma_conf {
+	unsigned int dma_buf_sz;
+
+	/* RX Queue */
+	struct stmmac_avb_rx_queue rx_queue;
+	unsigned int dma_rx_size;
+
+	/* TX Queue */
+	struct stmmac_avb_tx_queue tx_queue;
+	unsigned int dma_tx_size;
+};
+#endif
+
 struct stmmac_priv {
 	/* Frequently used values are kept adjacent for cache effect */
 	u32 tx_coal_frames[MTL_MAX_TX_QUEUES];
@@ -223,6 +278,15 @@ struct stmmac_priv {
 	struct mac_device_info *hw;
 	int (*hwif_quirks)(struct stmmac_priv *priv);
 	struct mutex lock;
+
+#ifdef CONFIG_STMMAC_GENAVB
+	const struct avb_ops *avb;
+	void *avb_data;
+	unsigned int avb_enabled;
+	//__ETHTOOL_DECLARE_LINK_MODE_MASK(phy_advertising);
+    struct stmmac_avb_dma_conf *dma_avb_conf;
+    raw_spinlock_t ptp_spinlock;
+#endif
 
 	struct stmmac_dma_conf dma_conf;
 
@@ -381,26 +445,11 @@ struct timespec64 stmmac_calc_tas_basetime(ktime_t old_base_time,
 					   ktime_t current_time,
 					   u64 cycle_time);
 
-#if IS_ENABLED(CONFIG_STMMAC_SELFTESTS)
 void stmmac_selftest_run(struct net_device *dev,
 			 struct ethtool_test *etest, u64 *buf);
 void stmmac_selftest_get_strings(struct stmmac_priv *priv, u8 *data);
 int stmmac_selftest_get_count(struct stmmac_priv *priv);
-#else
-static inline void stmmac_selftest_run(struct net_device *dev,
-				       struct ethtool_test *etest, u64 *buf)
-{
-	/* Not enabled */
-}
-static inline void stmmac_selftest_get_strings(struct stmmac_priv *priv,
-					       u8 *data)
-{
-	/* Not enabled */
-}
-static inline int stmmac_selftest_get_count(struct stmmac_priv *priv)
-{
-	return -EOPNOTSUPP;
-}
-#endif /* CONFIG_STMMAC_SELFTESTS */
+int stmmac_test_mac_loopback_src_addr(struct stmmac_priv *priv,
+        unsigned char addr[ETH_ALEN], u16 h_proto);
 
 #endif /* __STMMAC_H__ */
