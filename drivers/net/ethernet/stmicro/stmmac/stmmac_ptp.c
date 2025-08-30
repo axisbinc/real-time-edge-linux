@@ -307,6 +307,9 @@ void stmmac_ptp_register(struct stmmac_priv *priv)
 	stmmac_ptp_clock_ops.n_per_out = priv->dma_cap.pps_out_num;
 	stmmac_ptp_clock_ops.n_ext_ts = priv->dma_cap.aux_snapshot_n;
 
+#ifdef CONFIG_STMMAC_GENAVB
+	raw_spin_lock_init(&priv->ptp_spinlock);
+#endif
 	rwlock_init(&priv->ptp_lock);
 	mutex_init(&priv->aux_ts_lock);
 	priv->ptp_clock_ops = stmmac_ptp_clock_ops;
@@ -337,3 +340,73 @@ void stmmac_ptp_unregister(struct stmmac_priv *priv)
 
 	mutex_destroy(&priv->aux_ts_lock);
 }
+
+#ifdef CONFIG_STMMAC_GENAVB
+/**
+ * stmmac_ptp_read
+ * @data: fec private context ptr
+ * @cnt: data pointer for counter value
+ *
+ * Returns status
+ */
+int stmmac_ptp_read_cnt(void *data, u32 *cnt)
+{
+    struct stmmac_priv *priv = data;
+	unsigned long flags;
+	u64 ns = 0;
+
+    // todo: evaluate if we need to serialize
+	raw_spin_lock_irqsave(&priv->ptp_spinlock, flags);
+	stmmac_get_ptptime(priv, priv->ptpaddr, &ns);
+	raw_spin_unlock_irqrestore(&priv->ptp_spinlock, flags);
+
+	*cnt = (u32) ns;
+
+	return 0;
+}
+EXPORT_SYMBOL(stmmac_ptp_read_cnt);
+
+/**
+ * stmmac_ptp_tc_start
+ * @data: fec private context ptr
+ * @id: TC register ID
+ * @ts_0: First timestamp
+ * @ts_1: Second timestamp
+ * @tcsr_val: TCSR register value
+ *
+ * Returns 0 on success, -1 if PTP counter is not
+ * enabled.
+ */
+int stmmac_ptp_tc_start(void *data, u8 id, u32 ts_0, u32 ts_1, u32 tcsr_val)
+{
+	return 0;
+}
+EXPORT_SYMBOL(stmmac_ptp_tc_start);
+
+/**
+ * stmmac_ptp_tc_stop
+ * @data: fec private context ptr
+ * @id: TC register ID
+ *
+ * Returns none
+ */
+void stmmac_ptp_tc_stop(void *data, u8 id)
+{
+}
+EXPORT_SYMBOL(stmmac_ptp_tc_stop);
+
+/**
+ * stmmac_ptp_tc_reload
+ * @data: fec private context ptr
+ * @id: TC register ID
+ * @ts: New timestamp to load
+ *
+ * Returns 0 if success, -1 if compare has not occured
+ * or if PTP counter is not enabled.
+ */
+int stmmac_ptp_tc_reload(void *data, u8 id, u32 ts)
+{
+	return 0;
+}
+EXPORT_SYMBOL(stmmac_ptp_tc_reload);
+#endif /* CONFIG_STMMAC_GENAVB */

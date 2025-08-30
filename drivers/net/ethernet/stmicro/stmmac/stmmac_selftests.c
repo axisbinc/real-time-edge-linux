@@ -56,7 +56,7 @@ struct stmmac_packet_attrs {
 
 static u8 stmmac_test_next_id;
 
-static struct sk_buff *stmmac_test_get_udp_skb(struct stmmac_priv *priv,
+struct sk_buff *stmmac_test_get_udp_skb(struct stmmac_priv *priv,
 					       struct stmmac_packet_attrs *attr)
 {
 	struct sk_buff *skb = NULL;
@@ -366,7 +366,7 @@ cleanup:
 	return ret;
 }
 
-static int stmmac_test_mac_loopback(struct stmmac_priv *priv)
+int stmmac_test_mac_loopback(struct stmmac_priv *priv)
 {
 	struct stmmac_packet_attrs attr = { };
 
@@ -1079,6 +1079,77 @@ static int stmmac_test_dvlanfilt_perfect(struct stmmac_priv *priv)
 }
 
 #ifdef CONFIG_NET_CLS_ACT
+
+static int stmmac_test_rxp_setup_new(
+    struct tc_cls_u32_offload *cls_u32, __be32 val, int offset, int tcfa)
+{
+	struct tc_u32_sel *sel;
+	struct tcf_exts *exts;
+	struct tcf_gact *gact;
+
+	cls_u32->command = TC_CLSU32_NEW_KNODE;
+	cls_u32->common.chain_index = 0;
+	cls_u32->common.protocol = htons(ETH_P_ALL);
+	cls_u32->knode.exts = NULL;
+	cls_u32->knode.sel = NULL;
+	cls_u32->knode.handle = 0x123;
+
+	sel = kzalloc(struct_size(sel, keys, 1), GFP_KERNEL);
+	if (!sel)
+		return -ENOMEM;
+
+	cls_u32->knode.sel = sel;
+	sel->nkeys = 1;
+	sel->offshift = 0;
+	sel->keys[0].off = offset;
+	sel->keys[0].val = val;
+	sel->keys[0].mask = htonl(0xffff0000);
+
+	exts = kzalloc(sizeof(*exts), GFP_KERNEL);
+	if (!exts) {
+		pr_err("stmmac_test_rxp: Failed to allocate exts\n");
+		return -ENOMEM;
+	}
+
+	cls_u32->knode.exts = exts;
+	exts->actions = kcalloc(1, sizeof(struct tc_action *), GFP_KERNEL);
+	if (!exts->actions) {
+		pr_err("stmmac_test_rxp: Failed to allocate actions\n");
+		return -ENOMEM;
+	}
+
+	exts->nr_actions = 1;
+	gact = kcalloc(1, sizeof(struct tcf_gact), GFP_KERNEL);
+	if (!gact) {
+		pr_err("stmmac_test_rxp: Failed to allocate gact\n");
+		return -ENOMEM;
+	}
+	exts->actions[0] = (struct tc_action *)gact;
+	gact->tcf_action = tcfa;
+
+	return 0;  /* Success */
+}
+
+void stmmac_test_rxp_setup_delete(struct tc_cls_u32_offload *cls_u32)
+{
+	struct tcf_exts *exts = cls_u32->knode.exts;
+    struct tc_u32_sel *sel = cls_u32->knode.sel;
+
+    if (exts) {
+        cls_u32->knode.exts = NULL;
+        if (exts->actions && exts->actions[0]) {
+            kfree(exts->actions[0]);
+            exts->actions[0] = NULL;
+        }
+        kfree(exts->actions);
+        kfree(exts);
+    }
+    if (sel) {
+        cls_u32->knode.sel = NULL;
+        kfree(sel);
+    }
+}
+
 static int stmmac_test_rxp(struct stmmac_priv *priv)
 {
 	unsigned char addr[ETH_ALEN] = {0xde, 0xad, 0xbe, 0xef, 0x00, 0x00};
@@ -1160,6 +1231,47 @@ cleanup_sel:
 	kfree(sel);
 	return ret;
 }
+
+static int stmmac_test_rxp2(struct stmmac_priv *priv)
+{
+	unsigned char addr[ETH_ALEN] = {0xde, 0xad, 0xbe, 0xef, 0x00, 0x00};
+	struct stmmac_packet_attrs attr = { };
+	struct tc_cls_u32_offload cls_u32 = { };
+	int ret;
+
+	if (!tc_can_offload(priv->dev)) {
+		return -EOPNOTSUPP;
+	}
+	if (!priv->dma_cap.frpsel) {
+		return -EOPNOTSUPP;
+	}
+
+	ret = stmmac_test_rxp_setup_new(&cls_u32, htonl(ETH_P_IP << 16), 12, TC_ACT_SHOT);
+		if (ret) {
+		return ret;
+	}
+
+	ret = stmmac_tc_setup_cls_u32(priv, priv, &cls_u32);
+	if (ret) {
+		pr_err("stmmac_test_rxp: Failed to install TC rule, ret=%d\n", ret);
+		goto cleanup_act;
+	}
+
+	attr.dst = priv->dev->dev_addr;
+	attr.src = addr;
+
+	ret = __stmmac_test_loopback(priv, &attr);
+
+	ret = ret ? 0 : -EINVAL; /* Shall NOT receive packet */
+
+	cls_u32.command = TC_CLSU32_DELETE_KNODE;
+	stmmac_tc_setup_cls_u32(priv, priv, &cls_u32);
+
+cleanup_act:
+    stmmac_test_rxp_setup_delete(&cls_u32);
+	return ret;
+}
+
 #else
 static int stmmac_test_rxp(struct stmmac_priv *priv)
 {
@@ -1884,6 +1996,10 @@ static const struct stmmac_test {
 		.name = "Flexible RX Parser         ",
 		.lb = STMMAC_LOOPBACK_PHY,
 		.fn = stmmac_test_rxp,
+	}, {
+		.name = "Flexible RX Parser2         ",
+		.lb = STMMAC_LOOPBACK_MAC,
+		.fn = stmmac_test_rxp2,
 	}, {
 		.name = "SA Insertion (desc)        ",
 		.lb = STMMAC_LOOPBACK_PHY,
