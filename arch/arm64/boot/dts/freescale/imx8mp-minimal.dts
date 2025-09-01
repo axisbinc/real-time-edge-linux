@@ -375,4 +375,11 @@
     pinctrl-names = "default";
     pinctrl-0 = <&pinctrl_i2c2>;
     status = "okay";
+
+	ad2437@68 {
+        compatible = "nxp,ad2437";
+        #address-cells = <1>;
+        #size-cells = <0>;
+        reg = <0x68>;
+    };
 };
