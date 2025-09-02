@@ -30,8 +30,14 @@
 	};
 	pinctrl_uart2: uart2grp {
 		fsl,pins = <
-			MX8MP_IOMUXC_SD1_DATA2__UART2_DCE_TX	0x144
-			MX8MP_IOMUXC_SD1_DATA3__UART2_DCE_RX	0x144
+			MX8MP_IOMUXC_SD1_DATA2__UART2_DCE_TX	0x142
+			MX8MP_IOMUXC_SD1_DATA3__UART2_DCE_RX	0x142
+		>;
+	};
+	pinctrl_uart1: uart1grp {
+		fsl,pins = <
+			MX8MP_IOMUXC_UART1_RXD__UART1_DCE_RX	0x142
+			MX8MP_IOMUXC_UART1_TXD__UART1_DCE_TX	0x142
 		>;
 	};
 	pinctrl_usdhc2: usdhc2grp {
@@ -77,14 +83,6 @@
 			MX8MP_IOMUXC_ENET_TD3__ENET_QOS_RGMII_TD3			0x16
 			MX8MP_IOMUXC_ENET_TX_CTL__ENET_QOS_RGMII_TX_CTL			0x16
 			MX8MP_IOMUXC_ENET_TXC__CCM_ENET_QOS_CLOCK_GENERATE_TX_CLK	0x16
-		>;
-	};
-	pinctrl_uart1: uart1grp {
-		fsl,pins = <
-			MX8MP_IOMUXC_UART1_RXD__UART1_DCE_RX	0x140
-			MX8MP_IOMUXC_UART1_TXD__UART1_DCE_TX	0x140
-			MX8MP_IOMUXC_SD1_DATA0__UART1_DTE_CTS	0x140
-			MX8MP_IOMUXC_SD1_DATA1__UART1_DTE_RTS	0x140
 		>;
 	};
 };
@@ -198,6 +196,12 @@
 			};
 		};
 	};
+};
+
+&uart1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_uart1>;
+	status = "okay";
 };
 
 &uart2 {
