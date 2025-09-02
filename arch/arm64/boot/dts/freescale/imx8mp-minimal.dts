@@ -30,8 +30,8 @@
 	};
 	pinctrl_uart2: uart2grp {
 		fsl,pins = <
-			MX8MP_IOMUXC_SD1_DATA2__UART2_DTE_RX	0x140
-			MX8MP_IOMUXC_SD1_DATA3__UART2_DTE_TX	0x140
+			MX8MP_IOMUXC_SD1_DATA2__UART2_DCE_TX	0x144
+			MX8MP_IOMUXC_SD1_DATA3__UART2_DCE_RX	0x144
 		>;
 	};
 	pinctrl_usdhc2: usdhc2grp {
@@ -115,90 +115,89 @@
 };
 
 &i2c3 {
-  clock-frequency = <400000>;
-  pinctrl-names = "default";
-  pinctrl-0 = <&pinctrl_i2c3>;
-  status = "okay";
+	clock-frequency = <400000>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_i2c3>;
+	status = "okay";
 
-  // TODO: Check voltage values
-  pmic@25 {
-    compatible = "nxp,pca9450c";
-    reg = <0x25>;
-    pinctrl-names = "default";
-    pinctrl-0 = <&pinctrl_pmic>;
-    interrupt-parent = <&gpio1>;
-    interrupts = <3 IRQ_TYPE_LEVEL_LOW>;
+	pmic@25 {
+		compatible = "nxp,pca9450c";
+		reg = <0x25>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_pmic>;
+		interrupt-parent = <&gpio1>;
+		interrupts = <3 IRQ_TYPE_LEVEL_LOW>;
 
-    regulators {
-      buck1: BUCK1 {
-        regulator-name = "BUCK1";
-        regulator-min-microvolt = <805000>;
-        regulator-max-microvolt = <1000000>;
-        regulator-boot-on;
-        regulator-always-on;
-        regulator-ramp-delay = <3125>;
-      };
+		regulators {
+			buck1: BUCK1 {
+				regulator-name = "BUCK1";
+				regulator-min-microvolt = <805000>;
+				regulator-max-microvolt = <1000000>;
+				regulator-boot-on;
+				regulator-always-on;
+				regulator-ramp-delay = <3125>;
+			};
 
-      buck2: BUCK2 {
-        regulator-name = "BUCK2";
-        regulator-min-microvolt = <805000>;
-        regulator-max-microvolt = <1050000>;
-        regulator-boot-on;
-        regulator-always-on;
-        regulator-ramp-delay = <3125>;
-        nxp,dvs-run-voltage = <1000000>;
-        nxp,dvs-standby-voltage = <950000>;
-      };
+			buck2: BUCK2 {
+				regulator-name = "BUCK2";
+				regulator-min-microvolt = <805000>;
+				regulator-max-microvolt = <1050000>;
+				regulator-boot-on;
+				regulator-always-on;
+				regulator-ramp-delay = <3125>;
+				nxp,dvs-run-voltage = <1000000>;
+				nxp,dvs-standby-voltage = <950000>;
+			};
 
-      buck4: BUCK4{
-        regulator-name = "BUCK4";
-        regulator-min-microvolt = <3000000>;
-        regulator-max-microvolt = <3600000>;
-        regulator-boot-on;
-        regulator-always-on;
-      };
+			buck4: BUCK4{
+				regulator-name = "BUCK4";
+				regulator-min-microvolt = <3000000>;
+				regulator-max-microvolt = <3600000>;
+				regulator-boot-on;
+				regulator-always-on;
+			};
 
-      buck5: BUCK5{
-        regulator-name = "BUCK5";
-        regulator-min-microvolt = <1650000>;
-        regulator-max-microvolt = <1950000>;
-        regulator-boot-on;
-        regulator-always-on;
-      };
+			buck5: BUCK5{
+				regulator-name = "BUCK5";
+				regulator-min-microvolt = <1650000>;
+				regulator-max-microvolt = <1950000>;
+				regulator-boot-on;
+				regulator-always-on;
+			};
 
-      buck6: BUCK6 {
-        regulator-name = "BUCK6";
-        regulator-min-microvolt = <1045000>;
-        regulator-max-microvolt = <1155000>;
-        regulator-boot-on;
-        regulator-always-on;
-      };
+			buck6: BUCK6 {
+				regulator-name = "BUCK6";
+				regulator-min-microvolt = <1045000>;
+				regulator-max-microvolt = <1155000>;
+				regulator-boot-on;
+				regulator-always-on;
+			};
 
-      ldo1: LDO1 {
-        regulator-name = "LDO1";
-        regulator-min-microvolt = <1710000>;
-        regulator-max-microvolt = <1950000>;
-        regulator-boot-on;
-        regulator-always-on;
-      };
+			ldo1: LDO1 {
+				regulator-name = "LDO1";
+				regulator-min-microvolt = <1710000>;
+				regulator-max-microvolt = <1950000>;
+				regulator-boot-on;
+				regulator-always-on;
+			};
 
-      ldo3: LDO3 {
-        regulator-name = "LDO3";
-        regulator-min-microvolt = <1710000>;
-        regulator-max-microvolt = <1890000>;
-        regulator-boot-on;
-        regulator-always-on;
-      };
+			ldo3: LDO3 {
+				regulator-name = "LDO3";
+				regulator-min-microvolt = <1710000>;
+				regulator-max-microvolt = <1890000>;
+				regulator-boot-on;
+				regulator-always-on;
+			};
 
-      ldo5: LDO5 {
-        regulator-name = "LDO5";
-        regulator-min-microvolt = <1650000>;
-        regulator-max-microvolt = <3600000>;
-        regulator-boot-on;
-        regulator-always-on;
-      };
-    };
-  };
+			ldo5: LDO5 {
+				regulator-name = "LDO5";
+				regulator-min-microvolt = <1650000>;
+				regulator-max-microvolt = <3600000>;
+				regulator-boot-on;
+				regulator-always-on;
+			};
+		};
+	};
 };
 
 &uart2 {
@@ -209,23 +208,23 @@
 };
 
 &usdhc2 {
-  assigned-clocks = <&clk IMX8MP_CLK_USDHC2>;
-  assigned-clock-rates = <400000000>;
-  pinctrl-names = "default";
+	assigned-clocks = <&clk IMX8MP_CLK_USDHC2>;
+	assigned-clock-rates = <400000000>;
+	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_usdhc2>;
-  vmmc-supply = <&reg_usdhc2_vmmc>;
-  bus-width = <4>;
-  status = "okay";
+	vmmc-supply = <&reg_usdhc2_vmmc>;
+	bus-width = <4>;
+	status = "okay";
 };
 
 &usdhc3 {
-  assigned-clocks = <&clk IMX8MP_CLK_USDHC3>;
-  assigned-clock-rates = <400000000>;
-  pinctrl-names = "default";
-  pinctrl-0 = <&pinctrl_usdhc3>;
-  bus-width = <8>;
-  non-removable;
-  status = "okay";
+	assigned-clocks = <&clk IMX8MP_CLK_USDHC3>;
+	assigned-clock-rates = <400000000>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_usdhc3>;
+	bus-width = <8>;
+	non-removable;
+	status = "okay";
 };
 
 &eqos {
@@ -316,22 +315,19 @@
 	assigned-clock-parents = <&clk IMX8MP_AUDIO_PLL1_OUT>;
 	assigned-clock-rates = <24576000>;
 	clocks = <&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_OCRAMA_IPG>,
-			 <&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_DSP_ROOT>,
-			 <&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_DSPDBG_ROOT>,
-			 <&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_SDMA3_ROOT>,
-			 <&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_ASRC_IPG>,
-			 <&clk IMX8MP_CLK_UART1_ROOT>;
-	clock-names = "ocram", "core", "debug",
-				  "per_clk1", "per_clk2", "per_clk3";
+		<&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_DSP_ROOT>,
+		<&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_DSPDBG_ROOT>,
+		<&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_SDMA3_ROOT>,
+		<&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_ASRC_IPG>,
+		<&clk IMX8MP_CLK_UART1_ROOT>;
+	clock-names = "ocram", "core", "debug", "per_clk1", "per_clk2", "per_clk3";
 	firmware-name = "imx/dsp/hifi4.bin";
 	power-domains = <&audiomix_pd>;
 	mbox-names = "tx0", "rx0", "rxdb0";
-	mboxes = <&mu2 0 0>,
-			 <&mu2 1 0>,
-			 <&mu2 3 0>;
-	memory-region = <&dsp_vdev0buffer>, <&dsp_vdev0vring0>,
-					<&dsp_vdev0vring1>, <&dsp_reserved>;
+	mboxes = <&mu2 0 0>, <&mu2 1 0>, <&mu2 3 0>;
+	memory-region = <&dsp_vdev0buffer>, <&dsp_vdev0vring0>, <&dsp_vdev0vring1>, <&dsp_reserved>;
 	syscon = <&audio_blk_ctrl>;
+	status = "okay";
 };
 
 &gpt1 {
@@ -342,8 +338,8 @@
 	domain = <0>;
 
 	clocks = <&clk IMX8MP_CLK_GPT1_ROOT>,
-		 <&clk IMX8MP_CLK_GPT1_ROOT>,
-		 <&clk IMX8MP_AUDIO_PLL1>;
+		<&clk IMX8MP_CLK_GPT1_ROOT>,
+		<&clk IMX8MP_AUDIO_PLL1>;
 	clock-names = "ipg", "per", "audio_pll";
 
 	/* Make the GPT clk root derive from the audio PLL*/
@@ -357,29 +353,29 @@
 };
 
 &i2c1 {
-    clock-frequency = <400000>;
-    pinctrl-names = "default";
-    pinctrl-0 = <&pinctrl_i2c1>;
-    status = "okay";
+	clock-frequency = <400000>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_i2c1>;
+	status = "okay";
 
-    i2c-mux@70 {
-        compatible = "nxp,pca9548";
-        #address-cells = <1>;
-        #size-cells = <0>;
-        reg = <0x70>;
-    };
+	i2c-mux@70 {
+		compatible = "nxp,pca9548";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0x70>;
+	};
 };
 
 &i2c2 {
-    clock-frequency = <400000>;
-    pinctrl-names = "default";
-    pinctrl-0 = <&pinctrl_i2c2>;
-    status = "okay";
+	clock-frequency = <400000>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_i2c2>;
+	status = "okay";
 
 	ad2437@68 {
-        compatible = "nxp,ad2437";
-        #address-cells = <1>;
-        #size-cells = <0>;
-        reg = <0x68>;
-    };
+		compatible = "nxp,ad2437";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0x68>;
+	};
 };
