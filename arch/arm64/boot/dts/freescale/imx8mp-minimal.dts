@@ -85,6 +85,16 @@
 			MX8MP_IOMUXC_ENET_TXC__CCM_ENET_QOS_CLOCK_GENERATE_TX_CLK	0x16
 		>;
 	};
+
+	pinctrl_sai6: sai6grp {
+		fsl,pins = <
+			MX8MP_IOMUXC_SAI1_RXD4__AUDIOMIX_SAI6_TX_BCLK 			0x00000106
+			MX8MP_IOMUXC_SAI1_RXD5__AUDIOMIX_SAI6_TX_DATA00 		0x00000106
+			MX8MP_IOMUXC_SAI1_RXD6__AUDIOMIX_SAI6_TX_SYNC 			0x00000106
+			MX8MP_IOMUXC_SAI1_RXD7__AUDIOMIX_SAI6_MCLK 			0x00000106
+		>;
+	};
+
 };
 
 / {
@@ -382,4 +392,21 @@
 		#size-cells = <0>;
 		reg = <0x68>;
 	};
+};
+
+&sai6 {
+    #sound-dai-cells = <0>;
+    pinctrl-names = "default";
+    pinctrl-0 = <&pinctrl_sai6>;
+    assigned-clocks = <&clk IMX8MP_CLK_SAI6>;
+    assigned-clock-parents = <&clk IMX8MP_AUDIO_PLL1_OUT>;
+    assigned-clock-rates = <24576000>; // For 48kHz sample rates 
+    clocks = <&audio_blk_ctrl IMX8MP_CLK_AUDIOMIX_SAI6_IPG>, 
+             <&clk IMX8MP_CLK_DUMMY>, 
+             <&audio_blk_ctrl IMX8MP_CLK_AUDIOMIX_SAI2_MCLK1>,
+             <&clk IMX8MP_CLK_DUMMY>, 
+             <&clk IMX8MP_AUDIO_PLL1_OUT>,
+    clock-names = "bus", "mclk0", "mclk1", "mclk2", "mclk3", "pll8k", "pll11k";
+    fsl,sai-mclk-direction-output;
+    status = "okay";
 };
