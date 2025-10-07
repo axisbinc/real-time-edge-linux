@@ -66,9 +66,8 @@
     pinctrl-names = "default";
     pinctrl-0 = <&pinctrl_i2c5>;
     clock-frequency = <100000>;  /* Start with 100kHz for reliability */
-    scl-gpios = <&gpio5 4 GPIO_ACTIVE_HIGH>;  /* recovery gpios */
-    sda-gpios = <&gpio5 5 GPIO_ACTIVE_HIGH>;  /* recovery gpios */
-
+    scl-gpios = <&gpio3 26 GPIO_ACTIVE_HIGH>;  /* recovery gpios */
+    sda-gpios = <&gpio3 27 GPIO_ACTIVE_HIGH>;  /* recovery gpios */
 };
 
 /* ------------------------------------------------------------------------ */
@@ -89,12 +88,18 @@
     clock-names = "bus", "mclk0", "mclk1", "mclk2", "mclk3";
     fsl,sai-mclk-direction-output;
     
-    /* TDM configuration */
-    fsl,dataline = <0 0x1 0x1>; /* Format, RX mask, TX mask */
+    /* TDM configuration - using TX_DATA_0 and TX_DATA_1 */
+    fsl,dataline = <1 0x1 0x3>; /* Type=1 (I2S), RX mask=0x1 (RX_DATA_0), TX mask=0x3 (TX_DATA_0 + TX_DATA_1) */
+    
+    /* Override DMA configuration for multi-FIFO support */
+    dmas = <&sdma2 2 25 0>, <&sdma2 3 25 0>; /* 25 = IMX_DMATYPE_MULTI_SAI */
+    dma-names = "rx", "tx";
 };
 
 /* ------------------------------------------------------------------------ */
-/*   Sound Cards */
+/*   Sound Card - Single card with 32 channels (8 chairs × 4 speakers)     */
+/*   TX_DATA0: Channels 0-15 (Chairs 0-3, 4 channels each)                 */
+/*   TX_DATA1: Channels 16-31 (Chairs 4-7, 4 channels each)                */
 / {
     /* Dummy codec for TDM16 testing */
     dummy_codec: dummy-codec {
@@ -102,20 +107,25 @@
         #sound-dai-cells = <0>;
     };
 
-    /* SSM3582 TDM16 Sound Card - using simple-audio-card with dummy codec */
-    sound-ssm3582 {
+    /* Single sound card with all 32 channels */
+    sound-volumetric {
         compatible = "simple-audio-card";
-        simple-audio-card,name = "ssm3582-tdm16";
+        simple-audio-card,name = "volumetric-audio";
         simple-audio-card,format = "dsp_a";
-        simple-audio-card,bitclock-master = <&ssm3582_cpu>;
-        simple-audio-card,frame-master = <&ssm3582_cpu>;
+        simple-audio-card,bitclock-master = <&volumetric_cpu>;
+        simple-audio-card,frame-master = <&volumetric_cpu>;
         status = "okay";
 
-        ssm3582_cpu: simple-audio-card,cpu {
+        volumetric_cpu: simple-audio-card,cpu {
             sound-dai = <&sai2>;
-            dai-tdm-slot-num = <16>;
-            dai-tdm-slot-width = <32>;
-            dai-tdm-slot-tx-mask = <0xFFFF>; /* All 16 slots */
+            dai-tdm-slot-num = <16>;        /* 16 slots per frame */
+            dai-tdm-slot-width = <32>;       /* 32 bits per slot */
+            dai-tdm-slot-tx-mask = <0xFFFF>; /* All 16 slots active */
+            /* Note: With fsl,dataline = <0 0x1 0x3>, this creates:
+             * - TX_DATA0: 16 channels (slots 0-15) -> Chairs 0-3
+             * - TX_DATA1: 16 channels (slots 0-15) -> Chairs 4-7
+             * Total: 32 channels
+             */
         };
 
         simple-audio-card,codec {
@@ -147,7 +157,7 @@
 	memory-region = <&dsp_vdev0buffer>, <&dsp_vdev0vring0>,
 					<&dsp_vdev0vring1>, <&dsp_reserved>;
 	syscon = <&audio_blk_ctrl>;
-	status = "disabled";
+	status = "okay";
 };
 
 &uart4 {
