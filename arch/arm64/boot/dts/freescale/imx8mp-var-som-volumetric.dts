@@ -46,8 +46,8 @@
 		fsl,pins = <
 			MX8MP_IOMUXC_SAI2_TXFS__AUDIOMIX_SAI2_TX_SYNC			0xd6
 			MX8MP_IOMUXC_SAI2_TXC__AUDIOMIX_SAI2_TX_BCLK			0xd6
-			MX8MP_IOMUXC_SAI2_TXD0__AUDIOMIX_SAI2_TX_DATA00			0xd6
-			MX8MP_IOMUXC_SAI2_RXD0__AUDIOMIX_SAI2_TX_DATA01			0xd6
+			MX8MP_IOMUXC_SAI2_TXD0__AUDIOMIX_SAI2_TX_DATA00			0x116
+			MX8MP_IOMUXC_SAI2_RXD0__AUDIOMIX_SAI2_TX_DATA01			0x116
 			MX8MP_IOMUXC_SAI2_MCLK__AUDIOMIX_SAI2_MCLK			    0xd6
 		>;
 	};
@@ -88,18 +88,23 @@
     clock-names = "bus", "mclk0", "mclk1", "mclk2", "mclk3";
     fsl,sai-mclk-direction-output;
     
-    /* TDM configuration - using TX_DATA_0 and TX_DATA_1 */
-    fsl,dataline = <1 0x1 0x3>; /* Type=1 (I2S), RX mask=0x1 (RX_DATA_0), TX mask=0x3 (TX_DATA_0 + TX_DATA_1) */
+    /* Dataline configuration for volumetric (32 channels via 2x TDM16):
+     * - Type 0 = Default/TDM mode
+     * - RX mask 0x1 = RX_DATA0
+     * - TX mask 0x3 = TX_DATA0 and TX_DATA1 (both enabled for 2x TDM16)
+     */
+    fsl,dataline = <0 0x1 0x3>;
     
-    /* Override DMA configuration for multi-FIFO support */
+    /* Use MULTI-FIFO DMA for 32-channel operation (2x TDM16) */
     dmas = <&sdma2 2 25 0>, <&sdma2 3 25 0>; /* 25 = IMX_DMATYPE_MULTI_SAI */
     dma-names = "rx", "tx";
 };
 
 /* ------------------------------------------------------------------------ */
-/*   Sound Card - Single card with 32 channels (8 chairs × 4 speakers)     */
-/*   TX_DATA0: Channels 0-15 (Chairs 0-3, 4 channels each)                 */
-/*   TX_DATA1: Channels 16-31 (Chairs 4-7, 4 channels each)                */
+/*   Sound Cards                                                            */
+/*   - volumetric: Single card with 32 channels (8 chairs × 4 speakers)    */
+/*   - ssm3582-0: TX_DATA0 - Channels 0-15 (Chairs 0-3)                    */
+/*   - ssm3582-1: TX_DATA1 - Channels 16-31 (Chairs 4-7)                   */
 / {
     /* Dummy codec for TDM16 testing */
     dummy_codec: dummy-codec {
@@ -126,6 +131,92 @@
              * - TX_DATA1: 16 channels (slots 0-15) -> Chairs 4-7
              * Total: 32 channels
              */
+        };
+
+        simple-audio-card,codec {
+            sound-dai = <&dummy_codec>;
+        };
+    };
+
+    /* SSM3582 Sound Card #0 - TX_DATA0 (16 channels) - BASELINE TEST */
+    sound-ssm3582-0 {
+        compatible = "simple-audio-card";
+        simple-audio-card,name = "ssm3582-tdm16-0";
+        simple-audio-card,format = "dsp_a";
+        simple-audio-card,bitclock-master = <&ssm3582_0_cpu>;
+        simple-audio-card,frame-master = <&ssm3582_0_cpu>;
+        status = "disabled";
+
+        ssm3582_0_cpu: simple-audio-card,cpu {
+            sound-dai = <&sai2>;
+            dai-tdm-slot-num = <16>;         /* 16 slots per frame */
+            dai-tdm-slot-width = <32>;        /* 32 bits per slot */
+            dai-tdm-slot-tx-mask = <0xFFFF>;  /* All 16 slots active on TX_DATA0 */
+        };
+
+        simple-audio-card,codec {
+            sound-dai = <&dummy_codec>;
+        };
+    };
+
+    /* SSM3582 Sound Card #1 - TX_DATA1 (16 channels) - DISABLED FOR NOW */
+    sound-ssm3582-1 {
+        compatible = "simple-audio-card";
+        simple-audio-card,name = "ssm3582-tdm16-1";
+        simple-audio-card,format = "dsp_a";
+        simple-audio-card,bitclock-master = <&ssm3582_1_cpu>;
+        simple-audio-card,frame-master = <&ssm3582_1_cpu>;
+        status = "disabled";
+
+        ssm3582_1_cpu: simple-audio-card,cpu {
+            sound-dai = <&sai2>;
+            dai-tdm-slot-num = <16>;         /* 16 slots TDM16 */
+            dai-tdm-slot-width = <32>;        /* 32 bits per slot */
+            dai-tdm-slot-tx-mask = <0xFFFF>;  /* All 16 slots active */
+        };
+
+        simple-audio-card,codec {
+            sound-dai = <&dummy_codec>;
+        };
+    };
+
+    /* Simple I2S Sound Card #1 - TX_DATA0 only - for scope testing */
+    sound-simple1 {
+        compatible = "simple-audio-card";
+        simple-audio-card,name = "simple-i2s-0";
+        simple-audio-card,format = "i2s";
+        simple-audio-card,bitclock-master = <&simple1_cpu>;
+        simple-audio-card,frame-master = <&simple1_cpu>;
+        status = "disabled";
+
+        simple1_cpu: simple-audio-card,cpu {
+            sound-dai = <&sai2>;
+            /* Simple I2S: 2 channels (stereo) on TX_DATA0 */
+            dai-tdm-slot-num = <2>;
+            dai-tdm-slot-width = <32>;
+            dai-tdm-slot-tx-mask = <0x3>;  /* Use slots 0-1, will map to TX_DATA0 */
+        };
+
+        simple-audio-card,codec {
+            sound-dai = <&dummy_codec>;
+        };
+    };
+
+    /* Simple I2S Sound Card #2 - TX_DATA1 only - for scope testing */
+    sound-simple2 {
+        compatible = "simple-audio-card";
+        simple-audio-card,name = "simple-i2s-1";
+        simple-audio-card,format = "i2s";
+        simple-audio-card,bitclock-master = <&simple2_cpu>;
+        simple-audio-card,frame-master = <&simple2_cpu>;
+        status = "disabled";
+
+        simple2_cpu: simple-audio-card,cpu {
+            sound-dai = <&sai2>;
+            /* Simple I2S: 2 channels (stereo) on TX_DATA1 */
+            dai-tdm-slot-num = <2>;
+            dai-tdm-slot-width = <32>;
+            dai-tdm-slot-tx-mask = <0x3>;  /* Use slots 0-1, will map to TX_DATA1 */
         };
 
         simple-audio-card,codec {
