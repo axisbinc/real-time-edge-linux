@@ -275,6 +275,14 @@
                 #sound-dai-cells = <0>;
                 status = "okay";
             };
+
+            /* TAS5825M #16: ADR via 4.7K to GND -> 0x4E */
+            tas5825m_16: tas5825m@4e {
+                compatible = "ti,tas5825m";
+                reg = <0x4e>;
+                #sound-dai-cells = <0>;
+                status = "okay";
+            };
         };
     };
 };
