@@ -1,0 +1,782 @@
+/*
+ * Copyright AxisB Inc 2024 - 2025
+ * All rights reserved
+ *
+ * Device tree for 16-channel TAS5825M amplifier array
+ * - 8 TAS5825M amplifiers on SAI2-TX_DATA0 (channels 0-15)
+ * - 8 TAS5825M amplifiers on SAI2-TX_DATA1 (channels 16-31)
+ * - Each amplifier handles 2 channels (stereo pair) from TDM16 stream
+ */
+
+#include "imx8mp-var-som-symphony.dts"
+
+/* Enable easrc */
+&easrc {
+	fsl,asrc-rate  = <48000>;
+	status = "okay";
+};
+
+/* AVB HW timer */
+&gpt1 {
+	compatible = "fsl,avb-gpt";
+	timer-channel = <1>; /* Use output compare channel 1*/
+	rec-channel = <1 0 1>; // capture channel, eth port, ENET TC id
+	prescale = <1>;
+	domain = <0>;
+
+	clocks = <&clk IMX8MP_CLK_GPT1_ROOT>,
+		 <&clk IMX8MP_CLK_GPT1_ROOT>,
+		 <&clk IMX8MP_AUDIO_PLL1>;
+	clock-names = "ipg", "per", "audio_pll";
+
+	/* Make the GPT clk root derive from the audio PLL*/
+	assigned-clocks = <&clk IMX8MP_CLK_GPT1>;
+	assigned-clock-parents = <&clk IMX8MP_AUDIO_PLL1_OUT>;
+	assigned-clock-rates = <0>;
+
+	gpt1_capin1_sel = <&gpr 0x4 2>;
+
+	status = "okay";
+};
+
+&iomuxc {
+	pinctrl_i2c5: i2c5grp {
+		fsl,pins = <
+			MX8MP_IOMUXC_HDMI_DDC_SCL__I2C5_SCL				0x400001c6
+			MX8MP_IOMUXC_HDMI_DDC_SDA__I2C5_SDA				0x400001c6
+		>;
+	};
+
+	pinctrl_sai2: sai2grp {
+		fsl,pins = <
+			MX8MP_IOMUXC_SAI2_TXFS__AUDIOMIX_SAI2_TX_SYNC			0xd6
+			MX8MP_IOMUXC_SAI2_TXC__AUDIOMIX_SAI2_TX_BCLK			0xd6
+			MX8MP_IOMUXC_SAI2_TXD0__AUDIOMIX_SAI2_TX_DATA00			0x116
+			MX8MP_IOMUXC_SAI2_RXD0__AUDIOMIX_SAI2_TX_DATA01			0x116
+			MX8MP_IOMUXC_SAI2_MCLK__AUDIOMIX_SAI2_MCLK			    0xd6
+		>;
+	};
+};
+
+/* ------------------------------------------------------------------------ */
+/*   Enable I2C5 for TAS5825M amplifiers via PCA9548 I2C Multiplexer      */
+&i2c5 {
+    status = "okay";
+    pinctrl-names = "default";
+    pinctrl-0 = <&pinctrl_i2c5>;
+    clock-frequency = <100000>;  /* 100kHz for reliability */
+    scl-gpios = <&gpio3 26 GPIO_ACTIVE_HIGH>;
+    sda-gpios = <&gpio3 27 GPIO_ACTIVE_HIGH>;
+
+    /* -------------------------------------------------------------------- */
+    /* PCA9548 I2C Multiplexer - 8 channels, 2 TAS5825M per channel        */
+    /* -------------------------------------------------------------------- */
+    i2c-mux@70 {
+        compatible = "nxp,pca9548";
+        #address-cells = <1>;
+        #size-cells = <0>;
+        reg = <0x70>;
+
+        /* ================================================================ */
+        /* Channel 0: TAS5825M #0 and #1 (Channels 0-3, TX_DATA0)          */
+        /* ================================================================ */
+        i2c@0 {
+            #address-cells = <1>;
+            #size-cells = <0>;
+            reg = <0>;
+
+            /* TAS5825M #0: ADR to GND -> 0x4C */
+            tas5825m_0: tas5825m@4c {
+                compatible = "ti,tas5825m";
+                reg = <0x4c>;
+                #sound-dai-cells = <0>;
+                status = "okay";
+            };
+
+            /* TAS5825M #1: ADR via 1K to GND -> 0x4D */
+            tas5825m_1: tas5825m@4d {
+                compatible = "ti,tas5825m";
+                reg = <0x4d>;
+                #sound-dai-cells = <0>;
+                status = "okay";
+            };
+        };
+
+        /* ================================================================ */
+        /* Channel 1: TAS5825M #2 and #3 (Channels 4-7, TX_DATA0)          */
+        /* ================================================================ */
+        i2c@1 {
+            #address-cells = <1>;
+            #size-cells = <0>;
+            reg = <1>;
+
+            /* TAS5825M #2: ADR to GND -> 0x4C */
+            tas5825m_2: tas5825m@4c {
+                compatible = "ti,tas5825m";
+                reg = <0x4c>;
+                #sound-dai-cells = <0>;
+                status = "okay";
+            };
+
+            /* TAS5825M #3: ADR via 1K to GND -> 0x4D */
+            tas5825m_3: tas5825m@4d {
+                compatible = "ti,tas5825m";
+                reg = <0x4d>;
+                #sound-dai-cells = <0>;
+                status = "okay";
+            };
+        };
+
+        /* ================================================================ */
+        /* Channel 2: TAS5825M #4 and #5 (Channels 8-11, TX_DATA0)         */
+        /* ================================================================ */
+        i2c@2 {
+            #address-cells = <1>;
+            #size-cells = <0>;
+            reg = <2>;
+
+            /* TAS5825M #4: ADR to GND -> 0x4C */
+            tas5825m_4: tas5825m@4c {
+                compatible = "ti,tas5825m";
+                reg = <0x4c>;
+                #sound-dai-cells = <0>;
+                status = "okay";
+            };
+
+            /* TAS5825M #5: ADR via 1K to GND -> 0x4D */
+            tas5825m_5: tas5825m@4d {
+                compatible = "ti,tas5825m";
+                reg = <0x4d>;
+                #sound-dai-cells = <0>;
+                status = "okay";
+            };
+        };
+
+        /* ================================================================ */
+        /* Channel 3: TAS5825M #6 and #7 (Channels 12-15, TX_DATA0)        */
+        /* ================================================================ */
+        i2c@3 {
+            #address-cells = <1>;
+            #size-cells = <0>;
+            reg = <3>;
+
+            /* TAS5825M #6: ADR to GND -> 0x4C */
+            tas5825m_6: tas5825m@4c {
+                compatible = "ti,tas5825m";
+                reg = <0x4c>;
+                #sound-dai-cells = <0>;
+                status = "okay";
+            };
+
+            /* TAS5825M #7: ADR via 1K to GND -> 0x4D */
+            tas5825m_7: tas5825m@4d {
+                compatible = "ti,tas5825m";
+                reg = <0x4d>;
+                #sound-dai-cells = <0>;
+                status = "okay";
+            };
+        };
+
+        /* ================================================================ */
+        /* Channel 4: TAS5825M #8 and #9 (Channels 16-19, TX_DATA1)        */
+        /* ================================================================ */
+        i2c@4 {
+            #address-cells = <1>;
+            #size-cells = <0>;
+            reg = <4>;
+
+            /* TAS5825M #8: ADR to GND -> 0x4C */
+            tas5825m_8: tas5825m@4c {
+                compatible = "ti,tas5825m";
+                reg = <0x4c>;
+                #sound-dai-cells = <0>;
+                status = "okay";
+            };
+
+            /* TAS5825M #9: ADR via 1K to GND -> 0x4D */
+            tas5825m_9: tas5825m@4d {
+                compatible = "ti,tas5825m";
+                reg = <0x4d>;
+                #sound-dai-cells = <0>;
+                status = "okay";
+            };
+        };
+
+        /* ================================================================ */
+        /* Channel 5: TAS5825M #10 and #11 (Channels 20-23, TX_DATA1)      */
+        /* ================================================================ */
+        i2c@5 {
+            #address-cells = <1>;
+            #size-cells = <0>;
+            reg = <5>;
+
+            /* TAS5825M #10: ADR to GND -> 0x4C */
+            tas5825m_10: tas5825m@4c {
+                compatible = "ti,tas5825m";
+                reg = <0x4c>;
+                #sound-dai-cells = <0>;
+                status = "okay";
+            };
+
+            /* TAS5825M #11: ADR via 1K to GND -> 0x4D */
+            tas5825m_11: tas5825m@4d {
+                compatible = "ti,tas5825m";
+                reg = <0x4d>;
+                #sound-dai-cells = <0>;
+                status = "okay";
+            };
+        };
+
+        /* ================================================================ */
+        /* Channel 6: TAS5825M #12 and #13 (Channels 24-27, TX_DATA1)      */
+        /* ================================================================ */
+        i2c@6 {
+            #address-cells = <1>;
+            #size-cells = <0>;
+            reg = <6>;
+
+            /* TAS5825M #12: ADR to GND -> 0x4C */
+            tas5825m_12: tas5825m@4c {
+                compatible = "ti,tas5825m";
+                reg = <0x4c>;
+                #sound-dai-cells = <0>;
+                status = "okay";
+            };
+
+            /* TAS5825M #13: ADR via 1K to GND -> 0x4D */
+            tas5825m_13: tas5825m@4d {
+                compatible = "ti,tas5825m";
+                reg = <0x4d>;
+                #sound-dai-cells = <0>;
+                status = "okay";
+            };
+        };
+
+        /* ================================================================ */
+        /* Channel 7: TAS5825M #14 and #15 (Channels 28-31, TX_DATA1)      */
+        /* ================================================================ */
+        i2c@7 {
+            #address-cells = <1>;
+            #size-cells = <0>;
+            reg = <7>;
+
+            /* TAS5825M #14: ADR to GND -> 0x4C */
+            tas5825m_14: tas5825m@4c {
+                compatible = "ti,tas5825m";
+                reg = <0x4c>;
+                #sound-dai-cells = <0>;
+                status = "okay";
+            };
+
+            /* TAS5825M #15: ADR via 1K to GND -> 0x4D */
+            tas5825m_15: tas5825m@4d {
+                compatible = "ti,tas5825m";
+                reg = <0x4d>;
+                #sound-dai-cells = <0>;
+                status = "okay";
+            };
+        };
+    };
+};
+
+/* ------------------------------------------------------------------------ */
+/*   Enable SAI2 with TDM16 on both TX_DATA0 and TX_DATA1                  */
+&sai2 {
+    status = "okay";
+    #sound-dai-cells = <0>;
+    pinctrl-names = "default";
+    pinctrl-0 = <&pinctrl_sai2>;
+
+    /* Audio clock for BCLK/FS generation - standard rate for TDM16 */
+    assigned-clocks = <&clk IMX8MP_CLK_SAI2>;
+    assigned-clock-parents = <&clk IMX8MP_AUDIO_PLL1_OUT>;
+    assigned-clock-rates = <24576000>; /* Standard 24.576 MHz */
+    clocks = <&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_SAI2_IPG>, <&clk IMX8MP_CLK_DUMMY>,
+             <&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_SAI2_MCLK1>, <&clk IMX8MP_CLK_DUMMY>,
+             <&clk IMX8MP_CLK_DUMMY>;
+    clock-names = "bus", "mclk0", "mclk1", "mclk2", "mclk3";
+    fsl,sai-mclk-direction-output;
+    
+    /* Dataline configuration for 32 channels via 2x TDM16:
+     * - Type 0 = Default/TDM mode
+     * - RX mask 0x1 = RX_DATA0
+     * - TX mask 0x3 = TX_DATA0 and TX_DATA1 (both enabled for 2x TDM16)
+     */
+    fsl,dataline = <0 0x1 0x3>;
+    
+    /* Use MULTI-FIFO DMA for 32-channel operation (2x TDM16) */
+    dmas = <&sdma2 2 25 0>, <&sdma2 3 25 0>; /* 25 = IMX_DMATYPE_MULTI_SAI */
+    dma-names = "rx", "tx";
+};
+
+/* ------------------------------------------------------------------------ */
+/*   Sound Cards - 16 individual cards, one per TAS5825M amplifier         */
+/*   Each card handles a 2-channel stereo pair from the TDM16 stream       */
+/ {
+    /* -------------------------------------------------------------------- */
+    /* Group 1: TX_DATA0 - Channels 0-15 (8 amplifiers)                    */
+    /* -------------------------------------------------------------------- */
+    
+    /* TAS5825M #0: Channels 0-1 (TDM slots 0-1 on TX_DATA0) */
+    sound-amp-0 {
+        compatible = "simple-audio-card";
+        simple-audio-card,name = "tas5825m-ch0-1";
+        simple-audio-card,format = "dsp_a";
+        simple-audio-card,bitclock-master = <&cpu_amp_0>;
+        simple-audio-card,frame-master = <&cpu_amp_0>;
+        status = "okay";
+
+        cpu_amp_0: simple-audio-card,cpu {
+            sound-dai = <&sai2>;
+            dai-tdm-slot-num = <16>;         /* 16 slots per TDM frame */
+            dai-tdm-slot-width = <32>;       /* 32 bits per slot */
+            dai-tdm-slot-tx-mask = <0x0003>; /* Slots 0-1: bits 0-1 set */
+        };
+
+        simple-audio-card,codec {
+            sound-dai = <&tas5825m_0>;
+        };
+    };
+
+    /* TAS5825M #1: Channels 2-3 (TDM slots 2-3 on TX_DATA0) */
+    sound-amp-1 {
+        compatible = "simple-audio-card";
+        simple-audio-card,name = "tas5825m-ch2-3";
+        simple-audio-card,format = "dsp_a";
+        simple-audio-card,bitclock-master = <&cpu_amp_1>;
+        simple-audio-card,frame-master = <&cpu_amp_1>;
+        status = "okay";
+
+        cpu_amp_1: simple-audio-card,cpu {
+            sound-dai = <&sai2>;
+            dai-tdm-slot-num = <16>;
+            dai-tdm-slot-width = <32>;
+            dai-tdm-slot-tx-mask = <0x000C>; /* Slots 2-3: bits 2-3 set */
+        };
+
+        simple-audio-card,codec {
+            sound-dai = <&tas5825m_1>;
+        };
+    };
+
+    /* TAS5825M #2: Channels 4-5 (TDM slots 4-5 on TX_DATA0) */
+    sound-amp-2 {
+        compatible = "simple-audio-card";
+        simple-audio-card,name = "tas5825m-ch4-5";
+        simple-audio-card,format = "dsp_a";
+        simple-audio-card,bitclock-master = <&cpu_amp_2>;
+        simple-audio-card,frame-master = <&cpu_amp_2>;
+        status = "okay";
+
+        cpu_amp_2: simple-audio-card,cpu {
+            sound-dai = <&sai2>;
+            dai-tdm-slot-num = <16>;
+            dai-tdm-slot-width = <32>;
+            dai-tdm-slot-tx-mask = <0x0030>; /* Slots 4-5: bits 4-5 set */
+        };
+
+        simple-audio-card,codec {
+            sound-dai = <&tas5825m_2>;
+        };
+    };
+
+    /* TAS5825M #3: Channels 6-7 (TDM slots 6-7 on TX_DATA0) */
+    sound-amp-3 {
+        compatible = "simple-audio-card";
+        simple-audio-card,name = "tas5825m-ch6-7";
+        simple-audio-card,format = "dsp_a";
+        simple-audio-card,bitclock-master = <&cpu_amp_3>;
+        simple-audio-card,frame-master = <&cpu_amp_3>;
+        status = "okay";
+
+        cpu_amp_3: simple-audio-card,cpu {
+            sound-dai = <&sai2>;
+            dai-tdm-slot-num = <16>;
+            dai-tdm-slot-width = <32>;
+            dai-tdm-slot-tx-mask = <0x00C0>; /* Slots 6-7: bits 6-7 set */
+        };
+
+        simple-audio-card,codec {
+            sound-dai = <&tas5825m_3>;
+        };
+    };
+
+    /* TAS5825M #4: Channels 8-9 (TDM slots 8-9 on TX_DATA0) */
+    sound-amp-4 {
+        compatible = "simple-audio-card";
+        simple-audio-card,name = "tas5825m-ch8-9";
+        simple-audio-card,format = "dsp_a";
+        simple-audio-card,bitclock-master = <&cpu_amp_4>;
+        simple-audio-card,frame-master = <&cpu_amp_4>;
+        status = "okay";
+
+        cpu_amp_4: simple-audio-card,cpu {
+            sound-dai = <&sai2>;
+            dai-tdm-slot-num = <16>;
+            dai-tdm-slot-width = <32>;
+            dai-tdm-slot-tx-mask = <0x0300>; /* Slots 8-9: bits 8-9 set */
+        };
+
+        simple-audio-card,codec {
+            sound-dai = <&tas5825m_4>;
+        };
+    };
+
+    /* TAS5825M #5: Channels 10-11 (TDM slots 10-11 on TX_DATA0) */
+    sound-amp-5 {
+        compatible = "simple-audio-card";
+        simple-audio-card,name = "tas5825m-ch10-11";
+        simple-audio-card,format = "dsp_a";
+        simple-audio-card,bitclock-master = <&cpu_amp_5>;
+        simple-audio-card,frame-master = <&cpu_amp_5>;
+        status = "okay";
+
+        cpu_amp_5: simple-audio-card,cpu {
+            sound-dai = <&sai2>;
+            dai-tdm-slot-num = <16>;
+            dai-tdm-slot-width = <32>;
+            dai-tdm-slot-tx-mask = <0x0C00>; /* Slots 10-11: bits 10-11 set */
+        };
+
+        simple-audio-card,codec {
+            sound-dai = <&tas5825m_5>;
+        };
+    };
+
+    /* TAS5825M #6: Channels 12-13 (TDM slots 12-13 on TX_DATA0) */
+    sound-amp-6 {
+        compatible = "simple-audio-card";
+        simple-audio-card,name = "tas5825m-ch12-13";
+        simple-audio-card,format = "dsp_a";
+        simple-audio-card,bitclock-master = <&cpu_amp_6>;
+        simple-audio-card,frame-master = <&cpu_amp_6>;
+        status = "okay";
+
+        cpu_amp_6: simple-audio-card,cpu {
+            sound-dai = <&sai2>;
+            dai-tdm-slot-num = <16>;
+            dai-tdm-slot-width = <32>;
+            dai-tdm-slot-tx-mask = <0x3000>; /* Slots 12-13: bits 12-13 set */
+        };
+
+        simple-audio-card,codec {
+            sound-dai = <&tas5825m_6>;
+        };
+    };
+
+    /* TAS5825M #7: Channels 14-15 (TDM slots 14-15 on TX_DATA0) */
+    sound-amp-7 {
+        compatible = "simple-audio-card";
+        simple-audio-card,name = "tas5825m-ch14-15";
+        simple-audio-card,format = "dsp_a";
+        simple-audio-card,bitclock-master = <&cpu_amp_7>;
+        simple-audio-card,frame-master = <&cpu_amp_7>;
+        status = "okay";
+
+        cpu_amp_7: simple-audio-card,cpu {
+            sound-dai = <&sai2>;
+            dai-tdm-slot-num = <16>;
+            dai-tdm-slot-width = <32>;
+            dai-tdm-slot-tx-mask = <0xC000>; /* Slots 14-15: bits 14-15 set */
+        };
+
+        simple-audio-card,codec {
+            sound-dai = <&tas5825m_7>;
+        };
+    };
+
+    /* -------------------------------------------------------------------- */
+    /* Group 2: TX_DATA1 - Channels 16-31 (8 amplifiers)                   */
+    /* Note: These use the same slot numbers (0-15) but on TX_DATA1        */
+    /* The dataline configuration (fsl,dataline = <0 0x1 0x3>) ensures     */
+    /* they are routed to the second physical data line                    */
+    /* -------------------------------------------------------------------- */
+    
+    /* TAS5825M #8: Channels 16-17 (TDM slots 0-1 on TX_DATA1) */
+    sound-amp-8 {
+        compatible = "simple-audio-card";
+        simple-audio-card,name = "tas5825m-ch16-17";
+        simple-audio-card,format = "dsp_a";
+        simple-audio-card,bitclock-master = <&cpu_amp_8>;
+        simple-audio-card,frame-master = <&cpu_amp_8>;
+        status = "okay";
+
+        cpu_amp_8: simple-audio-card,cpu {
+            sound-dai = <&sai2>;
+            dai-tdm-slot-num = <16>;
+            dai-tdm-slot-width = <32>;
+            dai-tdm-slot-tx-mask = <0x0003>; /* Slots 0-1 on TX_DATA1 */
+        };
+
+        simple-audio-card,codec {
+            sound-dai = <&tas5825m_8>;
+        };
+    };
+
+    /* TAS5825M #9: Channels 18-19 (TDM slots 2-3 on TX_DATA1) */
+    sound-amp-9 {
+        compatible = "simple-audio-card";
+        simple-audio-card,name = "tas5825m-ch18-19";
+        simple-audio-card,format = "dsp_a";
+        simple-audio-card,bitclock-master = <&cpu_amp_9>;
+        simple-audio-card,frame-master = <&cpu_amp_9>;
+        status = "okay";
+
+        cpu_amp_9: simple-audio-card,cpu {
+            sound-dai = <&sai2>;
+            dai-tdm-slot-num = <16>;
+            dai-tdm-slot-width = <32>;
+            dai-tdm-slot-tx-mask = <0x000C>; /* Slots 2-3 on TX_DATA1 */
+        };
+
+        simple-audio-card,codec {
+            sound-dai = <&tas5825m_9>;
+        };
+    };
+
+    /* TAS5825M #10: Channels 20-21 (TDM slots 4-5 on TX_DATA1) */
+    sound-amp-10 {
+        compatible = "simple-audio-card";
+        simple-audio-card,name = "tas5825m-ch20-21";
+        simple-audio-card,format = "dsp_a";
+        simple-audio-card,bitclock-master = <&cpu_amp_10>;
+        simple-audio-card,frame-master = <&cpu_amp_10>;
+        status = "okay";
+
+        cpu_amp_10: simple-audio-card,cpu {
+            sound-dai = <&sai2>;
+            dai-tdm-slot-num = <16>;
+            dai-tdm-slot-width = <32>;
+            dai-tdm-slot-tx-mask = <0x0030>; /* Slots 4-5 on TX_DATA1 */
+        };
+
+        simple-audio-card,codec {
+            sound-dai = <&tas5825m_10>;
+        };
+    };
+
+    /* TAS5825M #11: Channels 22-23 (TDM slots 6-7 on TX_DATA1) */
+    sound-amp-11 {
+        compatible = "simple-audio-card";
+        simple-audio-card,name = "tas5825m-ch22-23";
+        simple-audio-card,format = "dsp_a";
+        simple-audio-card,bitclock-master = <&cpu_amp_11>;
+        simple-audio-card,frame-master = <&cpu_amp_11>;
+        status = "okay";
+
+        cpu_amp_11: simple-audio-card,cpu {
+            sound-dai = <&sai2>;
+            dai-tdm-slot-num = <16>;
+            dai-tdm-slot-width = <32>;
+            dai-tdm-slot-tx-mask = <0x00C0>; /* Slots 6-7 on TX_DATA1 */
+        };
+
+        simple-audio-card,codec {
+            sound-dai = <&tas5825m_11>;
+        };
+    };
+
+    /* TAS5825M #12: Channels 24-25 (TDM slots 8-9 on TX_DATA1) */
+    sound-amp-12 {
+        compatible = "simple-audio-card";
+        simple-audio-card,name = "tas5825m-ch24-25";
+        simple-audio-card,format = "dsp_a";
+        simple-audio-card,bitclock-master = <&cpu_amp_12>;
+        simple-audio-card,frame-master = <&cpu_amp_12>;
+        status = "okay";
+
+        cpu_amp_12: simple-audio-card,cpu {
+            sound-dai = <&sai2>;
+            dai-tdm-slot-num = <16>;
+            dai-tdm-slot-width = <32>;
+            dai-tdm-slot-tx-mask = <0x0300>; /* Slots 8-9 on TX_DATA1 */
+        };
+
+        simple-audio-card,codec {
+            sound-dai = <&tas5825m_12>;
+        };
+    };
+
+    /* TAS5825M #13: Channels 26-27 (TDM slots 10-11 on TX_DATA1) */
+    sound-amp-13 {
+        compatible = "simple-audio-card";
+        simple-audio-card,name = "tas5825m-ch26-27";
+        simple-audio-card,format = "dsp_a";
+        simple-audio-card,bitclock-master = <&cpu_amp_13>;
+        simple-audio-card,frame-master = <&cpu_amp_13>;
+        status = "okay";
+
+        cpu_amp_13: simple-audio-card,cpu {
+            sound-dai = <&sai2>;
+            dai-tdm-slot-num = <16>;
+            dai-tdm-slot-width = <32>;
+            dai-tdm-slot-tx-mask = <0x0C00>; /* Slots 10-11 on TX_DATA1 */
+        };
+
+        simple-audio-card,codec {
+            sound-dai = <&tas5825m_13>;
+        };
+    };
+
+    /* TAS5825M #14: Channels 28-29 (TDM slots 12-13 on TX_DATA1) */
+    sound-amp-14 {
+        compatible = "simple-audio-card";
+        simple-audio-card,name = "tas5825m-ch28-29";
+        simple-audio-card,format = "dsp_a";
+        simple-audio-card,bitclock-master = <&cpu_amp_14>;
+        simple-audio-card,frame-master = <&cpu_amp_14>;
+        status = "okay";
+
+        cpu_amp_14: simple-audio-card,cpu {
+            sound-dai = <&sai2>;
+            dai-tdm-slot-num = <16>;
+            dai-tdm-slot-width = <32>;
+            dai-tdm-slot-tx-mask = <0x3000>; /* Slots 12-13 on TX_DATA1 */
+        };
+
+        simple-audio-card,codec {
+            sound-dai = <&tas5825m_14>;
+        };
+    };
+
+    /* TAS5825M #15: Channels 30-31 (TDM slots 14-15 on TX_DATA1) */
+    sound-amp-15 {
+        compatible = "simple-audio-card";
+        simple-audio-card,name = "tas5825m-ch30-31";
+        simple-audio-card,format = "dsp_a";
+        simple-audio-card,bitclock-master = <&cpu_amp_15>;
+        simple-audio-card,frame-master = <&cpu_amp_15>;
+        status = "okay";
+
+        cpu_amp_15: simple-audio-card,cpu {
+            sound-dai = <&sai2>;
+            dai-tdm-slot-num = <16>;
+            dai-tdm-slot-width = <32>;
+            dai-tdm-slot-tx-mask = <0xC000>; /* Slots 14-15 on TX_DATA1 */
+        };
+
+        simple-audio-card,codec {
+            sound-dai = <&tas5825m_15>;
+        };
+    };
+};
+
+&dsp {
+	compatible = "fsl,imx8mp-hifi4";
+	reg = <0x0 0x3B6E8000 0x0 0x88000>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_uart4>;
+	clocks = <&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_OCRAMA_IPG>,
+			 <&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_DSP_ROOT>,
+			 <&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_DSPDBG_ROOT>,
+			 <&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_SDMA3_ROOT>,
+			 <&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_ASRC_IPG>,
+			 <&clk IMX8MP_CLK_UART4_ROOT>;
+	clock-names = "ocram", "core", "debug",
+				  "per_clk1", "per_clk2", "per_clk3",
+                  "per_clk5", "per_clk7";
+	firmware-name = "imx/dsp/hifi4.bin";
+	power-domains = <&audiomix_pd>;
+	mbox-names = "tx0", "rx0", "rxdb0";
+	mboxes = <&mu2 0 0>,
+			 <&mu2 1 0>,
+			 <&mu2 3 0>;
+	memory-region = <&dsp_vdev0buffer>, <&dsp_vdev0vring0>,
+					<&dsp_vdev0vring1>, <&dsp_reserved>;
+	syscon = <&audio_blk_ctrl>;
+	status = "okay";
+};
+
+/* Disable conflicting peripherals from symphony base */
+&uart3 {
+	status = "disabled";
+};
+
+&ecspi2 {
+	status = "disabled";
+};
+
+&uart4 {
+	status = "disabled";
+};
+
+&wm8904 {
+	status = "disabled";
+};
+
+&pcie {
+    status = "disabled";
+};
+
+&pcie_ep {
+    status = "disabled";
+};
+
+&sound_hdmi {
+	status = "disabled";
+};
+
+&aud2htx {
+	status = "disabled";
+};
+
+&flexcan2 {
+	status = "disabled";
+};
+
+&irqsteer_hdmi {
+	status = "disabled";
+};
+
+&hdmi_blk_ctrl {
+	status = "disabled";
+};
+
+&hdmi_pavi {
+	status = "disabled";
+};
+
+&hdmi {
+	status = "disabled";
+};
+
+&hdmiphy {
+	status = "disabled";
+};
+
+/* MIPI-DSI */
+&lcdif1 {
+	status = "disabled";
+};
+
+/* LVDS */
+&lcdif2 {
+	status = "disabled";
+};
+
+/* HDMI */
+&lcdif3 {
+	status = "disabled";
+};
+
+&ldb {
+	status = "disabled";
+};
+
+&ldb_phy {
+	status = "disabled";
+};
+
+&mipi_dsi {
+	status = "disabled";
+};
+
+/* Force FEC ethernet to 100 Mbps */
+&fec {
+	max-speed = <100>;
+};
+
+/* Also limit the PHY to 100 Mbps */
+&ethphy1 {
+	max-speed = <100>;
+};
