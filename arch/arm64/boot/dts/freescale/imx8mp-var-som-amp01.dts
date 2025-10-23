@@ -336,9 +336,9 @@
 
         cpu_amp_0: simple-audio-card,cpu {
             sound-dai = <&sai2>;
-            dai-tdm-slot-num = <16>;         /* 16 slots per TDM frame */
+            dai-tdm-slot-num = <32>;         /* 16 slots per TDM frame */
             dai-tdm-slot-width = <32>;       /* 32 bits per slot */
-            dai-tdm-slot-tx-mask = <0x0003>; /* Slots 0-1: bits 0-1 set */
+            dai-tdm-slot-tx-mask = <0x00000003>; /* Slots 0-1: bits 0-1 set */
         };
 
         simple-audio-card,codec {
@@ -357,9 +357,9 @@
 
         cpu_amp_1: simple-audio-card,cpu {
             sound-dai = <&sai2>;
-            dai-tdm-slot-num = <16>;
+            dai-tdm-slot-num = <32>;
             dai-tdm-slot-width = <32>;
-            dai-tdm-slot-tx-mask = <0x000C>; /* Slots 2-3: bits 2-3 set */
+            dai-tdm-slot-tx-mask = <0x0000000C>; /* Slots 2-3: bits 2-3 set */
         };
 
         simple-audio-card,codec {
@@ -378,9 +378,9 @@
 
         cpu_amp_2: simple-audio-card,cpu {
             sound-dai = <&sai2>;
-            dai-tdm-slot-num = <16>;
+            dai-tdm-slot-num = <32>;
             dai-tdm-slot-width = <32>;
-            dai-tdm-slot-tx-mask = <0x0030>; /* Slots 4-5: bits 4-5 set */
+            dai-tdm-slot-tx-mask = <0x00000030>; /* Slots 4-5: bits 4-5 set */
         };
 
         simple-audio-card,codec {
@@ -399,9 +399,9 @@
 
         cpu_amp_3: simple-audio-card,cpu {
             sound-dai = <&sai2>;
-            dai-tdm-slot-num = <16>;
+            dai-tdm-slot-num = <32>;
             dai-tdm-slot-width = <32>;
-            dai-tdm-slot-tx-mask = <0x00C0>; /* Slots 6-7: bits 6-7 set */
+            dai-tdm-slot-tx-mask = <0x000000C0>; /* Slots 6-7: bits 6-7 set */
         };
 
         simple-audio-card,codec {
@@ -420,9 +420,9 @@
 
         cpu_amp_4: simple-audio-card,cpu {
             sound-dai = <&sai2>;
-            dai-tdm-slot-num = <16>;
+            dai-tdm-slot-num = <32>;
             dai-tdm-slot-width = <32>;
-            dai-tdm-slot-tx-mask = <0x0300>; /* Slots 8-9: bits 8-9 set */
+            dai-tdm-slot-tx-mask = <0x00000300>; /* Slots 8-9: bits 8-9 set */
         };
 
         simple-audio-card,codec {
@@ -441,9 +441,9 @@
 
         cpu_amp_5: simple-audio-card,cpu {
             sound-dai = <&sai2>;
-            dai-tdm-slot-num = <16>;
+            dai-tdm-slot-num = <32>;
             dai-tdm-slot-width = <32>;
-            dai-tdm-slot-tx-mask = <0x0C00>; /* Slots 10-11: bits 10-11 set */
+            dai-tdm-slot-tx-mask = <0x00000C00>; /* Slots 10-11: bits 10-11 set */
         };
 
         simple-audio-card,codec {
@@ -462,9 +462,9 @@
 
         cpu_amp_6: simple-audio-card,cpu {
             sound-dai = <&sai2>;
-            dai-tdm-slot-num = <16>;
+            dai-tdm-slot-num = <32>;
             dai-tdm-slot-width = <32>;
-            dai-tdm-slot-tx-mask = <0x3000>; /* Slots 12-13: bits 12-13 set */
+            dai-tdm-slot-tx-mask = <0x00003000>; /* Slots 12-13: bits 12-13 set */
         };
 
         simple-audio-card,codec {
@@ -483,9 +483,9 @@
 
         cpu_amp_7: simple-audio-card,cpu {
             sound-dai = <&sai2>;
-            dai-tdm-slot-num = <16>;
+            dai-tdm-slot-num = <32>;
             dai-tdm-slot-width = <32>;
-            dai-tdm-slot-tx-mask = <0xC000>; /* Slots 14-15: bits 14-15 set */
+            dai-tdm-slot-tx-mask = <0x0000C000>; /* Slots 14-15: bits 14-15 set */
         };
 
         simple-audio-card,codec {
@@ -511,9 +511,9 @@
 
         cpu_amp_8: simple-audio-card,cpu {
             sound-dai = <&sai2>;
-            dai-tdm-slot-num = <16>;
+            dai-tdm-slot-num = <32>;
             dai-tdm-slot-width = <32>;
-            dai-tdm-slot-tx-mask = <0x0003>; /* Slots 0-1 on TX_DATA1 */
+            dai-tdm-slot-tx-mask = <0x00030000>; /* Slots 0-1 on TX_DATA1 */
         };
 
         simple-audio-card,codec {
@@ -532,9 +532,9 @@
 
         cpu_amp_9: simple-audio-card,cpu {
             sound-dai = <&sai2>;
-            dai-tdm-slot-num = <16>;
+            dai-tdm-slot-num = <32>;
             dai-tdm-slot-width = <32>;
-            dai-tdm-slot-tx-mask = <0x000C>; /* Slots 2-3 on TX_DATA1 */
+            dai-tdm-slot-tx-mask = <0x000C0000>; /* Slots 2-3 on TX_DATA1 */
         };
 
         simple-audio-card,codec {
@@ -553,9 +553,9 @@
 
         cpu_amp_10: simple-audio-card,cpu {
             sound-dai = <&sai2>;
-            dai-tdm-slot-num = <16>;
+            dai-tdm-slot-num = <32>;
             dai-tdm-slot-width = <32>;
-            dai-tdm-slot-tx-mask = <0x0030>; /* Slots 4-5 on TX_DATA1 */
+            dai-tdm-slot-tx-mask = <0x00300000>; /* Slots 4-5 on TX_DATA1 */
         };
 
         simple-audio-card,codec {
@@ -574,9 +574,9 @@
 
         cpu_amp_11: simple-audio-card,cpu {
             sound-dai = <&sai2>;
-            dai-tdm-slot-num = <16>;
+            dai-tdm-slot-num = <32>;
             dai-tdm-slot-width = <32>;
-            dai-tdm-slot-tx-mask = <0x00C0>; /* Slots 6-7 on TX_DATA1 */
+            dai-tdm-slot-tx-mask = <0x00C00000>; /* Slots 6-7 on TX_DATA1 */
         };
 
         simple-audio-card,codec {
@@ -595,9 +595,9 @@
 
         cpu_amp_12: simple-audio-card,cpu {
             sound-dai = <&sai2>;
-            dai-tdm-slot-num = <16>;
+            dai-tdm-slot-num = <32>;
             dai-tdm-slot-width = <32>;
-            dai-tdm-slot-tx-mask = <0x0300>; /* Slots 8-9 on TX_DATA1 */
+            dai-tdm-slot-tx-mask = <0x03000000>; /* Slots 8-9 on TX_DATA1 */
         };
 
         simple-audio-card,codec {
@@ -616,9 +616,9 @@
 
         cpu_amp_13: simple-audio-card,cpu {
             sound-dai = <&sai2>;
-            dai-tdm-slot-num = <16>;
+            dai-tdm-slot-num = <32>;
             dai-tdm-slot-width = <32>;
-            dai-tdm-slot-tx-mask = <0x0C00>; /* Slots 10-11 on TX_DATA1 */
+            dai-tdm-slot-tx-mask = <0x0C000000>; /* Slots 10-11 on TX_DATA1 */
         };
 
         simple-audio-card,codec {
@@ -637,9 +637,9 @@
 
         cpu_amp_14: simple-audio-card,cpu {
             sound-dai = <&sai2>;
-            dai-tdm-slot-num = <16>;
+            dai-tdm-slot-num = <32>;
             dai-tdm-slot-width = <32>;
-            dai-tdm-slot-tx-mask = <0x3000>; /* Slots 12-13 on TX_DATA1 */
+            dai-tdm-slot-tx-mask = <0x30000000>; /* Slots 12-13 on TX_DATA1 */
         };
 
         simple-audio-card,codec {
@@ -658,9 +658,9 @@
 
         cpu_amp_15: simple-audio-card,cpu {
             sound-dai = <&sai2>;
-            dai-tdm-slot-num = <16>;
+            dai-tdm-slot-num = <32>;
             dai-tdm-slot-width = <32>;
-            dai-tdm-slot-tx-mask = <0xC000>; /* Slots 14-15 on TX_DATA1 */
+            dai-tdm-slot-tx-mask = <0xC0000000>; /* Slots 14-15 on TX_DATA1 */
         };
 
         simple-audio-card,codec {
