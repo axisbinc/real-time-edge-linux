@@ -318,10 +318,57 @@ static void send_cfg(struct regmap *rm,
 static void tas5825m_init(struct tas5825m_priv *tas5825m)
 {
     struct regmap *rm = tas5825m->regmap;
+    int i, ret;
+    uint8_t test_regs[8];
+    unsigned int reg_val;
+
+    dev_info(&tas5825m->i2c->dev, "tas5825m_init starting\n");
 
     dev_info(&tas5825m->i2c->dev, "DSP startup\n");
 
     mutex_lock(&tas5825m->lock);
+
+    /* DEBUG: Test I2C read - try to read some status registers */
+    dev_info(&tas5825m->i2c->dev, "DEBUG: Testing I2C read operations...\n");
+    
+    /* Read multiple registers to verify I2C */
+    ret = regmap_read(rm, REG_DEVICE_CTRL_2, &reg_val);
+    if (ret) {
+        dev_err(&tas5825m->i2c->dev, "DEBUG: Failed to read REG_DEVICE_CTRL_2: %d\n", ret);
+    } else {
+        dev_info(&tas5825m->i2c->dev, "DEBUG: REG_DEVICE_CTRL_2 = 0x%02x\n", reg_val);
+        test_regs[0] = reg_val;
+    }
+
+    ret = regmap_read(rm, REG_FAULT, &reg_val);
+    if (ret) {
+        dev_err(&tas5825m->i2c->dev, "DEBUG: Failed to read REG_FAULT: %d\n", ret);
+    } else {
+        dev_info(&tas5825m->i2c->dev, "DEBUG: REG_FAULT = 0x%02x\n", reg_val);
+        test_regs[1] = reg_val;
+    }
+
+    /* Try to read a few more registers */
+    for (i = 0; i < 6; i++) {
+        ret = regmap_read(rm, i, &reg_val);
+        if (ret) {
+            dev_err(&tas5825m->i2c->dev, "DEBUG: Failed to read reg 0x%02x: %d\n", i, ret);
+            test_regs[i + 2] = 0xFF;
+        } else {
+            test_regs[i + 2] = reg_val;
+        }
+    }
+
+    /* Hexdump the read values */
+    dev_info(&tas5825m->i2c->dev, "DEBUG: Register dump (first 8 regs):\n");
+    print_hex_dump(KERN_INFO, "TAS5825M REG: ", DUMP_PREFIX_OFFSET, 16, 1,
+                   test_regs, sizeof(test_regs), true);
+
+    /* Hexdump the read values */
+    dev_info(&tas5825m->i2c->dev, "DEBUG: Register dump (first 8 regs):\n");
+    print_hex_dump(KERN_INFO, "TAS5825M REG: ", DUMP_PREFIX_OFFSET, 16, 1,
+                   test_regs, sizeof(test_regs), true);
+
     /* We mustn't issue any I2C transactions until the I2S
      * clock is stable. Furthermore, we must allow a 5ms
      * delay after the first set of register writes to
@@ -332,9 +379,18 @@ static void tas5825m_init(struct tas5825m_priv *tas5825m)
     usleep_range(5000, 15000);
     send_cfg(rm, tas5825m_init_sequence, ARRAY_SIZE(tas5825m_init_sequence));
 
+    /* DEBUG: Read registers again after init */
+    dev_info(&tas5825m->i2c->dev, "DEBUG: After init - reading registers...\n");
+    ret = regmap_read(rm, REG_DEVICE_CTRL_2, &reg_val);
+    if (!ret) {
+        dev_info(&tas5825m->i2c->dev, "DEBUG: After init - REG_DEVICE_CTRL_2 = 0x%02x\n", reg_val);
+    }
+
     tas5825m->is_powered = true;
     tas5825m_refresh(tas5825m);
     mutex_unlock(&tas5825m->lock);
+
+    dev_info(&tas5825m->i2c->dev, "tas5825m_init completed\n");
 }
 
 static void do_work(struct work_struct *work)
@@ -489,6 +545,15 @@ static int tas5825m_i2c_probe(struct i2c_client *i2c)
     const char *config_name;
     const struct firmware *fw;
     int ret;
+    unsigned int test_val;
+    uint8_t test_buf[16];
+    int i;
+
+    /* DEBUG: Verify the I2C client is properly configured */
+    if (!i2c_check_functionality(i2c->adapter, I2C_FUNC_I2C)) {
+        dev_err(dev, "DEBUG: I2C adapter doesn't support I2C_FUNC_I2C\n");
+        return -ENODEV;
+    }
 
     dev_info(dev, "tas5825m: probing codec\n");
     regmap = devm_regmap_init_i2c(i2c, &tas5825m_regmap);
@@ -496,6 +561,38 @@ static int tas5825m_i2c_probe(struct i2c_client *i2c)
         ret = PTR_ERR(regmap);
         dev_err(dev, "unable to allocate register map: %d\n", ret);
         return ret;
+    }
+
+    /* DEBUG: Try immediate I2C read to verify connection */
+    dev_info(dev, "DEBUG: Testing immediate I2C read in probe...\n");
+    ret = regmap_read(regmap, REG_PAGE, &test_val);
+    if (ret) {
+        dev_err(dev, "DEBUG: Failed to read REG_PAGE register: %d\n", ret);
+        dev_err(dev, "DEBUG: I2C connection might not be working!\n");
+    } else {
+        dev_info(dev, "DEBUG: Successfully read REG_PAGE = 0x%02x\n", test_val);
+    }
+
+    /* DEBUG: Try to read multiple registers */
+    for (i = 0; i < 8; i++) {
+        ret = regmap_read(regmap, i, &test_val);
+        if (ret) {
+            dev_err(dev, "DEBUG: Failed to read register 0x%02x: %d\n", i, ret);
+            test_buf[i] = 0xFF;
+        } else {
+            test_buf[i] = test_val;
+        }
+    }
+    
+    /* DEBUG: Hexdump the initial register state */
+    dev_info(dev, "DEBUG: Initial register dump (probe):\n");
+    print_hex_dump(KERN_INFO, "TAS5825M PROBE: ", DUMP_PREFIX_OFFSET, 16, 1,
+                   test_buf, 8, true);
+
+    /* Try to read some known registers */
+    ret = regmap_read(regmap, REG_DEVICE_CTRL_2, &test_val);
+    if (!ret) {
+        dev_info(dev, "DEBUG: REG_DEVICE_CTRL_2 at probe = 0x%02x\n", test_val);
     }
 
     tas5825m = devm_kzalloc(dev, sizeof(struct tas5825m_priv), GFP_KERNEL);
