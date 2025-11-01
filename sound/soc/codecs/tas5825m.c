@@ -41,8 +41,7 @@
 #define REG_CLKDET_STATUS    0x39
 #define REG_VOL_CTL        0x4c
 #define REG_AGAIN        0x54
-#define REG_ADR_PIN_CTRL    0x60
-#define REG_ADR_PIN_CONFIG    0x61
+#define REG_POWER_STATE  0x68
 #define REG_CHAN_FAULT        0x70
 #define REG_GLOBAL_FAULT1    0x71
 #define REG_GLOBAL_FAULT2    0x72
@@ -61,16 +60,22 @@
 /* This sequence of register writes must always be sent, prior to the
  * 5ms delay while we wait for the DSP to boot.
  */
-static const uint8_t dsp_cfg_preboot[] = {
-    0x00, 0x00,  /* Page 0x00 */
-    0x7f, 0x00,  /* Book 0x00 */
-    0x01, 0x11,  /* Reset register and digital core */
+// static const uint8_t dsp_cfg_preboot[] = {
+//     0x00, 0x00,  /* Page 0x00 */
+//     0x7f, 0x00,  /* Book 0x00 */
+//     0x01, 0x11,  /* Reset register and digital core */
+//
+//     0x00, 0x00,  /* Page 0x00 */
+//     0x7f, 0x00,  /* Book 0x00 */
+//     0x03, 0x12,  /* switch from deep sleep to Hi-z mode*/
+//     0x4C, 0x30,  /* Digital volume 0dB */
+//     0x03, 0x03,     /* Play mode */
+// };
 
-    0x00, 0x00,  /* Page 0x00 */
-    0x7f, 0x00,  /* Book 0x00 */
-    0x03, 0x12,  /* switch from deep sleep to Hi-z mode*/
-    0x4C, 0x30,  /* Digital volume 0dB */
-    0x03, 0x03,     /* Play mode */
+static const uint8_t dsp_cfg_preboot[] = {
+	0x00, 0x00, 0x7f, 0x00, 0x03, 0x02, 0x01, 0x11,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x7f, 0x00, 0x03, 0x02,
 };
 
 /*
@@ -86,6 +91,7 @@ w 4c 78 80
 
 static const uint8_t tas5825m_init_sequence[] = {
     0x78, 0x80,  /* clear analog fault */
+    0x03, 0x03,
 };
 
 static const uint32_t tas5825m_volume[] = {
@@ -340,6 +346,11 @@ static void tas5825m_init(struct tas5825m_priv *tas5825m)
         test_regs[0] = reg_val;
     }
 
+    ret = regmap_read(rm, REG_POWER_STATE, &reg_val);
+    if (!ret) {
+        dev_info(&tas5825m->i2c->dev, "DEBUG: REG_POWER_STATE = 0x%02x\n", reg_val);
+    }
+
     ret = regmap_read(rm, REG_FAULT, &reg_val);
     if (ret) {
         dev_err(&tas5825m->i2c->dev, "DEBUG: Failed to read REG_FAULT: %d\n", ret);
@@ -348,26 +359,14 @@ static void tas5825m_init(struct tas5825m_priv *tas5825m)
         test_regs[1] = reg_val;
     }
 
-    /* Try to read a few more registers */
-    for (i = 0; i < 6; i++) {
-        ret = regmap_read(rm, i, &reg_val);
-        if (ret) {
-            dev_err(&tas5825m->i2c->dev, "DEBUG: Failed to read reg 0x%02x: %d\n", i, ret);
-            test_regs[i + 2] = 0xFF;
-        } else {
-            test_regs[i + 2] = reg_val;
-        }
-    }
+    unsigned int chan, global1, global2;
 
-    /* Hexdump the read values */
-    dev_info(&tas5825m->i2c->dev, "DEBUG: Register dump (first 8 regs):\n");
-    print_hex_dump(KERN_INFO, "TAS5825M REG: ", DUMP_PREFIX_OFFSET, 16, 1,
-                   test_regs, sizeof(test_regs), true);
+    regmap_read(rm, REG_CHAN_FAULT, &chan);
+    regmap_read(rm, REG_GLOBAL_FAULT1, &global1);
+    regmap_read(rm, REG_GLOBAL_FAULT2, &global2);
 
-    /* Hexdump the read values */
-    dev_info(&tas5825m->i2c->dev, "DEBUG: Register dump (first 8 regs):\n");
-    print_hex_dump(KERN_INFO, "TAS5825M REG: ", DUMP_PREFIX_OFFSET, 16, 1,
-                   test_regs, sizeof(test_regs), true);
+    dev_info(&tas5825m->i2c->dev, "DEBUG: Before init - fault regs: CHAN=%02x, GLOBAL1=%02x, GLOBAL2=%02x\n",
+            chan, global1, global2);
 
     /* We mustn't issue any I2C transactions until the I2S
      * clock is stable. Furthermore, we must allow a 5ms
@@ -378,6 +377,7 @@ static void tas5825m_init(struct tas5825m_priv *tas5825m)
     send_cfg(rm, dsp_cfg_preboot, ARRAY_SIZE(dsp_cfg_preboot));
     usleep_range(5000, 15000);
     send_cfg(rm, tas5825m_init_sequence, ARRAY_SIZE(tas5825m_init_sequence));
+    usleep_range(5000, 10000);
 
     /* DEBUG: Read registers again after init */
     dev_info(&tas5825m->i2c->dev, "DEBUG: After init - reading registers...\n");
@@ -385,6 +385,18 @@ static void tas5825m_init(struct tas5825m_priv *tas5825m)
     if (!ret) {
         dev_info(&tas5825m->i2c->dev, "DEBUG: After init - REG_DEVICE_CTRL_2 = 0x%02x\n", reg_val);
     }
+
+    ret = regmap_read(rm, REG_POWER_STATE, &reg_val);
+    if (!ret) {
+        dev_info(&tas5825m->i2c->dev, "DEBUG: After init - REG_POWER_STATE = 0x%02x\n", reg_val);
+    }
+
+    regmap_read(rm, REG_CHAN_FAULT, &chan);
+    regmap_read(rm, REG_GLOBAL_FAULT1, &global1);
+    regmap_read(rm, REG_GLOBAL_FAULT2, &global2);
+
+    dev_info(&tas5825m->i2c->dev, "DEBUG: After init - fault regs: CHAN=%02x, GLOBAL1=%02x, GLOBAL2=%02x\n",
+            chan, global1, global2);
 
     tas5825m->is_powered = true;
     tas5825m_refresh(tas5825m);
@@ -573,26 +585,10 @@ static int tas5825m_i2c_probe(struct i2c_client *i2c)
         dev_info(dev, "DEBUG: Successfully read REG_PAGE = 0x%02x\n", test_val);
     }
 
-    /* DEBUG: Try to read multiple registers */
-    for (i = 0; i < 8; i++) {
-        ret = regmap_read(regmap, i, &test_val);
-        if (ret) {
-            dev_err(dev, "DEBUG: Failed to read register 0x%02x: %d\n", i, ret);
-            test_buf[i] = 0xFF;
-        } else {
-            test_buf[i] = test_val;
-        }
-    }
-    
-    /* DEBUG: Hexdump the initial register state */
-    dev_info(dev, "DEBUG: Initial register dump (probe):\n");
-    print_hex_dump(KERN_INFO, "TAS5825M PROBE: ", DUMP_PREFIX_OFFSET, 16, 1,
-                   test_buf, 8, true);
-
     /* Try to read some known registers */
-    ret = regmap_read(regmap, REG_DEVICE_CTRL_2, &test_val);
+    ret = regmap_read(regmap, REG_POWER_STATE, &test_val);
     if (!ret) {
-        dev_info(dev, "DEBUG: REG_DEVICE_CTRL_2 at probe = 0x%02x\n", test_val);
+        dev_info(dev, "DEBUG: REG_POWER_STATE at probe = 0x%02x\n", test_val);
     }
 
     tas5825m = devm_kzalloc(dev, sizeof(struct tas5825m_priv), GFP_KERNEL);
@@ -607,9 +603,8 @@ static int tas5825m_i2c_probe(struct i2c_client *i2c)
     tas5825m->vol[0] = tas5825m_VOLUME_MIN;
     tas5825m->vol[1] = tas5825m_VOLUME_MIN;
 
+    INIT_WORK(&tas5825m->work, do_work);
     mutex_init(&tas5825m->lock);
-	INIT_WORK(&tas5825m->work, do_work);
-    tas5825m_init(tas5825m);
 
     /* Don't register through devm. We need to be able to unregister
      * the component prior to deasserting PDN#
