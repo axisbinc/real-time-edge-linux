@@ -73,9 +73,17 @@
 // };
 
 static const uint8_t dsp_cfg_preboot[] = {
-	0x00, 0x00, 0x7f, 0x00, 0x03, 0x02, 0x01, 0x11,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x7f, 0x00, 0x03, 0x02,
+    0x00, 0x00,
+    0x7f, 0x00,
+    0x03, 0x02,
+    0x01, 0x11,         // Reset I2C regs and DSP
+    0x00, 0x00,
+    0x00, 0x00,
+    0x00, 0x00,
+    0x00, 0x00,
+    0x00, 0x00,
+    0x7f, 0x00,
+    0x03, 0x02,         // Set device in HiZ mode
 };
 
 /*
@@ -90,8 +98,10 @@ w 4c 78 80
 */
 
 static const uint8_t tas5825m_init_sequence[] = {
-    0x78, 0x80,  /* clear analog fault */
-    0x03, 0x03,
+    0x00, 0x00,
+    0x7f, 0x00,
+    0x03, 0x03,         // Set device in play mode
+    0x78, 0x80,         // Clear analog fault
 };
 
 static const uint32_t tas5825m_volume[] = {
@@ -327,16 +337,12 @@ static void tas5825m_init(struct tas5825m_priv *tas5825m)
     int i, ret;
     uint8_t test_regs[8];
     unsigned int reg_val;
+    unsigned int chan, global1, global2;
 
     dev_info(&tas5825m->i2c->dev, "tas5825m_init starting\n");
 
-    dev_info(&tas5825m->i2c->dev, "DSP startup\n");
-
     mutex_lock(&tas5825m->lock);
 
-    /* DEBUG: Test I2C read - try to read some status registers */
-    dev_info(&tas5825m->i2c->dev, "DEBUG: Testing I2C read operations...\n");
-    
     /* Read multiple registers to verify I2C */
     ret = regmap_read(rm, REG_DEVICE_CTRL_2, &reg_val);
     if (ret) {
@@ -350,16 +356,6 @@ static void tas5825m_init(struct tas5825m_priv *tas5825m)
     if (!ret) {
         dev_info(&tas5825m->i2c->dev, "DEBUG: REG_POWER_STATE = 0x%02x\n", reg_val);
     }
-
-    ret = regmap_read(rm, REG_FAULT, &reg_val);
-    if (ret) {
-        dev_err(&tas5825m->i2c->dev, "DEBUG: Failed to read REG_FAULT: %d\n", ret);
-    } else {
-        dev_info(&tas5825m->i2c->dev, "DEBUG: REG_FAULT = 0x%02x\n", reg_val);
-        test_regs[1] = reg_val;
-    }
-
-    unsigned int chan, global1, global2;
 
     regmap_read(rm, REG_CHAN_FAULT, &chan);
     regmap_read(rm, REG_GLOBAL_FAULT1, &global1);
@@ -376,8 +372,17 @@ static void tas5825m_init(struct tas5825m_priv *tas5825m)
     usleep_range(5000, 10000);
     send_cfg(rm, dsp_cfg_preboot, ARRAY_SIZE(dsp_cfg_preboot));
     usleep_range(5000, 15000);
+    regmap_write(rm, REG_FAULT, 0x80);
+    usleep_range(5000, 15000);
+    regmap_read(rm, REG_CHAN_FAULT, &chan);
+    regmap_read(rm, REG_GLOBAL_FAULT1, &global1);
+    regmap_read(rm, REG_GLOBAL_FAULT2, &global2);
+
+    dev_info(&tas5825m->i2c->dev, "DEBUG: After fault reset - fault regs: CHAN=%02x, GLOBAL1=%02x, GLOBAL2=%02x\n",
+            chan, global1, global2);
+
     send_cfg(rm, tas5825m_init_sequence, ARRAY_SIZE(tas5825m_init_sequence));
-    usleep_range(5000, 10000);
+    usleep_range(10000, 20000);
 
     /* DEBUG: Read registers again after init */
     dev_info(&tas5825m->i2c->dev, "DEBUG: After init - reading registers...\n");
