@@ -336,9 +336,9 @@
 
         cpu_amp_0: simple-audio-card,cpu {
             sound-dai = <&sai2>;
-            dai-tdm-slot-num = <32>;         /* 16 slots per TDM frame */
-            dai-tdm-slot-width = <32>;       /* 32 bits per slot */
-            dai-tdm-slot-tx-mask = <0x00000003>; /* Slots 0-1: bits 0-1 set */
+            dai-tdm-slot-num = <16>;         // 16 slots per TDM frame 
+            dai-tdm-slot-width = <32>;       // 32 bits per slot 
+            dai-tdm-slot-tx-mask = <0x0003>; // Slots 0-1: bits 0-1 set
         };
 
         simple-audio-card,codec {
@@ -347,151 +347,151 @@
     };
 
     /* TAS5825M #1: Channels 2-3 (TDM slots 2-3 on TX_DATA0) */
-    sound-amp-1 {
-        compatible = "simple-audio-card";
-        simple-audio-card,name = "tas5825m-ch2-3";
-        simple-audio-card,format = "dsp_a";
-        simple-audio-card,bitclock-master = <&cpu_amp_1>;
-        simple-audio-card,frame-master = <&cpu_amp_1>;
-        status = "okay";
-
-        cpu_amp_1: simple-audio-card,cpu {
-            sound-dai = <&sai2>;
-            dai-tdm-slot-num = <32>;
-            dai-tdm-slot-width = <32>;
-            dai-tdm-slot-tx-mask = <0x0000000C>; /* Slots 2-3: bits 2-3 set */
-        };
-
-        simple-audio-card,codec {
-            sound-dai = <&tas5825m_1>;
-        };
-    };
+    /* sound-amp-1 { */
+    /*     compatible = "simple-audio-card"; */
+    /*     simple-audio-card,name = "tas5825m-ch2-3"; */
+    /*     simple-audio-card,format = "dsp_a"; */
+    /*     simple-audio-card,bitclock-master = <&cpu_amp_1>; */
+    /*     simple-audio-card,frame-master = <&cpu_amp_1>; */
+    /*     status = "okay"; */
+    /**/
+    /*     cpu_amp_1: simple-audio-card,cpu { */
+    /*         sound-dai = <&sai2>; */
+    /*         dai-tdm-slot-num = <32>; */
+    /*         dai-tdm-slot-width = <32>; */
+    /*         dai-tdm-slot-tx-mask = <0x0000000C>; /* Slots 2-3: bits 2-3 set */ 
+    /*     }; */
+    /**/
+    /*     simple-audio-card,codec { */
+    /*         sound-dai = <&tas5825m_1>; */
+    /*     }; */
+    /* }; */
 
     /* TAS5825M #2: Channels 4-5 (TDM slots 4-5 on TX_DATA0) */
-    sound-amp-2 {
-        compatible = "simple-audio-card";
-        simple-audio-card,name = "tas5825m-ch4-5";
-        simple-audio-card,format = "dsp_a";
-        simple-audio-card,bitclock-master = <&cpu_amp_2>;
-        simple-audio-card,frame-master = <&cpu_amp_2>;
-        status = "okay";
-
-        cpu_amp_2: simple-audio-card,cpu {
-            sound-dai = <&sai2>;
-            dai-tdm-slot-num = <32>;
-            dai-tdm-slot-width = <32>;
-            dai-tdm-slot-tx-mask = <0x00000030>; /* Slots 4-5: bits 4-5 set */
-        };
-
-        simple-audio-card,codec {
-            sound-dai = <&tas5825m_2>;
-        };
-    };
+    /* sound-amp-2 { */
+    /*     compatible = "simple-audio-card"; */
+    /*     simple-audio-card,name = "tas5825m-ch4-5"; */
+    /*     simple-audio-card,format = "dsp_a"; */
+    /*     simple-audio-card,bitclock-master = <&cpu_amp_2>; */
+    /*     simple-audio-card,frame-master = <&cpu_amp_2>; */
+    /*     status = "okay"; */
+    /**/
+    /*     cpu_amp_2: simple-audio-card,cpu { */
+    /*         sound-dai = <&sai2>; */
+    /*         dai-tdm-slot-num = <32>; */
+    /*         dai-tdm-slot-width = <32>; */
+    /*         dai-tdm-slot-tx-mask = <0x00000030>; /* Slots 4-5: bits 4-5 set */ 
+    /*     }; */
+    /**/
+    /*     simple-audio-card,codec { */
+    /*         sound-dai = <&tas5825m_2>; */
+    /*     }; */
+    /* }; */
 
     /* TAS5825M #3: Channels 6-7 (TDM slots 6-7 on TX_DATA0) */
-    sound-amp-3 {
-        compatible = "simple-audio-card";
-        simple-audio-card,name = "tas5825m-ch6-7";
-        simple-audio-card,format = "dsp_a";
-        simple-audio-card,bitclock-master = <&cpu_amp_3>;
-        simple-audio-card,frame-master = <&cpu_amp_3>;
-        status = "okay";
-
-        cpu_amp_3: simple-audio-card,cpu {
-            sound-dai = <&sai2>;
-            dai-tdm-slot-num = <32>;
-            dai-tdm-slot-width = <32>;
-            dai-tdm-slot-tx-mask = <0x000000C0>; /* Slots 6-7: bits 6-7 set */
-        };
-
-        simple-audio-card,codec {
-            sound-dai = <&tas5825m_3>;
-        };
-    };
+    /* sound-amp-3 { */
+    /*     compatible = "simple-audio-card"; */
+    /*     simple-audio-card,name = "tas5825m-ch6-7"; */
+    /*     simple-audio-card,format = "dsp_a"; */
+    /*     simple-audio-card,bitclock-master = <&cpu_amp_3>; */
+    /*     simple-audio-card,frame-master = <&cpu_amp_3>; */
+    /*     status = "okay"; */
+    /**/
+    /*     cpu_amp_3: simple-audio-card,cpu { */
+    /*         sound-dai = <&sai2>; */
+    /*         dai-tdm-slot-num = <32>; */
+    /*         dai-tdm-slot-width = <32>; */
+    /*         dai-tdm-slot-tx-mask = <0x000000C0>; /* Slots 6-7: bits 6-7 set */ 
+    /*     }; */
+    /**/
+    /*     simple-audio-card,codec { */
+    /*         sound-dai = <&tas5825m_3>; */
+    /*     }; */
+    /* }; */
 
     /* TAS5825M #4: Channels 8-9 (TDM slots 8-9 on TX_DATA0) */
-    sound-amp-4 {
-        compatible = "simple-audio-card";
-        simple-audio-card,name = "tas5825m-ch8-9";
-        simple-audio-card,format = "dsp_a";
-        simple-audio-card,bitclock-master = <&cpu_amp_4>;
-        simple-audio-card,frame-master = <&cpu_amp_4>;
-        status = "okay";
-
-        cpu_amp_4: simple-audio-card,cpu {
-            sound-dai = <&sai2>;
-            dai-tdm-slot-num = <32>;
-            dai-tdm-slot-width = <32>;
-            dai-tdm-slot-tx-mask = <0x00000300>; /* Slots 8-9: bits 8-9 set */
-        };
-
-        simple-audio-card,codec {
-            sound-dai = <&tas5825m_4>;
-        };
-    };
+    /* sound-amp-4 { */
+    /*     compatible = "simple-audio-card"; */
+    /*     simple-audio-card,name = "tas5825m-ch8-9"; */
+    /*     simple-audio-card,format = "dsp_a"; */
+    /*     simple-audio-card,bitclock-master = <&cpu_amp_4>; */
+    /*     simple-audio-card,frame-master = <&cpu_amp_4>; */
+    /*     status = "okay"; */
+    /**/
+    /*     cpu_amp_4: simple-audio-card,cpu { */
+    /*         sound-dai = <&sai2>; */
+    /*         dai-tdm-slot-num = <32>; */
+    /*         dai-tdm-slot-width = <32>; */
+    /*         dai-tdm-slot-tx-mask = <0x00000300>; /* Slots 8-9: bits 8-9 set */ 
+    /*     }; */
+    /**/
+    /*     simple-audio-card,codec { */
+    /*         sound-dai = <&tas5825m_4>; */
+    /*     }; */
+    /* }; */
 
     /* TAS5825M #5: Channels 10-11 (TDM slots 10-11 on TX_DATA0) */
-    sound-amp-5 {
-        compatible = "simple-audio-card";
-        simple-audio-card,name = "tas5825m-ch10-11";
-        simple-audio-card,format = "dsp_a";
-        simple-audio-card,bitclock-master = <&cpu_amp_5>;
-        simple-audio-card,frame-master = <&cpu_amp_5>;
-        status = "okay";
-
-        cpu_amp_5: simple-audio-card,cpu {
-            sound-dai = <&sai2>;
-            dai-tdm-slot-num = <32>;
-            dai-tdm-slot-width = <32>;
-            dai-tdm-slot-tx-mask = <0x00000C00>; /* Slots 10-11: bits 10-11 set */
-        };
-
-        simple-audio-card,codec {
-            sound-dai = <&tas5825m_5>;
-        };
-    };
+    /* sound-amp-5 { */
+    /*     compatible = "simple-audio-card"; */
+    /*     simple-audio-card,name = "tas5825m-ch10-11"; */
+    /*     simple-audio-card,format = "dsp_a"; */
+    /*     simple-audio-card,bitclock-master = <&cpu_amp_5>; */
+    /*     simple-audio-card,frame-master = <&cpu_amp_5>; */
+    /*     status = "okay"; */
+    /**/
+    /*     cpu_amp_5: simple-audio-card,cpu { */
+    /*         sound-dai = <&sai2>; */
+    /*         dai-tdm-slot-num = <32>; */
+    /*         dai-tdm-slot-width = <32>; */
+    /*         dai-tdm-slot-tx-mask = <0x00000C00>; /* Slots 10-11: bits 10-11 set */ 
+    /*     }; */
+    /**/
+    /*     simple-audio-card,codec { */
+    /*         sound-dai = <&tas5825m_5>; */
+    /*     }; */
+    /* }; */
 
     /* TAS5825M #6: Channels 12-13 (TDM slots 12-13 on TX_DATA0) */
-    sound-amp-6 {
-        compatible = "simple-audio-card";
-        simple-audio-card,name = "tas5825m-ch12-13";
-        simple-audio-card,format = "dsp_a";
-        simple-audio-card,bitclock-master = <&cpu_amp_6>;
-        simple-audio-card,frame-master = <&cpu_amp_6>;
-        status = "okay";
-
-        cpu_amp_6: simple-audio-card,cpu {
-            sound-dai = <&sai2>;
-            dai-tdm-slot-num = <32>;
-            dai-tdm-slot-width = <32>;
-            dai-tdm-slot-tx-mask = <0x00003000>; /* Slots 12-13: bits 12-13 set */
-        };
-
-        simple-audio-card,codec {
-            sound-dai = <&tas5825m_6>;
-        };
-    };
+    /* sound-amp-6 { */
+    /*     compatible = "simple-audio-card"; */
+    /*     simple-audio-card,name = "tas5825m-ch12-13"; */
+    /*     simple-audio-card,format = "dsp_a"; */
+    /*     simple-audio-card,bitclock-master = <&cpu_amp_6>; */
+    /*     simple-audio-card,frame-master = <&cpu_amp_6>; */
+    /*     status = "okay"; */
+    /**/
+    /*     cpu_amp_6: simple-audio-card,cpu { */
+    /*         sound-dai = <&sai2>; */
+    /*         dai-tdm-slot-num = <32>; */
+    /*         dai-tdm-slot-width = <32>; */
+    /*         dai-tdm-slot-tx-mask = <0x00003000>; /* Slots 12-13: bits 12-13 set */ 
+    /*     }; */
+    /**/
+    /*     simple-audio-card,codec { */
+    /*         sound-dai = <&tas5825m_6>; */
+    /*     }; */
+    /* }; */
 
     /* TAS5825M #7: Channels 14-15 (TDM slots 14-15 on TX_DATA0) */
-    sound-amp-7 {
-        compatible = "simple-audio-card";
-        simple-audio-card,name = "tas5825m-ch14-15";
-        simple-audio-card,format = "dsp_a";
-        simple-audio-card,bitclock-master = <&cpu_amp_7>;
-        simple-audio-card,frame-master = <&cpu_amp_7>;
-        status = "okay";
-
-        cpu_amp_7: simple-audio-card,cpu {
-            sound-dai = <&sai2>;
-            dai-tdm-slot-num = <32>;
-            dai-tdm-slot-width = <32>;
-            dai-tdm-slot-tx-mask = <0x0000C000>; /* Slots 14-15: bits 14-15 set */
-        };
-
-        simple-audio-card,codec {
-            sound-dai = <&tas5825m_7>;
-        };
-    };
+    /* sound-amp-7 { */
+    /*     compatible = "simple-audio-card"; */
+    /*     simple-audio-card,name = "tas5825m-ch14-15"; */
+    /*     simple-audio-card,format = "dsp_a"; */
+    /*     simple-audio-card,bitclock-master = <&cpu_amp_7>; */
+    /*     simple-audio-card,frame-master = <&cpu_amp_7>; */
+    /*     status = "okay"; */
+    /**/
+    /*     cpu_amp_7: simple-audio-card,cpu { */
+    /*         sound-dai = <&sai2>; */
+    /*         dai-tdm-slot-num = <32>; */
+    /*         dai-tdm-slot-width = <32>; */
+    /*         dai-tdm-slot-tx-mask = <0x0000C000>; /* Slots 14-15: bits 14-15 set */ 
+    /*     }; */
+    /**/
+    /*     simple-audio-card,codec { */
+    /*         sound-dai = <&tas5825m_7>; */
+    /*     }; */
+    /* }; */
 
     /* -------------------------------------------------------------------- */
     /* Group 2: TX_DATA1 - Channels 16-31 (8 amplifiers)                   */
@@ -501,172 +501,172 @@
     /* -------------------------------------------------------------------- */
     
     /* TAS5825M #8: Channels 16-17 (TDM slots 0-1 on TX_DATA1) */
-    sound-amp-8 {
-        compatible = "simple-audio-card";
-        simple-audio-card,name = "tas5825m-ch16-17";
-        simple-audio-card,format = "dsp_a";
-        simple-audio-card,bitclock-master = <&cpu_amp_8>;
-        simple-audio-card,frame-master = <&cpu_amp_8>;
-        status = "okay";
-
-        cpu_amp_8: simple-audio-card,cpu {
-            sound-dai = <&sai2>;
-            dai-tdm-slot-num = <32>;
-            dai-tdm-slot-width = <32>;
-            dai-tdm-slot-tx-mask = <0x00030000>; /* Slots 0-1 on TX_DATA1 */
-        };
-
-        simple-audio-card,codec {
-            sound-dai = <&tas5825m_8>;
-        };
-    };
+    /* sound-amp-8 { */
+    /*     compatible = "simple-audio-card"; */
+    /*     simple-audio-card,name = "tas5825m-ch16-17"; */
+    /*     simple-audio-card,format = "dsp_a"; */
+    /*     simple-audio-card,bitclock-master = <&cpu_amp_8>; */
+    /*     simple-audio-card,frame-master = <&cpu_amp_8>; */
+    /*     status = "okay"; */
+    /**/
+    /*     cpu_amp_8: simple-audio-card,cpu { */
+    /*         sound-dai = <&sai2>; */
+    /*         dai-tdm-slot-num = <32>; */
+    /*         dai-tdm-slot-width = <32>; */
+    /*         dai-tdm-slot-tx-mask = <0x00030000>; /* Slots 0-1 on TX_DATA1 */ 
+    /*     }; */
+    /**/
+    /*     simple-audio-card,codec { */
+    /*         sound-dai = <&tas5825m_8>; */
+    /*     }; */
+    /* }; */
 
     /* TAS5825M #9: Channels 18-19 (TDM slots 2-3 on TX_DATA1) */
-    sound-amp-9 {
-        compatible = "simple-audio-card";
-        simple-audio-card,name = "tas5825m-ch18-19";
-        simple-audio-card,format = "dsp_a";
-        simple-audio-card,bitclock-master = <&cpu_amp_9>;
-        simple-audio-card,frame-master = <&cpu_amp_9>;
-        status = "okay";
-
-        cpu_amp_9: simple-audio-card,cpu {
-            sound-dai = <&sai2>;
-            dai-tdm-slot-num = <32>;
-            dai-tdm-slot-width = <32>;
-            dai-tdm-slot-tx-mask = <0x000C0000>; /* Slots 2-3 on TX_DATA1 */
-        };
-
-        simple-audio-card,codec {
-            sound-dai = <&tas5825m_9>;
-        };
-    };
+    /* sound-amp-9 { */
+    /*     compatible = "simple-audio-card"; */
+    /*     simple-audio-card,name = "tas5825m-ch18-19"; */
+    /*     simple-audio-card,format = "dsp_a"; */
+    /*     simple-audio-card,bitclock-master = <&cpu_amp_9>; */
+    /*     simple-audio-card,frame-master = <&cpu_amp_9>; */
+    /*     status = "okay"; */
+    /**/
+    /*     cpu_amp_9: simple-audio-card,cpu { */
+    /*         sound-dai = <&sai2>; */
+    /*         dai-tdm-slot-num = <32>; */
+    /*         dai-tdm-slot-width = <32>; */
+    /*         dai-tdm-slot-tx-mask = <0x000C0000>; /* Slots 2-3 on TX_DATA1 */ 
+    /*     }; */
+    /**/
+    /*     simple-audio-card,codec { */
+    /*         sound-dai = <&tas5825m_9>; */
+    /*     }; */
+    /* }; */
 
     /* TAS5825M #10: Channels 20-21 (TDM slots 4-5 on TX_DATA1) */
-    sound-amp-10 {
-        compatible = "simple-audio-card";
-        simple-audio-card,name = "tas5825m-ch20-21";
-        simple-audio-card,format = "dsp_a";
-        simple-audio-card,bitclock-master = <&cpu_amp_10>;
-        simple-audio-card,frame-master = <&cpu_amp_10>;
-        status = "okay";
-
-        cpu_amp_10: simple-audio-card,cpu {
-            sound-dai = <&sai2>;
-            dai-tdm-slot-num = <32>;
-            dai-tdm-slot-width = <32>;
-            dai-tdm-slot-tx-mask = <0x00300000>; /* Slots 4-5 on TX_DATA1 */
-        };
-
-        simple-audio-card,codec {
-            sound-dai = <&tas5825m_10>;
-        };
-    };
+    /* sound-amp-10 { */
+    /*     compatible = "simple-audio-card"; */
+    /*     simple-audio-card,name = "tas5825m-ch20-21"; */
+    /*     simple-audio-card,format = "dsp_a"; */
+    /*     simple-audio-card,bitclock-master = <&cpu_amp_10>; */
+    /*     simple-audio-card,frame-master = <&cpu_amp_10>; */
+    /*     status = "okay"; */
+    /**/
+    /*     cpu_amp_10: simple-audio-card,cpu { */
+    /*         sound-dai = <&sai2>; */
+    /*         dai-tdm-slot-num = <32>; */
+    /*         dai-tdm-slot-width = <32>; */
+    /*         dai-tdm-slot-tx-mask = <0x00300000>; /* Slots 4-5 on TX_DATA1 */ 
+    /*     }; */
+    /**/
+    /*     simple-audio-card,codec { */
+    /*         sound-dai = <&tas5825m_10>; */
+    /*     }; */
+    /* }; */
 
     /* TAS5825M #11: Channels 22-23 (TDM slots 6-7 on TX_DATA1) */
-    sound-amp-11 {
-        compatible = "simple-audio-card";
-        simple-audio-card,name = "tas5825m-ch22-23";
-        simple-audio-card,format = "dsp_a";
-        simple-audio-card,bitclock-master = <&cpu_amp_11>;
-        simple-audio-card,frame-master = <&cpu_amp_11>;
-        status = "okay";
-
-        cpu_amp_11: simple-audio-card,cpu {
-            sound-dai = <&sai2>;
-            dai-tdm-slot-num = <32>;
-            dai-tdm-slot-width = <32>;
-            dai-tdm-slot-tx-mask = <0x00C00000>; /* Slots 6-7 on TX_DATA1 */
-        };
-
-        simple-audio-card,codec {
-            sound-dai = <&tas5825m_11>;
-        };
-    };
+    /* sound-amp-11 { */
+    /*     compatible = "simple-audio-card"; */
+    /*     simple-audio-card,name = "tas5825m-ch22-23"; */
+    /*     simple-audio-card,format = "dsp_a"; */
+    /*     simple-audio-card,bitclock-master = <&cpu_amp_11>; */
+    /*     simple-audio-card,frame-master = <&cpu_amp_11>; */
+    /*     status = "okay"; */
+    /**/
+    /*     cpu_amp_11: simple-audio-card,cpu { */
+    /*         sound-dai = <&sai2>; */
+    /*         dai-tdm-slot-num = <32>; */
+    /*         dai-tdm-slot-width = <32>; */
+    /*         dai-tdm-slot-tx-mask = <0x00C00000>; /* Slots 6-7 on TX_DATA1 */ 
+    /*     }; */
+    /**/
+    /*     simple-audio-card,codec { */
+    /*         sound-dai = <&tas5825m_11>; */
+    /*     }; */
+    /* }; */
 
     /* TAS5825M #12: Channels 24-25 (TDM slots 8-9 on TX_DATA1) */
-    sound-amp-12 {
-        compatible = "simple-audio-card";
-        simple-audio-card,name = "tas5825m-ch24-25";
-        simple-audio-card,format = "dsp_a";
-        simple-audio-card,bitclock-master = <&cpu_amp_12>;
-        simple-audio-card,frame-master = <&cpu_amp_12>;
-        status = "okay";
-
-        cpu_amp_12: simple-audio-card,cpu {
-            sound-dai = <&sai2>;
-            dai-tdm-slot-num = <32>;
-            dai-tdm-slot-width = <32>;
-            dai-tdm-slot-tx-mask = <0x03000000>; /* Slots 8-9 on TX_DATA1 */
-        };
-
-        simple-audio-card,codec {
-            sound-dai = <&tas5825m_12>;
-        };
-    };
+    /* sound-amp-12 { */
+    /*     compatible = "simple-audio-card"; */
+    /*     simple-audio-card,name = "tas5825m-ch24-25"; */
+    /*     simple-audio-card,format = "dsp_a"; */
+    /*     simple-audio-card,bitclock-master = <&cpu_amp_12>; */
+    /*     simple-audio-card,frame-master = <&cpu_amp_12>; */
+    /*     status = "okay"; */
+    /**/
+    /*     cpu_amp_12: simple-audio-card,cpu { */
+    /*         sound-dai = <&sai2>; */
+    /*         dai-tdm-slot-num = <32>; */
+    /*         dai-tdm-slot-width = <32>; */
+    /*         dai-tdm-slot-tx-mask = <0x03000000>; /* Slots 8-9 on TX_DATA1 */ 
+    /*     }; */
+    /**/
+    /*     simple-audio-card,codec { */
+    /*         sound-dai = <&tas5825m_12>; */
+    /*     }; */
+    /* }; */
 
     /* TAS5825M #13: Channels 26-27 (TDM slots 10-11 on TX_DATA1) */
-    sound-amp-13 {
-        compatible = "simple-audio-card";
-        simple-audio-card,name = "tas5825m-ch26-27";
-        simple-audio-card,format = "dsp_a";
-        simple-audio-card,bitclock-master = <&cpu_amp_13>;
-        simple-audio-card,frame-master = <&cpu_amp_13>;
-        status = "okay";
-
-        cpu_amp_13: simple-audio-card,cpu {
-            sound-dai = <&sai2>;
-            dai-tdm-slot-num = <32>;
-            dai-tdm-slot-width = <32>;
-            dai-tdm-slot-tx-mask = <0x0C000000>; /* Slots 10-11 on TX_DATA1 */
-        };
-
-        simple-audio-card,codec {
-            sound-dai = <&tas5825m_13>;
-        };
-    };
+    /* sound-amp-13 { */
+    /*     compatible = "simple-audio-card"; */
+    /*     simple-audio-card,name = "tas5825m-ch26-27"; */
+    /*     simple-audio-card,format = "dsp_a"; */
+    /*     simple-audio-card,bitclock-master = <&cpu_amp_13>; */
+    /*     simple-audio-card,frame-master = <&cpu_amp_13>; */
+    /*     status = "okay"; */
+    /**/
+    /*     cpu_amp_13: simple-audio-card,cpu { */
+    /*         sound-dai = <&sai2>; */
+    /*         dai-tdm-slot-num = <32>; */
+    /*         dai-tdm-slot-width = <32>; */
+    /*         dai-tdm-slot-tx-mask = <0x0C000000>; /* Slots 10-11 on TX_DATA1 */ 
+    /*     }; */
+    /**/
+    /*     simple-audio-card,codec { */
+    /*         sound-dai = <&tas5825m_13>; */
+    /*     }; */
+    /* }; */
 
     /* TAS5825M #14: Channels 28-29 (TDM slots 12-13 on TX_DATA1) */
-    sound-amp-14 {
-        compatible = "simple-audio-card";
-        simple-audio-card,name = "tas5825m-ch28-29";
-        simple-audio-card,format = "dsp_a";
-        simple-audio-card,bitclock-master = <&cpu_amp_14>;
-        simple-audio-card,frame-master = <&cpu_amp_14>;
-        status = "okay";
-
-        cpu_amp_14: simple-audio-card,cpu {
-            sound-dai = <&sai2>;
-            dai-tdm-slot-num = <32>;
-            dai-tdm-slot-width = <32>;
-            dai-tdm-slot-tx-mask = <0x30000000>; /* Slots 12-13 on TX_DATA1 */
-        };
-
-        simple-audio-card,codec {
-            sound-dai = <&tas5825m_14>;
-        };
-    };
+    /* sound-amp-14 { */
+    /*     compatible = "simple-audio-card"; */
+    /*     simple-audio-card,name = "tas5825m-ch28-29"; */
+    /*     simple-audio-card,format = "dsp_a"; */
+    /*     simple-audio-card,bitclock-master = <&cpu_amp_14>; */
+    /*     simple-audio-card,frame-master = <&cpu_amp_14>; */
+    /*     status = "okay"; */
+    /**/
+    /*     cpu_amp_14: simple-audio-card,cpu { */
+    /*         sound-dai = <&sai2>; */
+    /*         dai-tdm-slot-num = <32>; */
+    /*         dai-tdm-slot-width = <32>; */
+    /*         dai-tdm-slot-tx-mask = <0x30000000>; /* Slots 12-13 on TX_DATA1 */ 
+    /*     }; */
+    /**/
+    /*     simple-audio-card,codec { */
+    /*         sound-dai = <&tas5825m_14>; */
+    /*     }; */
+    /* }; */
 
     /* TAS5825M #15: Channels 30-31 (TDM slots 14-15 on TX_DATA1) */
-    sound-amp-15 {
-        compatible = "simple-audio-card";
-        simple-audio-card,name = "tas5825m-ch30-31";
-        simple-audio-card,format = "dsp_a";
-        simple-audio-card,bitclock-master = <&cpu_amp_15>;
-        simple-audio-card,frame-master = <&cpu_amp_15>;
-        status = "okay";
-
-        cpu_amp_15: simple-audio-card,cpu {
-            sound-dai = <&sai2>;
-            dai-tdm-slot-num = <32>;
-            dai-tdm-slot-width = <32>;
-            dai-tdm-slot-tx-mask = <0xC0000000>; /* Slots 14-15 on TX_DATA1 */
-        };
-
-        simple-audio-card,codec {
-            sound-dai = <&tas5825m_15>;
-        };
-    };
+    /* sound-amp-15 { */
+    /*     compatible = "simple-audio-card"; */
+    /*     simple-audio-card,name = "tas5825m-ch30-31"; */
+    /*     simple-audio-card,format = "dsp_a"; */
+    /*     simple-audio-card,bitclock-master = <&cpu_amp_15>; */
+    /*     simple-audio-card,frame-master = <&cpu_amp_15>; */
+    /*     status = "okay"; */
+    /**/
+    /*     cpu_amp_15: simple-audio-card,cpu { */
+    /*         sound-dai = <&sai2>; */
+    /*         dai-tdm-slot-num = <32>; */
+    /*         dai-tdm-slot-width = <32>; */
+    /*         dai-tdm-slot-tx-mask = <0xC0000000>; /* Slots 14-15 on TX_DATA1 */ 
+    /*     }; */
+    /**/
+    /*     simple-audio-card,codec { */
+    /*         sound-dai = <&tas5825m_15>; */
+    /*     }; */
+    /* }; */
 };
 
 &dsp {
