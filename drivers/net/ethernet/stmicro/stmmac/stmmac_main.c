@@ -3972,14 +3972,15 @@ static int __stmmac_open(struct net_device *dev,
 
 #ifdef CONFIG_STMMAC_GENAVB
 	if (stmmac_avb_enabled && priv->avb_enabled) {
-        priv->dma_avb_conf = stmmac_avb_init_dma_desc(priv);
-        if (IS_ERR(priv->dma_avb_conf)) {
-            netdev_err(priv->dev, "%s: AVB DMA descriptors allocation failed\n",
-                       __func__);
-            priv->dma_avb_conf = NULL;
-        }
-        else {
-            stmmac_avb_init_dma_engine(priv);
+		priv->avb_rx_packets = 0;
+		priv->avb_tx_packets = 0;
+		priv->dma_avb_conf = stmmac_avb_init_dma_desc(priv);
+		if (IS_ERR(priv->dma_avb_conf)) {
+			netdev_err(priv->dev, "%s: AVB DMA descriptors allocation failed\n",
+				   __func__);
+			priv->dma_avb_conf = NULL;
+		} else {
+			stmmac_avb_init_dma_engine(priv);
     		priv->avb->open(priv->avb_data, priv, priv->speed);
         }
     }
@@ -6424,6 +6425,8 @@ static int stmmac_avb_status_show(struct seq_file *seq, void *v)
 	seq_printf(seq, "\tAVB Logging: %d\n", stmmac_avb_verbose);
 	seq_printf(seq, "\tGenAVB registered: %s\n",
 		   priv->avb_enabled ? "Y" : "N");
+	seq_printf(seq, "\tAVB RX Packets: %d\n", priv->avb_rx_packets);
+	seq_printf(seq, "\tAVB TX Packets: %d\n", priv->avb_tx_packets);
 	return 0;
 }
 DEFINE_SHOW_ATTRIBUTE(stmmac_avb_status);
@@ -8170,7 +8173,6 @@ int stmmac_enet_rx_poll_avb(void *data)
             if (stmmac_avb_verbose & STMMAC_AVB_VERBOSE_RX)
                 pr_info("stmmac_enet_rx_poll_avb: accept_count: %d\n",
                         accept_count);
-            priv->avb_rx_packets += accept_count;
         }
         entry = rx_q->cur_rx;
         desc  = &rx_q->dma_rx[entry];
@@ -8180,6 +8182,7 @@ int stmmac_enet_rx_poll_avb(void *data)
         if (unlikely(status & dma_own))
             break; /* no more packets */
 
+        priv->avb_rx_packets++;
         len = stmmac_rx_buf1_len(priv, desc, status, 0);
 
         if (stmmac_avb_verbose & STMMAC_AVB_VERBOSE_RX)
@@ -8363,6 +8366,7 @@ int stmmac_enet_tx_avb(void *data)
 
         dma_rmb();
 
+        priv->avb_tx_packets++;
         avb_buff = tx_q->buf_pool[entry].vaddr;
         if (stmmac_avb_verbose & STMMAC_AVB_VERBOSE_TX)
             pr_info("stmmac_enet_tx_avb [%d] : 0x%x 0x%x | 0x%x 0x%x\n", entry,
