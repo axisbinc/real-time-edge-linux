@@ -368,11 +368,13 @@ static void tas5825m_init(struct tas5825m_priv *tas5825m)
     regmap_read(rm, REG_GLOBAL_FAULT1, &global1);
     regmap_read(rm, REG_GLOBAL_FAULT2, &global2);
 
-    dev_info(&tas5825m->i2c->dev, "DEBUG: After fault reset - fault regs: CHAN=%02x, GLOBAL1=%02x, GLOBAL2=%02x\n",
-            chan, global1, global2);
-
     send_cfg(rm, tas5825m_init_sequence, ARRAY_SIZE(tas5825m_init_sequence));
     usleep_range(10000, 20000);
+
+
+    regmap_read(rm, REG_CHAN_FAULT, &chan);
+    regmap_read(rm, REG_GLOBAL_FAULT1, &global1);
+    regmap_read(rm, REG_GLOBAL_FAULT2, &global2);
 
     /* DEBUG: Read registers again after init */
     dev_info(&tas5825m->i2c->dev, "DEBUG: After init - reading registers...\n");
@@ -386,9 +388,20 @@ static void tas5825m_init(struct tas5825m_priv *tas5825m)
         dev_info(&tas5825m->i2c->dev, "DEBUG: After init - REG_POWER_STATE = 0x%02x\n", reg_val);
     }
 
-    regmap_read(rm, REG_CHAN_FAULT, &chan);
-    regmap_read(rm, REG_GLOBAL_FAULT1, &global1);
-    regmap_read(rm, REG_GLOBAL_FAULT2, &global2);
+    ret = regmap_read(rm, REG_FS_MON, &reg_val);
+    if (!ret) {
+        dev_info(&tas5825m->i2c->dev, "DEBUG: After init - REG_FS_MON = 0x%02x\n", reg_val);
+    }
+
+    ret = regmap_read(rm, REG_BCK_MON, &reg_val);
+    if (!ret) {
+        dev_info(&tas5825m->i2c->dev, "DEBUG: After init - REG_BCK_MON = 0x%02x\n", reg_val);
+    }
+
+    ret = regmap_read(rm, REG_CLKDET_STATUS, &reg_val);
+    if (!ret) {
+        dev_info(&tas5825m->i2c->dev, "DEBUG: After init - REG_CLKDET_STATUS = 0x%02x\n", reg_val);
+    }
 
     dev_info(&tas5825m->i2c->dev, "DEBUG: After init - fault regs: CHAN=%02x, GLOBAL1=%02x, GLOBAL2=%02x\n",
             chan, global1, global2);
