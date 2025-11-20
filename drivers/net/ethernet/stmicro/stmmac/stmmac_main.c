@@ -2731,16 +2731,16 @@ static int stmmac_tx_clean(struct stmmac_priv *priv, int budget, u32 queue)
 		}
 
 #ifdef CONFIG_STMMAC_GENAVB
-        if (avb_desc &&
-                tx_q->tx_skbuff_dma[entry].buf_type == STMMAC_TXBUF_T_AVB_POOL) {
-            stmmac_avb_print_hex_dump(
-                (void*)avb_desc + avb_desc->common.offset,
-                avb_desc->common.len,
-                "TX AVB cleanup");
-            tx_q->avb_desc[entry] = NULL;
-            tx_q->avb_frames_done++;
-            priv->avb->free(priv->avb_data, (void*)avb_desc);
-        }
+		if (avb_desc &&
+				tx_q->tx_skbuff_dma[entry].buf_type == STMMAC_TXBUF_T_AVB_POOL) {
+			stmmac_avb_print_hex_dump(
+					(void*)avb_desc + avb_desc->common.offset,
+					avb_desc->common.len,
+					"TX AVB cleanup");
+			tx_q->avb_desc[entry] = NULL;
+			tx_q->avb_frames_done++;
+			priv->avb->free(priv->avb_data, (void*)avb_desc);
+		}
 #endif
 
 		if (tx_q->tx_skbuff_dma[entry].buf_type == STMMAC_TXBUF_T_XSK_TX)
@@ -8152,91 +8152,92 @@ EXPORT_SYMBOL(stmmac_enet_set_idle_slope);
 
 int stmmac_enet_rx_poll_avb(void *data)
 {
-    int entry, status = 0, len = 0;
-    struct stmmac_avb_buffer *buf;
-    struct stmmac_avb_rx_queue *rx_q;
-    struct avb_rx_desc *avb_pkt_desc;
+	int entry, status = 0, len = 0;
+	struct stmmac_avb_buffer *buf;
+	struct stmmac_avb_rx_queue *rx_q;
+	struct avb_rx_desc *avb_pkt_desc;
 	struct stmmac_priv *priv = data;
-    void *new_avb_buf;
-    struct dma_desc *desc;
-    unsigned int count;
+	void *new_avb_buf;
+	struct dma_desc *desc;
+	unsigned int count;
 	unsigned int rc = 0;
 
-    rx_q = &priv->dma_avb_conf->rx_queue;
+	rx_q = &priv->dma_avb_conf->rx_queue;
 
 	/* 20 packets per 125us > 64 bytes packets @ 100Mbps */
-    for (count = 0; count < 20; count++) {
-        uint32_t accept_count = 0;
+	for (count = 0; count < 20; count++) {
+		uint32_t accept_count = 0;
 
-        dwmac5_frp_get_stats(priv->hw->pcsr, STMMAC_AVB_CHANNEL, &accept_count);
-        if (accept_count > 0) {
-            if (stmmac_avb_verbose & STMMAC_AVB_VERBOSE_RX)
-                pr_info("stmmac_enet_rx_poll_avb: accept_count: %d\n",
-                        accept_count);
-        }
-        entry = rx_q->cur_rx;
-        desc  = &rx_q->dma_rx[entry];
-        buf   = &rx_q->buf_pool[entry];
+		dwmac5_frp_get_stats(priv->hw->pcsr, STMMAC_AVB_CHANNEL, &accept_count);
+		if (accept_count > 0) {
+			if (stmmac_avb_verbose & STMMAC_AVB_VERBOSE_RX)
+				pr_info("stmmac_enet_rx_poll_avb: accept_count: %d\n",
+						accept_count);
+		}
+		entry = rx_q->cur_rx;
+		desc  = &rx_q->dma_rx[entry];
+		buf   = &rx_q->buf_pool[entry];
 
-        status = stmmac_rx_status(priv, &priv->dev->stats, &priv->xstats, desc);
-        if (unlikely(status & dma_own))
-            break; /* no more packets */
+		status = stmmac_rx_status(priv, &priv->dev->stats, &priv->xstats, desc);
+		if (unlikely(status & dma_own))
+			break; /* no more packets */
 
-        priv->avb_rx_packets++;
-        len = stmmac_rx_buf1_len(priv, desc, status, 0);
+		priv->avb_rx_packets++;
+		len = stmmac_rx_buf1_len(priv, desc, status, 0);
 
-        if (stmmac_avb_verbose & STMMAC_AVB_VERBOSE_RX)
-	        pr_info("stmmac_enet_rx_poll_avb [%d, %d, 0x%x] "
-                    ": 0x%x 0x%x | 0x%x 0x%x\n",
-                    entry, len, status,
-                    desc->des0, desc->des1, desc->des2, desc->des3);
+		if (stmmac_avb_verbose & STMMAC_AVB_VERBOSE_RX)
+			pr_info("stmmac_enet_rx_poll_avb [%d, %d, 0x%x] "
+					": 0x%x 0x%x | 0x%x 0x%x\n",
+					entry, len, status,
+					desc->des0, desc->des1, desc->des2, desc->des3);
 
-        rx_q->cur_rx = STMMAC_GET_ENTRY(rx_q->cur_rx,
-                priv->dma_avb_conf->dma_rx_size);
+		rx_q->cur_rx = STMMAC_GET_ENTRY(rx_q->cur_rx,
+				priv->dma_avb_conf->dma_rx_size);
 
-        if (unlikely(status == discard_frame)) {
-            // recycle the frame
-            dma_wmb();
-            stmmac_set_rx_owner(priv, desc, true); /* give back to the DMA */
-            continue;
-        }
+		if (unlikely(status == discard_frame)) {
+			// recycle the frame
+			dma_wmb();
+			stmmac_set_rx_owner(priv, desc, true); /* give back to the DMA */
+			continue;
+		}
 
-        prefetch(buf->vaddr + buf->offset);
+		prefetch(buf->vaddr + buf->offset);
 		dma_sync_single_for_cpu(priv->device, buf->dma_addr, len, DMA_FROM_DEVICE);
 
-        avb_pkt_desc = (struct avb_rx_desc*)buf->vaddr;
-        avb_pkt_desc->common.len = len;
+		avb_pkt_desc = (struct avb_rx_desc*)buf->vaddr;
+		avb_pkt_desc->common.len = len;
 
-        /* get timestamp from next descriptor */
-        prefetch(&rx_q->dma_rx[rx_q->cur_rx]);
-        avb_pkt_desc->common.ts = stmmac_get_rx_hwtstamp(priv, desc,
-                &rx_q->dma_rx[rx_q->cur_rx]);
+		/* get timestamp from next descriptor */
+		prefetch(&rx_q->dma_rx[rx_q->cur_rx]);
+		avb_pkt_desc->common.ts = stmmac_get_rx_hwtstamp(priv, desc,
+				&rx_q->dma_rx[rx_q->cur_rx]);
 
-        /* replace the rx_buffer */
-        new_avb_buf = priv->avb->alloc(priv->avb_data);
-        if (!new_avb_buf) {
-            netdev_err(priv->dev, "Failed to alloc rx buffer\n");
-            break;
-        }
+		/* replace the rx_buffer */
+		new_avb_buf = priv->avb->alloc(priv->avb_data);
+		if (!new_avb_buf) {
+			netdev_err(priv->dev, "Failed to alloc rx buffer\n");
+			break;
+		}
 
-        /* install the new rx buffer in the dma descriptor */
-        buf->vaddr = new_avb_buf;
-        buf->dma_addr = ((struct avb_rx_desc*)new_avb_buf)->dma_addr;
-        buf->offset = ((struct avb_rx_desc*)new_avb_buf)->common.offset;
+		/* install the new rx buffer in the dma descriptor */
+		buf->vaddr = new_avb_buf;
+		buf->dma_addr = ((struct avb_rx_desc*)new_avb_buf)->dma_addr;
+		buf->offset = ((struct avb_rx_desc*)new_avb_buf)->common.offset;
 		stmmac_set_desc_addr(priv, desc, buf->dma_addr);
-        dma_wmb();
+		dma_wmb();
 		stmmac_set_rx_owner(priv, desc, true); /* give back to the DMA */
+		dma_rmb();
 
-        rx_q->rx_count_frames++;
-        rx_q->rx_count_bytes += len;
-        if ((stmmac_avb_verbose & STMMAC_AVB_VERBOSE_RX)
-                || stmmac_avb_test_is_in_progress())
-            stmmac_avb_print_hex_dump(
-                    (void*)avb_pkt_desc + avb_pkt_desc->common.offset, len, "RX avb poll");
+		rx_q->rx_count_frames++;
+		rx_q->rx_count_bytes += len;
+		if ((stmmac_avb_verbose & STMMAC_AVB_VERBOSE_RX)
+				|| stmmac_avb_test_is_in_progress())
+			stmmac_avb_print_hex_dump((void*)avb_pkt_desc + avb_pkt_desc->common.offset
+					, len, "RX avb poll");
 
-        /* dispatch the inbound packet */
-        rc |= priv->avb->rx(priv->avb_data, avb_pkt_desc);
-    }
+		/* dispatch the inbound packet */
+		rc |= priv->avb->rx(priv->avb_data, avb_pkt_desc);
+	}
 
 	return rc;
 }
@@ -8346,68 +8347,70 @@ EXPORT_SYMBOL(stmmac_enet_finish_xmit_avb);
 
 int stmmac_enet_tx_avb(void *data)
 {
-    struct stmmac_priv* priv = data;
-    struct stmmac_avb_tx_queue *tx_q = &priv->dma_avb_conf->tx_queue;
+	struct stmmac_priv* priv = data;
+	struct stmmac_avb_tx_queue *tx_q = &priv->dma_avb_conf->tx_queue;
 	unsigned int entry = tx_q->dirty_tx;
 	int rc = 0;
 
-    /* try to clean all TX complete frames */
-    while (entry != tx_q->cur_tx) {
-        struct dma_desc *tx_desc;
-        int status;
-        struct avb_tx_desc *avb_buff;
-        u64 ns = 0;
+	/* try to clean all TX complete frames */
+	while (entry != tx_q->cur_tx) {
+		struct dma_desc *tx_desc;
+		int status;
+		struct avb_tx_desc *avb_buff;
+		u64 ns = 0;
 
-        tx_desc = &tx_q->dma_tx[entry];
-        status = stmmac_tx_status(priv, &priv->dev->stats, &priv->xstats,
-                tx_desc, priv->ioaddr);
-        if (unlikely(status & dma_own))
-            break; /* no more packets to clean */
+		tx_desc = &tx_q->dma_tx[entry];
+		status = stmmac_tx_status(priv, &priv->dev->stats, &priv->xstats,
+				tx_desc, priv->ioaddr);
+		if (unlikely(status & dma_own))
+			break; /* no more packets to clean */
 
-        dma_rmb();
+		dma_rmb();
 
-        priv->avb_tx_packets++;
-        avb_buff = tx_q->buf_pool[entry].vaddr;
-        if (stmmac_avb_verbose & STMMAC_AVB_VERBOSE_TX)
-            pr_info("stmmac_enet_tx_avb [%d] : 0x%x 0x%x | 0x%x 0x%x\n", entry,
-                    tx_desc->des0, tx_desc->des1, tx_desc->des2, tx_desc->des3);
-        if ((stmmac_avb_verbose & STMMAC_AVB_VERBOSE_TX) || stmmac_avb_test_is_in_progress()) {
-            // print the hwts_tx_en and hwts_rx_en
-            pr_info("stmmac_enet_tx_avb [%d] : hwts_tx_en: %d, hwts_rx_en: %d\n",
-                    entry, priv->hwts_tx_en, priv->hwts_rx_en);
+		priv->avb_tx_packets++;
+		avb_buff = tx_q->buf_pool[entry].vaddr;
+		if (stmmac_avb_verbose & STMMAC_AVB_VERBOSE_TX)
+			pr_info("stmmac_enet_tx_avb [%d] : 0x%x 0x%x | 0x%x 0x%x\n", entry,
+					tx_desc->des0, tx_desc->des1, tx_desc->des2, tx_desc->des3);
+		if ((stmmac_avb_verbose & STMMAC_AVB_VERBOSE_TX) || stmmac_avb_test_is_in_progress()) {
+			// print the hwts_tx_en and hwts_rx_en
+			pr_info("stmmac_enet_tx_avb [%d] : hwts_tx_en: %d, hwts_rx_en: %d\n",
+					entry, priv->hwts_tx_en, priv->hwts_rx_en);
 
-            stmmac_avb_print_hex_dump(
-                (void*)avb_buff + avb_buff->common.offset,
-                avb_buff->common.len,
-                "AVB desc cleanup");
-        }
+			stmmac_avb_print_hex_dump(
+					(void*)avb_buff + avb_buff->common.offset,
+					avb_buff->common.len,
+					"AVB desc cleanup");
+		}
 
-        /* get hw tstamp */
-        ns = __stmmac_get_tx_hwstamp(priv, tx_desc);
+		/* get hw tstamp */
+		ns = __stmmac_get_tx_hwstamp(priv, tx_desc);
 
 		dma_unmap_single(priv->device, avb_buff->dma_addr, avb_buff->common.len,
-						 DMA_TO_DEVICE);
-        /* free or return the tx buffer */
-        if (ns && (avb_buff->common.flags & AVB_TX_FLAG_HW_TS)) {
-            if (stmmac_avb_verbose & STMMAC_AVB_VERBOSE_TX)
-                pr_info("stmmac_enet_tx_avb [%d] : ts: %llu\n", entry, ns);
-            avb_buff->common.ts = ns;
-            rc |= priv->avb->tx_ts(priv->avb_data, &avb_buff->common);
-        }
-        else {
-            priv->avb->free(priv->avb_data, &avb_buff->common);
-        }
+				DMA_TO_DEVICE);
+		/* free or return the tx buffer */
+		if (ns && (avb_buff->common.flags & AVB_TX_FLAG_HW_TS)) {
+			if (stmmac_avb_verbose & STMMAC_AVB_VERBOSE_TX)
+				pr_info("stmmac_enet_tx_avb [%d] : ts: %llu\n", entry, ns);
+			avb_buff->common.ts = ns;
+			rc |= priv->avb->tx_ts(priv->avb_data, &avb_buff->common);
+		}
+		else {
+			priv->avb->free(priv->avb_data, &avb_buff->common);
+		}
 
-        tx_q->buf_pool[entry].vaddr = 0;
-        tx_q->buf_pool[entry].dma_addr = 0;
-        tx_q->buf_pool[entry].offset = 0;
+		tx_q->buf_pool[entry].vaddr = 0;
+		tx_q->buf_pool[entry].dma_addr = 0;
+		tx_q->buf_pool[entry].offset = 0;
 
-        /* clean the descriptor */
-        stmmac_release_tx_desc(priv, tx_desc, priv->mode);
+		dma_wmb();
+		/* clean the descriptor */
+		stmmac_release_tx_desc(priv, tx_desc, priv->mode);
+		dma_rmb();
 
-        entry = STMMAC_GET_ENTRY(entry, priv->dma_avb_conf->dma_tx_size);
-    }
-    tx_q->dirty_tx = entry;
+		entry = STMMAC_GET_ENTRY(entry, priv->dma_avb_conf->dma_tx_size);
+	}
+	tx_q->dirty_tx = entry;
 
 	return rc;
 }
