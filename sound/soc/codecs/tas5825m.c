@@ -89,7 +89,7 @@ w 4c 78 80
 static const uint8_t tas5825m_init_sequence[] = {
 	0x00, 0x00,
 	0x7f, 0x00,
-	0x33, 0x12,
+	0x33, 0x16,
 	0x03, 0x01,
 	// 0x03, 0x03,         // Set device in play mode
 	// 0x78, 0x80,         // Clear analog fault
@@ -339,13 +339,13 @@ static void tas5825m_init(struct tas5825m_priv *tas5825m)
 	if (ret) {
 		dev_err(&tas5825m->i2c->dev, "DEBUG: Failed to read REG_DEVICE_CTRL_2: %d\n", ret);
 	} else {
-		dev_info(&tas5825m->i2c->dev, "DEBUG: REG_DEVICE_CTRL_2 = 0x%02x\n", reg_val);
+		dev_info(&tas5825m->i2c->dev, "DEBUG: Before init - REG_DEVICE_CTRL_2 = 0x%02x\n", reg_val);
 		test_regs[0] = reg_val;
 	}
 
 	ret = regmap_read(rm, REG_POWER_STATE, &reg_val);
 	if (!ret) {
-		dev_info(&tas5825m->i2c->dev, "DEBUG: REG_POWER_STATE = 0x%02x\n", reg_val);
+		dev_info(&tas5825m->i2c->dev, "DEBUG: Before init - REG_POWER_STATE = 0x%02x\n", reg_val);
 	}
 
 	regmap_read(rm, REG_CHAN_FAULT, &chan);
@@ -399,6 +399,11 @@ static void tas5825m_init(struct tas5825m_priv *tas5825m)
 	ret = regmap_read(rm, REG_BCK_MON, &reg_val);
 	if (!ret) {
 		dev_info(&tas5825m->i2c->dev, "DEBUG: After init - REG_BCK_MON = 0x%02x\n", reg_val);
+	}
+
+	ret = regmap_read(rm, REG_SAP_CTRL_1, &reg_val);
+	if (!ret) {
+		dev_info(&tas5825m->i2c->dev, "DEBUG: After init - REG_SAP_CTRL_1 = 0x%02x\n", reg_val);
 	}
 
 	ret = regmap_read(rm, REG_CLKDET_STATUS, &reg_val);
