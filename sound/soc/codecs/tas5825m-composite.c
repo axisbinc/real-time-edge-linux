@@ -1,16 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
-//
-// Driver for the TAS5825M Audio Amplifier
-//
-// Author: Andy Liu <andy-liu@ti.com>
-// Author: Daniel Beer <daniel.beer@igorinstitute.com>
-//
-// This is based on a driver originally written by Andy Liu at TI and
-// posted here:
-//
-//    https://e2e.ti.com/support/audio-group/audio/f/audio-forum/722027/linux-tas5825m-linux-drivers
-//
-// It has been simplified a little and reworked for the 5.x ALSA SoC API.
+// Driver to trigger multiple tas5825m amplifiers
 
 #include <linux/module.h>
 #include <linux/moduleparam.h>
@@ -25,6 +14,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/atomic.h>
 #include <linux/workqueue.h>
+#include "tas5825m.h"
 
 #include <sound/soc.h>
 #include <sound/pcm.h>
@@ -56,6 +46,39 @@
 
 #define DCTRL2_MUTE        0x08
 #define DCTRL2_DIS_DSP        0x10
+
+# define MAX_AMPLIFIERS 8
+
+struct tas5825m_composite {
+    struct device *dev;
+    // struct snd_soc_codec_driver codec_driver;
+    
+    // Array of amplifier references
+    struct tas5825m_amp *amplifiers[MAX_AMPLIFIERS];
+    int num_amplifiers;
+    int amplifiers_ready;
+    
+    // Synchronization
+    struct mutex amp_lock;
+    struct completion all_amps_ready;
+    
+    // Probe state tracking
+    bool probe_complete;
+    struct work_struct retry_probe_work;
+};
+
+struct tas5825m_amp {
+    struct device *dev;
+    struct i2c_client *client;
+    struct device_node *of_node;
+    
+    // Reference to parent composite
+    struct tas5825m_composite *parent;
+    
+    // Amplifier specific state
+    bool initialized;
+    bool enabled;
+};
 
 /* This sequence of register writes must always be sent, prior to the
  * 5ms delay while we wait for the DSP to boot.
@@ -196,6 +219,82 @@ struct tas5825m_priv {
 	struct work_struct		work;
 	struct mutex            lock;
 };
+
+// Device Tree Parsing
+static int parse_amplifier_references(struct tas5825m_composite *composite)
+{
+    struct device *dev = composite->dev;
+    struct device_node *np = dev->of_node;
+    struct device_node *amp_node;
+    struct i2c_client *client;
+    int count, i, ret = 0;
+    
+    // Get number of amplifier references
+    count = of_property_count_elems_of_size(np, "amplifiers", sizeof(u32));
+    if (count <= 0) {
+        dev_err(dev, "No amplifiers specified in DT\n");
+        return -EINVAL;
+    }
+    
+    if (count > MAX_AMPLIFIERS) {
+        dev_err(dev, "Too many amplifiers specified: %d\n", count);
+        return -EINVAL;
+    }
+    
+    composite->num_amplifiers = count;
+    
+    // Parse each phandle reference
+    for (i = 0; i < count; i++) {
+        // Get device node from phandle
+        amp_node = of_parse_phandle(np, "amplifiers", i);
+        if (!amp_node) {
+            dev_err(dev, "Failed to parse amplifier %d phandle\n", i);
+            ret = -EINVAL;
+            goto cleanup;
+        }
+        
+        // Find I2C client for this device node
+        client = of_find_i2c_device_by_node(amp_node);
+        if (!client) {
+            dev_info(dev, "Amplifier %d not ready, deferring probe\n", i);
+            of_node_put(amp_node);
+            ret = -EPROBE_DEFER;
+            goto cleanup;
+        }
+        
+        // Allocate amplifier structure
+        composite->amplifiers[i] = devm_kzalloc(dev, 
+                                               sizeof(*composite->amplifiers[i]), 
+                                               GFP_KERNEL);
+        if (!composite->amplifiers[i]) {
+            ret = -ENOMEM;
+            goto cleanup;
+        }
+        
+        // Initialize amplifier reference
+        composite->amplifiers[i]->client = client;
+        composite->amplifiers[i]->dev = &client->dev;
+        composite->amplifiers[i]->of_node = amp_node;
+        composite->amplifiers[i]->parent = composite;
+        
+        dev_info(dev, "Found amplifier %d: %s\n", i, dev_name(&client->dev));
+    }
+    
+    composite->amplifiers_ready = count;
+    return 0;
+    
+cleanup:
+    // Clean up any allocated resources
+    for (int j = 0; j < i; j++) {
+        if (composite->amplifiers[j]) {
+            if (composite->amplifiers[j]->client)
+                put_device(&composite->amplifiers[j]->client->dev);
+            if (composite->amplifiers[j]->of_node)
+                of_node_put(composite->amplifiers[j]->of_node);
+        }
+    }
+    return ret;
+}
 
 static void set_dsp_scale(struct regmap *rm, int offset, int vol)
 {
@@ -428,35 +527,6 @@ static void do_work(struct work_struct *work)
 	tas5825m_init(tas5825m);
 }
 
-/* TODO: The TAS5805M DSP can't be configured until the I2S clock has been
- * present and stable for 5ms, or else it won't boot and we get no
- * sound.
- */
-int tas5825m_trigger_single(struct device* dev, int cmd)
-{
-	struct tas5825m_priv *tas5825m = dev_get_drvdata(dev);
-
-	switch (cmd) {
-		case SNDRV_PCM_TRIGGER_START:
-		case SNDRV_PCM_TRIGGER_RESUME:
-		case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
-			dev_info(dev, "clock start\n");
-			schedule_work(&tas5825m->work);
-			break;
-
-		case SNDRV_PCM_TRIGGER_STOP:
-		case SNDRV_PCM_TRIGGER_SUSPEND:
-		case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
-			break;
-
-		default:
-			return -EINVAL;
-	}
-
-	return 0;
-}
-EXPORT_SYMBOL_GPL(tas5825m_trigger_single);
-
 static int tas5825m_dac_event(struct snd_soc_dapm_widget *w,
 		struct snd_kcontrol *kcontrol, int event)
 {
@@ -491,6 +561,30 @@ static int tas5825m_dac_event(struct snd_soc_dapm_widget *w,
 	}
 
 	return 0;
+}
+
+// PCM trigger coordination
+static int tas5825m_composite_trigger(struct snd_pcm_substream *substream,
+                                    int cmd, struct snd_soc_dai *dai)
+{
+    struct tas5825m_composite *composite = snd_soc_dai_get_drvdata(dai);
+    int i, ret = 0;
+    
+    mutex_lock(&composite->amp_lock);
+    
+    // Coordinate trigger across all amplifiers
+    for (i = 0; i < composite->num_amplifiers; i++) {
+        ret = tas5825m_trigger_single(composite->amplifiers[i]->dev, cmd);
+        if (ret) {
+            dev_err(composite->dev, 
+                   "Trigger failed for amplifier %d: %d\n", i, ret);
+            // Consider whether to continue or abort
+            break;
+        }
+    }
+    
+    mutex_unlock(&composite->amp_lock);
+    return ret;
 }
 
 static const struct snd_soc_dapm_route tas5825m_audio_map[] = {
@@ -534,6 +628,23 @@ static int tas5825m_mute(struct snd_soc_dai *dai, int mute, int direction)
 	return 0;
 }
 
+static const struct snd_soc_dai_ops tas5825m_composite_dai_ops = {
+	.trigger            = tas5825m_composite_trigger,
+	.mute_stream        = tas5825m_mute,
+	.no_capture_mute    = 1,
+};
+
+static struct snd_soc_dai_driver tas5825m_composite_dai = {
+	.name        = "tas5825m-composite",
+	.playback    = {
+		.stream_name    = "Playback",
+		.channels_min    = 1,
+		.channels_max    = 8,
+		.rates        = SNDRV_PCM_RATE_48000,
+		.formats    = SNDRV_PCM_FMTBIT_S32_LE,
+	},
+	.ops        = &tas5825m_composite_dai_ops,
+};
 
 static const struct regmap_config tas5825m_regmap = {
 	.reg_bits    = 8,
@@ -546,82 +657,69 @@ static const struct regmap_config tas5825m_regmap = {
 	.cache_type    = REGCACHE_NONE,
 };
 
-static int tas5825m_i2c_probe(struct i2c_client *i2c)
+static int tas5825m_composite_probe(struct platform_device *pdev)
 {
-	struct device *dev = &i2c->dev;
-	struct regmap *regmap;
-	struct tas5825m_priv *tas5825m;
-	int ret;
+    struct tas5825m_composite *composite;
+    int ret;
+    
+    composite = devm_kzalloc(&pdev->dev, sizeof(*composite), GFP_KERNEL);
+    if (!composite)
+        return -ENOMEM;
+    
+    composite->dev = &pdev->dev;
+    mutex_init(&composite->amp_lock);
+    init_completion(&composite->all_amps_ready);
+    
+    // Parse device tree references
+    ret = parse_amplifier_references(composite);
+    if (ret) {
+        if (ret == -EPROBE_DEFER) {
+            dev_info(&pdev->dev, "Amplifiers not ready, deferring probe\n");
+        }
+        return ret;
+    }
+    
+    // Register the composite codec
+    ret = snd_soc_register_component(&pdev->dev, &soc_codec_dev_tas5825m,
+                                &tas5825m_composite_dai, 1);
+    if (ret) {
+        dev_err(&pdev->dev, "Failed to register codec: %d\n", ret);
+        return ret;
+    }
+    
+    platform_set_drvdata(pdev, composite);
+    composite->probe_complete = true;
+    
+    dev_info(&pdev->dev, "Composite codec with %d amplifiers ready\n", 
+             composite->num_amplifiers);
+    
+    return 0;
+}
 
-	/* DEBUG: Verify the I2C client is properly configured */
-	if (!i2c_check_functionality(i2c->adapter, I2C_FUNC_I2C)) {
-		dev_err(dev, "DEBUG: I2C adapter doesn't support I2C_FUNC_I2C\n");
-		return -ENODEV;
-	}
-
-	dev_info(dev, "tas5825m: probing codec\n");
-	regmap = devm_regmap_init_i2c(i2c, &tas5825m_regmap);
-	if (IS_ERR(regmap)) {
-		ret = PTR_ERR(regmap);
-		dev_err(dev, "unable to allocate register map: %d\n", ret);
-		return ret;
-	}
-
-	tas5825m = devm_kzalloc(dev, sizeof(struct tas5825m_priv), GFP_KERNEL);
-	if (!tas5825m)
-		return -ENOMEM;
-
-	tas5825m->i2c = i2c;
-
-	dev_set_drvdata(dev, tas5825m);
-	tas5825m->regmap = regmap;
-
-	tas5825m->vol[0] = tas5825m_VOLUME_MIN;
-	tas5825m->vol[1] = tas5825m_VOLUME_MIN;
-
-	INIT_WORK(&tas5825m->work, do_work);
-	mutex_init(&tas5825m->lock);
-
-	dev_info(dev, "tas5825m: probe succeeded\n");
+static int tas5825m_composite_remove(struct platform_device *pdev)
+{
+	snd_soc_unregister_component(&pdev->dev);
+	usleep_range(10000, 15000);
 	return 0;
 }
 
-static void tas5825m_i2c_remove(struct i2c_client *i2c)
-{
-	struct device *dev = &i2c->dev;
-	struct tas5825m_priv *tas5825m = dev_get_drvdata(dev);
-
-	snd_soc_unregister_component(dev);
-	usleep_range(10000, 15000);
-}
-
-static const struct i2c_device_id tas5825m_i2c_id[] = {
-	{ "tas5825m", },
-	{ }
-};
-MODULE_DEVICE_TABLE(i2c, tas5825m_i2c_id);
-
-#if IS_ENABLED(CONFIG_OF)
-static const struct of_device_id tas5825m_of_match[] = {
+static const struct of_device_id tas5825m_composite_of_match[] = {
 	{ .compatible = "ti,tas5825m", },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, tas5825m_of_match);
-#endif
+MODULE_DEVICE_TABLE(of, tas5825m_composite_of_match);
 
-static struct i2c_driver tas5825m_i2c_driver = {
-	.probe_new    = tas5825m_i2c_probe,
-	.remove        = tas5825m_i2c_remove,
-	.id_table    = tas5825m_i2c_id,
-	.driver        = {
-		.name        = "tas5825m",
-		.of_match_table = of_match_ptr(tas5825m_of_match),
+static struct platform_driver tas5825m_composite_driver = {
+	.probe	= tas5825m_composite_probe,
+	.remove	= tas5825m_composite_remove,
+	.driver	= {
+		.name        = "tas5825m-composite",
+		.of_match_table = of_match_ptr(tas5825m_composite_of_match),
 	},
 };
 
-module_i2c_driver(tas5825m_i2c_driver);
+module_platform_driver(tas5825m_composite_driver);
 
-MODULE_AUTHOR("Andy Liu <andy-liu@ti.com>");
-MODULE_AUTHOR("Daniel Beer <daniel.beer@igorinstitute.com>");
-MODULE_DESCRIPTION("TAS5825M Audio Amplifier Driver");
+MODULE_AUTHOR("Anuj Tripathi <anuj@axisbinc.com>");
+MODULE_DESCRIPTION("TAS5825M Composite Audio Amplifier Driver");
 MODULE_LICENSE("GPL v2");
