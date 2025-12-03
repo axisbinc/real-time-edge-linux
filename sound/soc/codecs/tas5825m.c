@@ -432,15 +432,17 @@ static void do_work(struct work_struct *work)
  * present and stable for 5ms, or else it won't boot and we get no
  * sound.
  */
-int tas5825m_trigger_single(struct device* dev, int cmd)
+static int tas5825m_trigger(struct snd_pcm_substream *substream, int cmd,
+		struct snd_soc_dai *dai)
 {
-	struct tas5825m_priv *tas5825m = dev_get_drvdata(dev);
+	struct snd_soc_component *component = dai->component;
+	struct tas5825m_priv *tas5825m = snd_soc_component_get_drvdata(component);
 
 	switch (cmd) {
 		case SNDRV_PCM_TRIGGER_START:
 		case SNDRV_PCM_TRIGGER_RESUME:
 		case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
-			dev_info(dev, "clock start\n");
+			dev_info(component->dev, "clock start\n");
 			schedule_work(&tas5825m->work);
 			break;
 
@@ -455,7 +457,6 @@ int tas5825m_trigger_single(struct device* dev, int cmd)
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(tas5825m_trigger_single);
 
 static int tas5825m_dac_event(struct snd_soc_dapm_widget *w,
 		struct snd_kcontrol *kcontrol, int event)
@@ -534,6 +535,23 @@ static int tas5825m_mute(struct snd_soc_dai *dai, int mute, int direction)
 	return 0;
 }
 
+static const struct snd_soc_dai_ops tas5825m_dai_ops = {
+	.trigger            = tas5825m_trigger,
+	.mute_stream        = tas5825m_mute,
+	.no_capture_mute    = 1,
+};
+
+static struct snd_soc_dai_driver tas5825m_dai = {
+	.name        = "tas5825m-amplifier",
+	.playback    = {
+		.stream_name    = "Playback",
+		.channels_min    = 2,
+		.channels_max    = 2,
+		.rates        = SNDRV_PCM_RATE_48000,
+		.formats    = SNDRV_PCM_FMTBIT_S32_LE,
+	},
+	.ops        = &tas5825m_dai_ops,
+};
 
 static const struct regmap_config tas5825m_regmap = {
 	.reg_bits    = 8,
@@ -551,7 +569,13 @@ static int tas5825m_i2c_probe(struct i2c_client *i2c)
 	struct device *dev = &i2c->dev;
 	struct regmap *regmap;
 	struct tas5825m_priv *tas5825m;
+	char filename[128];
+	const char *config_name;
+	const struct firmware *fw;
 	int ret;
+	unsigned int test_val;
+	uint8_t test_buf[16];
+	int i;
 
 	/* DEBUG: Verify the I2C client is properly configured */
 	if (!i2c_check_functionality(i2c->adapter, I2C_FUNC_I2C)) {
@@ -565,6 +589,22 @@ static int tas5825m_i2c_probe(struct i2c_client *i2c)
 		ret = PTR_ERR(regmap);
 		dev_err(dev, "unable to allocate register map: %d\n", ret);
 		return ret;
+	}
+
+	/* DEBUG: Try immediate I2C read to verify connection */
+	dev_info(dev, "DEBUG: Testing immediate I2C read in probe...\n");
+	ret = regmap_read(regmap, REG_PAGE, &test_val);
+	if (ret) {
+		dev_err(dev, "DEBUG: Failed to read REG_PAGE register: %d\n", ret);
+		dev_err(dev, "DEBUG: I2C connection might not be working!\n");
+	} else {
+		dev_info(dev, "DEBUG: Successfully read REG_PAGE = 0x%02x\n", test_val);
+	}
+
+	/* Try to read some known registers */
+	ret = regmap_read(regmap, REG_POWER_STATE, &test_val);
+	if (!ret) {
+		dev_info(dev, "DEBUG: REG_POWER_STATE at probe = 0x%02x\n", test_val);
 	}
 
 	tas5825m = devm_kzalloc(dev, sizeof(struct tas5825m_priv), GFP_KERNEL);
@@ -581,6 +621,16 @@ static int tas5825m_i2c_probe(struct i2c_client *i2c)
 
 	INIT_WORK(&tas5825m->work, do_work);
 	mutex_init(&tas5825m->lock);
+
+	/* Don't register through devm. We need to be able to unregister
+	 * the component prior to deasserting PDN#
+	 */
+	ret = snd_soc_register_component(dev, &soc_codec_dev_tas5825m,
+			&tas5825m_dai, 1);
+	if (ret < 0) {
+		dev_err(dev, "unable to register codec: %d\n", ret);
+		return ret;
+	}
 
 	dev_info(dev, "tas5825m: probe succeeded\n");
 	return 0;

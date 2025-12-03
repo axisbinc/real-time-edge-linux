@@ -1637,14 +1637,6 @@ config SND_SOC_TAS5825M
 	  DSP. DSP configuration for each instance needs to be supplied
 	  via a device-tree attribute.
 
-config SND_SOC_TAS5825M_COMPOSITE
-	tristate "Texas Instruments TAS5825M Composite multi-amplifier driver"
-	depends on I2C
-	help
-	  Enable support for multiple TAS5825M amplifiers configured as
-	  a single logical audio device. This driver coordinates multiple
-	  TAS5825M instances for synchronized audio playback.
-
 config SND_SOC_TAS6424
 	tristate "Texas Instruments TAS6424 Quad-Channel Audio amplifier"
 	depends on I2C
