@@ -75,17 +75,6 @@ static const uint8_t dsp_cfg_preboot[] = {
 	0x03, 0x02,         // Set device in HiZ mode
 };
 
-/*
-#Get TAS5825M into play mode
-w 4c 00 00
-w 4c 7f 00
-w 4c 00 00
-w 4c 03 03
-
-# Clear FAULT
-w 4c 78 80
-*/
-
 static const uint8_t tas5825m_init_sequence[] = {
 	0x00, 0x00,
 	0x7f, 0x00,
