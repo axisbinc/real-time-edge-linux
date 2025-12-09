@@ -6416,6 +6416,14 @@ static int stmmac_avb_status_show(struct seq_file *seq, void *v)
 {
 	struct net_device *dev = seq->private;
 	struct stmmac_priv *priv = netdev_priv(dev);
+	int accept_count = 0;
+
+	dwmac5_frp_get_stats(priv->hw->pcsr, STMMAC_AVB_CHANNEL, &accept_count);
+	if (accept_count > 0) {
+		if (stmmac_avb_verbose & STMMAC_AVB_VERBOSE_RX)
+			pr_info("stmmac_enet_rx_poll_avb: accept_count: %d\n",
+					accept_count);
+	}
 
 	seq_printf(seq, "==============================\n");
 	seq_printf(seq, "\tAVB Status\n");
@@ -6427,6 +6435,7 @@ static int stmmac_avb_status_show(struct seq_file *seq, void *v)
 		   priv->avb_enabled ? "Y" : "N");
 	seq_printf(seq, "\tAVB RX Packets: %d\n", priv->avb_rx_packets);
 	seq_printf(seq, "\tAVB TX Packets: %d\n", priv->avb_tx_packets);
+	seq_printf(seq, "\tFRP Accept Count: %d\n", accept_count);
 	return 0;
 }
 DEFINE_SHOW_ATTRIBUTE(stmmac_avb_status);
@@ -8168,12 +8177,12 @@ int stmmac_enet_rx_poll_avb(void *data)
 	for (count = 0; count < 20; count++) {
 		uint32_t accept_count = 0;
 
-		dwmac5_frp_get_stats(priv->hw->pcsr, STMMAC_AVB_CHANNEL, &accept_count);
-		if (accept_count > 0) {
-			if (stmmac_avb_verbose & STMMAC_AVB_VERBOSE_RX)
-				pr_info("stmmac_enet_rx_poll_avb: accept_count: %d\n",
-						accept_count);
-		}
+		// dwmac5_frp_get_stats(priv->hw->pcsr, STMMAC_AVB_CHANNEL, &accept_count);
+		// if (accept_count > 0) {
+		// 	if (stmmac_avb_verbose & STMMAC_AVB_VERBOSE_RX)
+		// 		pr_info("stmmac_enet_rx_poll_avb: accept_count: %d\n",
+		// 				accept_count);
+		// }
 		entry = rx_q->cur_rx;
 		desc  = &rx_q->dma_rx[entry];
 		buf   = &rx_q->buf_pool[entry];
@@ -8224,8 +8233,8 @@ int stmmac_enet_rx_poll_avb(void *data)
 		buf->dma_addr = ((struct avb_rx_desc*)new_avb_buf)->dma_addr;
 		buf->offset = ((struct avb_rx_desc*)new_avb_buf)->common.offset;
 		stmmac_set_desc_addr(priv, desc, buf->dma_addr);
-		dma_wmb();
 		stmmac_set_rx_owner(priv, desc, true); /* give back to the DMA */
+		dma_wmb();
 		dma_rmb();
 
 		rx_q->rx_count_frames++;
