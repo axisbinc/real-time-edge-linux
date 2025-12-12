@@ -46,7 +46,7 @@ enum stmmac_txbuf_type {
 	STMMAC_TXBUF_T_XDP_NDO,
 	STMMAC_TXBUF_T_XSK_TX,
 #ifdef CONFIG_STMMAC_GENAVB
-    STMMAC_TXBUF_T_AVB_POOL,
+	STMMAC_TXBUF_T_AVB_POOL,
 #endif
 };
 
@@ -75,12 +75,12 @@ struct stmmac_tx_queue {
 	union {
 		struct sk_buff **tx_skbuff;
 		struct xdp_frame **xdpf;
-        struct avb_tx_desc **avb_desc;
+		struct avb_tx_desc **avb_desc;
 	};
 	struct stmmac_tx_info *tx_skbuff_dma;
 	struct xsk_buff_pool *xsk_pool;
 	u32 xsk_frames_done;
-    u32 avb_frames_done;
+	u32 avb_frames_done;
 	unsigned int cur_tx;
 	unsigned int dirty_tx;
 	dma_addr_t dma_tx_phy;
@@ -212,18 +212,18 @@ struct stmmac_dma_conf {
 #ifdef CONFIG_STMMAC_GENAVB
 struct stmmac_avb_buffer {
 	void *vaddr;
-    __u32 offset; /* Offset from vaddr for rx data */
+	__u32 offset; /* Offset from vaddr for rx data */
 	dma_addr_t dma_addr; /* DMA address for vaddr + offset */
 };
 
 struct stmmac_avb_rx_queue {
 	u32 rx_count_frames;
-    u32 rx_count_bytes;
+	u32 rx_count_bytes;
 	u32 avb_chan;
 	struct stmmac_priv *priv_data;
 	struct dma_desc *dma_rx ____cacheline_aligned_in_smp;
 	unsigned int cur_rx;
-    struct stmmac_avb_buffer *buf_pool;
+	struct stmmac_avb_buffer *buf_pool;
 	dma_addr_t dma_rx_phy;
 	u32 rx_tail_addr;
 };
@@ -236,7 +236,7 @@ struct stmmac_avb_tx_queue {
 	struct dma_desc *dma_tx ____cacheline_aligned_in_smp;
 	unsigned int cur_tx;
 	unsigned int dirty_tx;
-    struct stmmac_avb_buffer *buf_pool;
+	struct stmmac_avb_buffer *buf_pool;
 	dma_addr_t dma_tx_phy;
 	dma_addr_t tx_tail_addr;
 	u32 mss;
@@ -286,8 +286,8 @@ struct stmmac_priv {
 	unsigned int avb_rx_packets;
 	unsigned int avb_tx_packets;
 	//__ETHTOOL_DECLARE_LINK_MODE_MASK(phy_advertising);
-    struct stmmac_avb_dma_conf *dma_avb_conf;
-    raw_spinlock_t ptp_spinlock;
+	struct stmmac_avb_dma_conf *dma_avb_conf;
+	raw_spinlock_t ptp_spinlock;
 #endif
 
 	struct stmmac_dma_conf dma_conf;
