@@ -3576,6 +3576,7 @@ static void stmmac_free_irq(struct net_device *dev,
 				irq_set_affinity_hint(priv->rx_irq[j], NULL);
 				free_irq(priv->rx_irq[j], &priv->dma_conf.rx_queue[j]);
 			}
+		}
 
 		if (priv->sfty_ue_irq > 0 && priv->sfty_ue_irq != dev->irq)
 			free_irq(priv->sfty_ue_irq, dev);
@@ -8328,7 +8329,7 @@ int stmmac_enet_start_xmit_avb(void *data, struct avb_tx_desc *avb_buff)
 
 	tx_q->tx_count_frames++;
 	stmmac_enable_dma_transmission(priv, priv->ioaddr);
-	tx_q->cur_tx = entry = STMMAC_GET_ENTRY(entry, priv->dma_avb_conf->dma_tx_size);
+	tx_q->cur_tx = entry = next_entry;
 
 	wmb();
 
