@@ -25,9 +25,6 @@
 #include <uapi/linux/bpf.h>
 #include <linux/fec.h>
 
-/* STMMAC adapter for GenAVB */
-#define CONFIG_STMMAC_GENAVB
-
 struct stmmac_resources {
 	void __iomem *addr;
 	u8 mac[ETH_ALEN];

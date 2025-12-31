@@ -53,7 +53,7 @@
 #ifdef CONFIG_STMMAC_GENAVB
 #include <linux/fec.h>
 #include "stmmac_frp.h"
-#include "stmmac_genavb.h"
+#include "stmmac_genavb_priv.h"
 
 static void stmmac_avb_print_hex_dump(const void *buf, size_t len, const char* msg)
 {
@@ -7923,7 +7923,7 @@ static int stmmac_avb_init_dma_engine(struct stmmac_priv *priv)
 	stmmac_init_chan(priv, priv->ioaddr, priv->plat->dma_cfg, avb_chan);
 	stmmac_disable_dma_irq(priv, priv->ioaddr, avb_chan, 1, 1);
 
-	stmmac_set_dma_bfsize(priv, priv->ioaddr, priv->dma_conf.dma_buf_sz, avb_chan);
+	stmmac_set_dma_bfsize(priv, priv->ioaddr, priv->dma_avb_conf->dma_buf_sz, avb_chan);
 
 	/* no split header - aiming for one frame per packet */
 	stmmac_enable_sph(priv, priv->ioaddr, false, avb_chan);
@@ -8168,7 +8168,6 @@ int stmmac_enet_rx_poll_avb(void *data)
 
 	/* 20 packets per 125us > 64 bytes packets @ 100Mbps */
 	for (count = 0; count < 20; count++) {
-		uint32_t accept_count = 0;
 		entry = rx_q->cur_rx;
 		desc  = &rx_q->dma_rx[entry];
 		buf   = &rx_q->buf_pool[entry];
@@ -8208,7 +8207,11 @@ int stmmac_enet_rx_poll_avb(void *data)
 		/* replace the rx_buffer */
 		new_avb_buf = priv->avb->alloc(priv->avb_data);
 		if (!new_avb_buf) {
-			netdev_err(priv->dev, "Failed to alloc rx buffer\n");
+			netdev_err(priv->dev, "Failed to alloc rx buffer (dropping frame)\n");
+			/* Do not stall the AVB DMA ring. Drop this frame and return the 
+             * descriptor to DMA ownership */
+			dma_wmb();
+			stmmac_set_rx_owner(priv, desc, true);
 			break;
 		}
 

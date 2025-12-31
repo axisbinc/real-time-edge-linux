@@ -1,11 +1,10 @@
-/**
- * 
- */
+/* SPDX-License-Identifier: GPL-2.0-only */
 
-#ifndef __STMMAC_GENAVB_H__
-#define __STMMAC_GENAVB_H__
+#ifndef __STMMAC_GENAVB_PRIV_H__
+#define __STMMAC_GENAVB_PRIV_H__
 
 #include "stmmac.h"
+#include <linux/stmmac_genavb.h>
 
 // todo: priv->plat->avb_dma_cfg->avb_dma_chan
 #define STMMAC_AVB_CHANNEL 4
@@ -25,4 +24,4 @@ int stmmac_avb_xmit_avb_tx_desc(struct stmmac_priv *priv, int queue,
 
 int stmmac_enet_start_xmit_avb(void *data, struct avb_tx_desc *avb_buff);
 
-#endif //__STMMAC_GENAVB_H__
+#endif /* __STMMAC_GENAVB_PRIV_H__ */
