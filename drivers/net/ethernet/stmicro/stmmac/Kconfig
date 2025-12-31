@@ -25,6 +25,16 @@ config STMMAC_SELFTESTS
 	  feature if you are facing problems with your HW and submit the test
 	  results to the netdev Mailing List.
 
+config STMMAC_GENAVB
+	bool "GenAVB_TSN AVB integration hooks"
+	depends on STMMAC_ETH
+	default n
+	help
+	  Enable GenAVB_TSN AVB integration for the STMMAC driver.
+	
+	  This exposes additional AVB datapath and PTP helper symbols (via
+	  EXPORT_SYMBOL) used by the GenAVB_TSN kernel module.
+
 config STMMAC_PLATFORM
 	tristate "STMMAC Platform bus support"
 	depends on STMMAC_ETH

@@ -3,7 +3,7 @@
 #include "stmmac.h"
 #include "stmmac_frp.h"
 #ifdef CONFIG_STMMAC_GENAVB
-#include "stmmac_genavb.h"
+#include "stmmac_genavb_priv.h"
 #define STMMAC_AVB_TX_ROOT_CAUSE_TESTS 1
 
 static bool stmmac_avb_test_in_progress = false;

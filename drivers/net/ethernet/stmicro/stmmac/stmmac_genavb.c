@@ -1,5 +1,5 @@
 #include "stmmac.h"
-#include "stmmac_genavb.h"
+#include "stmmac_genavb_priv.h"
 #include "stmmac_frp.h"
 
 int stmmac_rxp_setup(struct stmmac_priv *priv, u16 eth_types[], u16 count)
