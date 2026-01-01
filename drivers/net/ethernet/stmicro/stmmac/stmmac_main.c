@@ -165,9 +165,11 @@ static const struct net_device_ops stmmac_netdev_ops;
 static void stmmac_init_fs(struct net_device *dev);
 static void stmmac_exit_fs(struct net_device *dev);
 static struct dentry *stmmac_fs_dir;
-// to enable `echo Y > /sys/kernel/debug/stmmaceth/avb_enabled`
+#ifdef CONFIG_STMMAC_GENAVB
+// To enable AVB support at module load time, 
+// echo Y > /sys/kernel/debug/stmmaceth/avb_enabled
 // and dsiable `echo N > /sys/kernel/debug/stmmaceth/avb_enabled`
-static bool stmmac_avb_enabled = false;
+static bool stmmac_avb_enabled = true;
 
 #define STMMAC_AVB_VERBOSE_RX   0x1
 #define STMMAC_AVB_VERBOSE_TX   0x2
@@ -178,12 +180,35 @@ static bool stmmac_avb_enabled = false;
 #define STMMAC_SKB_VERBOSE_ALL  0x30
 
 static u32 stmmac_avb_verbose = 0;
-#endif
+#endif /* CONFIG_STMMAC_GENAVB */
+#endif /* CONFIG_DEBUG_FS */
+
 #ifdef CONFIG_STMMAC_GENAVB
 static struct stmmac_avb_dma_conf* stmmac_avb_init_dma_desc(struct stmmac_priv *priv);
 static int stmmac_avb_init_dma_engine(struct stmmac_priv *priv);
 static void stmmac_avb_free_dma_desc(struct stmmac_priv *priv,
 		struct stmmac_avb_dma_conf *dma_conf);
+
+static inline void stmmac_avb_filter(struct stmmac_priv *priv, bool enable)
+{
+	u16 eth_types[] = { ETH_P_1588, ETH_P_TSN, ETH_P_MVRP, 0x88F6, 0x22ea };
+
+	if (!priv || !priv->dev)
+		return;
+
+	if (!stmmac_avb_enabled || !priv->avb_enabled)
+		return;
+
+	if (enable) {
+		netdev_info(priv->dev, "Adding AVB filter...\n");
+		if (stmmac_rxp_setup(priv, eth_types, ARRAY_SIZE(eth_types)))
+			netdev_err(priv->dev, "Failed to add AVB filter\n");
+	} else {
+		netdev_info(priv->dev, "Deleting AVB filter...\n");
+		if (stmmac_rxp_clear(priv))
+			netdev_err(priv->dev, "Failed to delete AVB filter\n");
+	}
+}
 #endif
 
 #define STMMAC_COAL_TIMER(x) (ns_to_ktime((x) * NSEC_PER_USEC))
@@ -3982,6 +4007,7 @@ static int __stmmac_open(struct net_device *dev,
 		} else {
 			stmmac_avb_init_dma_engine(priv);
 			priv->avb->open(priv->avb_data, priv, priv->speed);
+			stmmac_avb_filter(priv, true);
 		}
 	}
 #endif
@@ -4066,6 +4092,9 @@ static int stmmac_release(struct net_device *dev)
 
 #ifdef CONFIG_STMMAC_GENAVB
 	if (stmmac_avb_enabled && priv->avb_enabled) {
+		/* Remove AVB RX parser rules before tearing down AVB DMA */
+		stmmac_avb_filter(priv, false);
+
 		/* Stop AVB DMA and free the descriptors */
 		stmmac_stop_rx_dma(priv, STMMAC_AVB_CHANNEL);
 		stmmac_stop_tx_dma(priv, STMMAC_AVB_CHANNEL);
@@ -6466,7 +6495,7 @@ static ssize_t stmmac_avb_filter_write(struct file *file, const char __user *buf
 			break;
 		case '9': { // open AVB
 				if (priv->avb_enabled) {
-				priv->dma_avb_conf = stmmac_avb_init_dma_desc(priv);
+					priv->dma_avb_conf = stmmac_avb_init_dma_desc(priv);
 					if (IS_ERR(priv->dma_avb_conf)) {
 						netdev_err(priv->dev, "%s: AVB DMA descriptors allocation failed\n",
 								__func__);
