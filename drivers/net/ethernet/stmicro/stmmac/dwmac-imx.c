@@ -451,8 +451,8 @@ err_match_data:
 
 static struct platform_driver imx_dwmac_driver;
 
-/* Checks if the net_device is registered by the fec */
-static bool __is_fec_net_device(struct net_device *ndev)
+/* Checks if the net_device is registered by the stmmac */
+static bool __is_stmmac_net_device(struct net_device *ndev)
 {
 	if (!ndev)
 		return false;
@@ -472,7 +472,7 @@ struct device *stmmac_enet_avb_get_device(const char *ifname)
 	if (!ndev)
 		goto err_dev_get;
 
-	if (!__is_fec_net_device(ndev))
+	if (!__is_stmmac_net_device(ndev))
 		goto err_ndev;
 
 	priv = netdev_priv(ndev);
@@ -500,7 +500,7 @@ int stmmac_enet_avb_register(const char *ifname, const struct avb_ops *avb, void
 	if (!ndev)
 		goto err_dev_get;
 
-	if (!__is_fec_net_device(ndev))
+	if (!__is_stmmac_net_device(ndev))
 		goto err_ndev;
 
 	priv = netdev_priv(ndev);
@@ -549,7 +549,7 @@ int stmmac_enet_avb_unregister(int ifindex, const struct avb_ops *avb)
 	if (!ndev)
 		goto err_dev_get;
 
-	if (!__is_fec_net_device(ndev))
+	if (!__is_stmmac_net_device(ndev))
 		goto err_ndev;
 
 	priv = netdev_priv(ndev);
@@ -593,7 +593,7 @@ int stmmac_enet_get_tx_queue_properties(int ifindex, struct tx_queue_properties 
 	if (!ndev)
 		goto err_dev_get;
 
-	if (!__is_fec_net_device(ndev))
+	if (!__is_stmmac_net_device(ndev))
 		goto err_ndev;
 
 	priv = netdev_priv(ndev);
