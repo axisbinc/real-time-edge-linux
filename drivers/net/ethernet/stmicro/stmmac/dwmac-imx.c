@@ -597,6 +597,11 @@ int stmmac_enet_get_tx_queue_properties(int ifindex, struct tx_queue_properties 
 		goto err_ndev;
 
 	priv = netdev_priv(ndev);
+	/* TODO:
+	 * GenAVB uses these properties to decide whether it can rely on HW CBS
+	 * (credit-based shaper). Until CBS offload is wired through the
+	 * stmmac_enet_set_idle_slope() hook, advertise strict-priority only.
+	 */
     prop->num_queues = 1;
 	prop->queue[0].priority = 0;
 	prop->queue[0].flags = TX_QUEUE_FLAGS_STRICT_PRIORITY;

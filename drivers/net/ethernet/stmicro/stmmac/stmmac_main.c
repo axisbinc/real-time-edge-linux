@@ -73,8 +73,9 @@ static void stmmac_avb_print_hex_dump(const void *buf, size_t len, const char* m
 #endif
 
 /* As long as the interface is active, we keep the timestamping counter enabled
- * with fine resolution and binary rollover. This avoid non-monotonic behavior
- * (clock jumps) when changing timestamping settings at runtime.
+ * with fine resolution and digital rollover (PTP_DIGITAL_ROLLOVER_MODE).
+ * This avoids non-monotonic behavior when changing timestamping settings at
+ * runtime.
  */
 #define STMMAC_HWTS_ACTIVE	(PTP_TCR_TSENA | PTP_TCR_TSCFUPDT | \
 				 PTP_TCR_TSCTRLSSR)
@@ -8176,8 +8177,12 @@ alloc_error:
 
 int stmmac_enet_set_idle_slope(void *data, unsigned int queue_id, u32 idle_slope)
 {
-	pr_info("[%d] %s\n", __LINE__, __func__);
-	return 0;
+	pr_info("[%d] %s: queue %d, idle_slope: %u\n", __LINE__, __func__,
+		queue_id, idle_slope);
+	/*
+	 * TODO: Enable HW CBS (credit-based shaper).
+	 */
+	return -EOPNOTSUPP;
 }
 EXPORT_SYMBOL(stmmac_enet_set_idle_slope);
 
