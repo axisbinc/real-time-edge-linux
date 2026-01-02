@@ -357,7 +357,10 @@ int stmmac_ptp_read_cnt(void *data, u32 *cnt)
 
     // todo: evaluate if we need to serialize
 	raw_spin_lock_irqsave(&priv->ptp_spinlock, flags);
-	stmmac_get_ptptime(priv, priv->ptpaddr, &ns);
+	/*
+	 * GenAVB expects a free-running PTP counter in nanoseconds (modulo 2^32).
+	 */
+	stmmac_get_systime(priv, priv->ptpaddr, &ns);
 	raw_spin_unlock_irqrestore(&priv->ptp_spinlock, flags);
 
 	*cnt = (u32) ns;
@@ -379,7 +382,9 @@ EXPORT_SYMBOL(stmmac_ptp_read_cnt);
  */
 int stmmac_ptp_tc_start(void *data, u8 id, u32 ts_0, u32 ts_1, u32 tcsr_val)
 {
-	return 0;
+	pr_info("[%d] %s\n", __LINE__, __func__);
+	/* TODO: */
+	return -EOPNOTSUPP;
 }
 EXPORT_SYMBOL(stmmac_ptp_tc_start);
 
@@ -392,6 +397,8 @@ EXPORT_SYMBOL(stmmac_ptp_tc_start);
  */
 void stmmac_ptp_tc_stop(void *data, u8 id)
 {
+	pr_info("[%d] %s\n", __LINE__, __func__);
+	/* TODO: */
 }
 EXPORT_SYMBOL(stmmac_ptp_tc_stop);
 
@@ -406,7 +413,9 @@ EXPORT_SYMBOL(stmmac_ptp_tc_stop);
  */
 int stmmac_ptp_tc_reload(void *data, u8 id, u32 ts)
 {
-	return 0;
+	pr_info("[%d] %s\n", __LINE__, __func__);
+	/* TODO: */
+	return -EOPNOTSUPP;
 }
 EXPORT_SYMBOL(stmmac_ptp_tc_reload);
 #endif /* CONFIG_STMMAC_GENAVB */
