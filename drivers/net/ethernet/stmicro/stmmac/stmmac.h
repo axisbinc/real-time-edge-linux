@@ -282,6 +282,12 @@ struct stmmac_priv {
 	unsigned int avb_enabled;
 	unsigned int avb_rx_packets;
 	unsigned int avb_tx_packets;
+	unsigned int avb_rx_ptp_packets;
+	unsigned int avb_tx_ptp_packets;
+	unsigned int avb_rx_avtp_packets;
+	unsigned int avb_tx_avtp_packets;
+	unsigned int avb_rx_other_packets;
+	unsigned int avb_tx_other_packets;
 	//__ETHTOOL_DECLARE_LINK_MODE_MASK(phy_advertising);
 	struct stmmac_avb_dma_conf *dma_avb_conf;
 	raw_spinlock_t ptp_spinlock;

@@ -14,6 +14,7 @@
 	https://bugzilla.stlinux.com/
 *******************************************************************************/
 
+#include "linux/if_ether.h"
 #include <linux/clk.h>
 #include <linux/kernel.h>
 #include <linux/interrupt.h>
@@ -185,6 +186,11 @@ static u32 stmmac_avb_verbose = 0;
 #endif /* CONFIG_DEBUG_FS */
 
 #ifdef CONFIG_STMMAC_GENAVB
+
+#define ETH_P_AVTP 0x22E0 /* Audio Video Transport Protocol */
+#define ETH_P_MSRP 0x22EA /* Multiple Stream Reservation Protocol */
+#define ETH_P_MMRP 0x88F6 /* Multiple MAC Registration Protocol */
+
 static struct stmmac_avb_dma_conf* stmmac_avb_init_dma_desc(struct stmmac_priv *priv);
 static int stmmac_avb_init_dma_engine(struct stmmac_priv *priv);
 static void stmmac_avb_free_dma_desc(struct stmmac_priv *priv,
@@ -192,7 +198,8 @@ static void stmmac_avb_free_dma_desc(struct stmmac_priv *priv,
 
 static inline void stmmac_avb_filter(struct stmmac_priv *priv, bool enable)
 {
-	u16 eth_types[] = { ETH_P_1588, ETH_P_TSN, ETH_P_MVRP, 0x88F6, 0x22ea };
+	u16 eth_types[] = { ETH_P_1588, ETH_P_TSN, ETH_P_MVRP, ETH_P_MMRP,
+			    ETH_P_AVTP, ETH_P_MSRP };
 
 	if (!priv || !priv->dev)
 		return;
@@ -4000,6 +4007,13 @@ static int __stmmac_open(struct net_device *dev,
 	if (stmmac_avb_enabled && priv->avb_enabled) {
 		priv->avb_rx_packets = 0;
 		priv->avb_tx_packets = 0;
+		priv->avb_rx_avtp_packets = 0;
+		priv->avb_tx_avtp_packets = 0;
+		priv->avb_rx_ptp_packets = 0;
+		priv->avb_tx_ptp_packets = 0;
+		priv->avb_rx_other_packets = 0;
+		priv->avb_tx_other_packets = 0;
+		
 		priv->dma_avb_conf = stmmac_avb_init_dma_desc(priv);
 		if (IS_ERR(priv->dma_avb_conf)) {
 			netdev_err(priv->dev, "%s: AVB DMA descriptors allocation failed\n",
@@ -6459,6 +6473,12 @@ static int stmmac_avb_status_show(struct seq_file *seq, void *v)
 		   priv->avb_enabled ? "Y" : "N");
 	seq_printf(seq, "\tAVB RX Packets: %d\n", priv->avb_rx_packets);
 	seq_printf(seq, "\tAVB TX Packets: %d\n", priv->avb_tx_packets);
+	seq_printf(seq, "\tAVB RX AVTP Packets: %d\n", priv->avb_rx_avtp_packets);
+	seq_printf(seq, "\tAVB TX AVTP Packets: %d\n", priv->avb_tx_avtp_packets);
+	seq_printf(seq, "\tAVB RX PTP Packets: %d\n", priv->avb_rx_ptp_packets);
+	seq_printf(seq, "\tAVB TX PTP Packets: %d\n", priv->avb_tx_ptp_packets);
+	seq_printf(seq, "\tAVB RX Other Packets: %d\n", priv->avb_rx_other_packets);
+	seq_printf(seq, "\tAVB TX Other Packets: %d\n", priv->avb_tx_other_packets);
 	seq_printf(seq, "\tFRP Accept Count: %d\n", accept_count);
 	return 0;
 }
@@ -8260,6 +8280,22 @@ int stmmac_enet_rx_poll_avb(void *data)
 
 		rx_q->rx_count_frames++;
 		rx_q->rx_count_bytes += len;
+
+		void* packet_data = (void*)avb_pkt_desc + avb_pkt_desc->common.offset;
+		struct ethhdr* eth = (struct ethhdr*)packet_data;
+
+		switch(ntohs(eth->h_proto)) {
+			case ETH_P_1588:
+				priv->avb_rx_ptp_packets++;
+				break;
+			case ETH_P_AVTP:
+				priv->avb_rx_avtp_packets++;
+				break;
+			default:
+				priv->avb_rx_other_packets++;
+				break;
+		}
+
 		// if ((stmmac_avb_verbose & STMMAC_AVB_VERBOSE_RX)
 		// 		|| stmmac_avb_test_is_in_progress())
 		// 	stmmac_avb_print_hex_dump((void*)avb_pkt_desc + avb_pkt_desc->common.offset
@@ -8420,6 +8456,20 @@ int stmmac_enet_tx_avb(void *data)
 		// 			avb_buff->common.len,
 		// 			"AVB desc cleanup");
 		// }
+		void* packet_data = (void*)avb_buff + avb_buff->common.offset;
+		struct ethhdr* eth = (struct ethhdr*)packet_data;
+
+		switch(ntohs(eth->h_proto)) {
+			case ETH_P_1588:
+				priv->avb_tx_ptp_packets++;
+				break;
+			case ETH_P_AVTP:
+				priv->avb_tx_avtp_packets++;
+				break;
+			default:
+				priv->avb_tx_other_packets++;
+				break;
+		}
 
 		/* get hw tstamp */
 		ns = __stmmac_get_tx_hwstamp(priv, tx_desc);
