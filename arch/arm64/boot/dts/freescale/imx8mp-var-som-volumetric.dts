@@ -1,0 +1,467 @@
+/*
+ * Copyright AxisB Inc 2024 - 2025
+ * All rights reserved
+ */
+
+#include "imx8mp-var-som-symphony.dts"
+
+/* Enable easrc */
+&easrc {
+	fsl,asrc-rate  = <48000>;
+	status = "okay";
+};
+
+/* AVB HW timer */
+&gpt1 {
+	compatible = "fsl,avb-gpt";
+	timer-channel = <1>; /* Use output compare channel 1*/
+	sw-recovery = <0>; /* Use SW recovery mode for STMMAC (eth port 0) */
+	prescale = <1>;
+	domain = <0>;
+
+	clocks = <&clk IMX8MP_CLK_GPT1_ROOT>,
+		 <&clk IMX8MP_CLK_GPT1_ROOT>,
+		 <&clk IMX8MP_AUDIO_PLL1>;
+	clock-names = "ipg", "per", "audio_pll";
+
+	/* Make the GPT clk root derive from the audio PLL*/
+	assigned-clocks = <&clk IMX8MP_CLK_GPT1>;
+	assigned-clock-parents = <&clk IMX8MP_AUDIO_PLL1_OUT>;
+	assigned-clock-rates = <0>;
+
+	gpt1_capin1_sel = <&gpr 0x4 2>;
+
+	status = "okay";
+};
+
+&iomuxc {
+	pinctrl_i2c5: i2c5grp {
+		fsl,pins = <
+			MX8MP_IOMUXC_HDMI_DDC_SCL__I2C5_SCL				0x400001c6
+			MX8MP_IOMUXC_HDMI_DDC_SDA__I2C5_SDA				0x400001c6
+		>;
+	};
+
+	pinctrl_sai2: sai2grp {
+		fsl,pins = <
+			MX8MP_IOMUXC_SAI2_TXFS__AUDIOMIX_SAI2_TX_SYNC			0xd6
+			MX8MP_IOMUXC_SAI2_TXC__AUDIOMIX_SAI2_TX_BCLK			0xd6
+			MX8MP_IOMUXC_SAI2_TXD0__AUDIOMIX_SAI2_TX_DATA00			0x116
+			MX8MP_IOMUXC_SAI2_RXD0__AUDIOMIX_SAI2_TX_DATA01			0x116
+			MX8MP_IOMUXC_SAI2_MCLK__AUDIOMIX_SAI2_MCLK			    0xd6
+		>;
+	};
+
+    pinctrl_gpio4_21: gpio_perf_grp {
+        fsl,pins = <
+			MX8MP_IOMUXC_SAI2_RXFS__GPIO4_IO21			            0xd6
+        >;
+    };
+
+	pinctrl_sai7: sai7grp {
+		fsl,pins = <
+			MX8MP_IOMUXC_ECSPI2_MOSI__AUDIOMIX_SAI7_TX_DATA00		0xd6
+			MX8MP_IOMUXC_ECSPI2_SCLK__AUDIOMIX_SAI7_TX_BCLK			0xd6
+			MX8MP_IOMUXC_ECSPI1_SS0__AUDIOMIX_SAI7_TX_SYNC			0xd6
+		>;
+	};
+};
+
+/* ------------------------------------------------------------------------ */
+/*   Enable I2C5 under Linux and bind the pins you already muxed above      */
+&i2c5 {
+    status = "okay";
+    pinctrl-names = "default";
+    pinctrl-0 = <&pinctrl_i2c5>;
+    clock-frequency = <100000>;  /* Start with 100kHz for reliability */
+    scl-gpios = <&gpio3 26 GPIO_ACTIVE_HIGH>;  /* recovery gpios */
+    sda-gpios = <&gpio3 27 GPIO_ACTIVE_HIGH>;  /* recovery gpios */
+};
+
+/* ------------------------------------------------------------------------ */
+/*   Enable SAI2 under Linux and bind the pinmux                            */
+&sai2 {
+    status = "okay";
+    #sound-dai-cells = <0>;
+    pinctrl-names = "default";
+    pinctrl-0 = <&pinctrl_sai2>;
+
+    /* audio clock for BCLK/FS generation - standard rate for TDM16 */
+    assigned-clocks = <&clk IMX8MP_CLK_SAI2>;
+    assigned-clock-parents = <&clk IMX8MP_AUDIO_PLL1_OUT>;
+    assigned-clock-rates = <49152000>; /* aiming for TDM32 */
+    clocks = <&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_SAI2_IPG>, <&clk IMX8MP_CLK_DUMMY>,
+             <&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_SAI2_MCLK1>, <&clk IMX8MP_CLK_DUMMY>,
+             <&clk IMX8MP_CLK_DUMMY>;
+    clock-names = "bus", "mclk0", "mclk1", "mclk2", "mclk3";
+    fsl,sai-mclk-direction-output;
+    
+    /* Dataline configuration for volumetric (32 channels via 2x TDM16):
+     * - Type 0 = Default/TDM mode
+     * - RX mask 0x1 = RX_DATA0
+     * - TX mask 0x3 = TX_DATA0 and TX_DATA1 (both enabled for 2x TDM16)
+     */
+    fsl,dataline = <0 0x1 0x3>;
+    
+    /* Use MULTI-FIFO DMA for 32-channel operation (2x TDM16) */
+    dmas = <&sdma2 2 25 0>, <&sdma2 3 25 0>; /* 25 = IMX_DMATYPE_MULTI_SAI */
+    dma-names = "rx", "tx";
+};
+
+/* ------------------------------------------------------------------------ */
+/*   Enable SAI7 under Linux and bind the pinmux                            */
+&sai7 {
+    status = "okay";
+    #sound-dai-cells = <0>;
+    pinctrl-names = "default";
+    pinctrl-0 = <&pinctrl_sai7>;
+
+    /* audio clock for BCLK/FS generation */
+    assigned-clocks = <&clk IMX8MP_CLK_SAI7>;
+    assigned-clock-parents = <&clk IMX8MP_AUDIO_PLL1_OUT>;
+    assigned-clock-rates = <49152000>; /* aiming for TDM32 */
+    clocks = <&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_SAI7_IPG>, <&clk IMX8MP_CLK_DUMMY>,
+             <&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_SAI7_MCLK1>, <&clk IMX8MP_CLK_DUMMY>,
+             <&clk IMX8MP_CLK_DUMMY>;
+    clock-names = "bus", "mclk0", "mclk1", "mclk2", "mclk3";
+    fsl,sai-mclk-direction-output;
+    
+    /* Standard SAI configuration - use base DMA settings */
+    fsl,dataline = <0 0x1 0x1>; /* TX_DATA0 only */
+    
+    /* Use the correct DMA channels for SAI7 */
+    dmas = <&sdma2 12 2 0>, <&sdma2 13 2 0>;
+    dma-names = "rx", "tx";
+};
+
+/* ------------------------------------------------------------------------ */
+/*   Sound Cards                                                            */
+/*   - volumetric: Single card with 32 channels (8 chairs × 4 speakers)    */
+/*   - ssm3582-0: TX_DATA0 - Channels 0-15 (Chairs 0-3)                    */
+/*   - ssm3582-1: TX_DATA1 - Channels 16-31 (Chairs 4-7)                   */
+/ {
+    /* Dummy codec for TDM16 testing */
+    dummy_codec: dummy-codec {
+        compatible = "linux,dummy-codec";
+        #sound-dai-cells = <0>;
+    };
+
+    /* Second dummy codec for SAI7 testing */
+    dummy_codec2: dummy-codec2 {
+        compatible = "linux,dummy-codec";
+        #sound-dai-cells = <0>;
+    };
+
+    /* Single sound card with all 32 channels */
+    sound-volumetric {
+        compatible = "simple-audio-card";
+        simple-audio-card,name = "volumetric-audio";
+        simple-audio-card,format = "dsp_a";
+        simple-audio-card,bitclock-master = <&volumetric_cpu>;
+        simple-audio-card,frame-master = <&volumetric_cpu>;
+        status = "okay";
+
+        volumetric_cpu: simple-audio-card,cpu {
+            sound-dai = <&sai2>;
+            dai-tdm-slot-num = <16>;        /* 16 slots per frame */
+            dai-tdm-slot-width = <32>;       /* 32 bits per slot */
+            dai-tdm-slot-tx-mask = <0xFFFF>; /* All 16 slots active */
+            /* Note: With fsl,dataline = <0 0x1 0x3>, this creates:
+             * - TX_DATA0: 16 channels (slots 0-15) -> Chairs 0-3
+             * - TX_DATA1: 16 channels (slots 0-15) -> Chairs 4-7
+             * Total: 32 channels
+             */
+        };
+
+        simple-audio-card,codec {
+            sound-dai = <&dummy_codec>;
+        };
+    };
+
+    /* SSM3582 Sound Card #0 - TX_DATA0 (16 channels) - BASELINE TEST */
+    sound-ssm3582-0 {
+        compatible = "simple-audio-card";
+        simple-audio-card,name = "ssm3582-tdm16-0";
+        simple-audio-card,format = "dsp_a";
+        simple-audio-card,bitclock-master = <&ssm3582_0_cpu>;
+        simple-audio-card,frame-master = <&ssm3582_0_cpu>;
+        status = "disabled";
+
+        ssm3582_0_cpu: simple-audio-card,cpu {
+            sound-dai = <&sai2>;
+            dai-tdm-slot-num = <16>;         /* 16 slots per frame */
+            dai-tdm-slot-width = <32>;        /* 32 bits per slot */
+            dai-tdm-slot-tx-mask = <0xFFFF>;  /* All 16 slots active on TX_DATA0 */
+        };
+
+        simple-audio-card,codec {
+            sound-dai = <&dummy_codec>;
+        };
+    };
+
+    /* SSM3582 Sound Card #1 - TX_DATA1 (16 channels) - DISABLED FOR NOW */
+    sound-ssm3582-1 {
+        compatible = "simple-audio-card";
+        simple-audio-card,name = "ssm3582-tdm16-1";
+        simple-audio-card,format = "dsp_a";
+        simple-audio-card,bitclock-master = <&ssm3582_1_cpu>;
+        simple-audio-card,frame-master = <&ssm3582_1_cpu>;
+        status = "disabled";
+
+        ssm3582_1_cpu: simple-audio-card,cpu {
+            sound-dai = <&sai2>;
+            dai-tdm-slot-num = <16>;         /* 16 slots TDM16 */
+            dai-tdm-slot-width = <32>;        /* 32 bits per slot */
+            dai-tdm-slot-tx-mask = <0xFFFF>;  /* All 16 slots active */
+        };
+
+        simple-audio-card,codec {
+            sound-dai = <&dummy_codec>;
+        };
+    };
+
+    /* Simple I2S Sound Card #1 - TX_DATA0 only - for scope testing */
+    sound-simple1 {
+        compatible = "simple-audio-card";
+        simple-audio-card,name = "simple-i2s-0";
+        simple-audio-card,format = "i2s";
+        simple-audio-card,bitclock-master = <&simple1_cpu>;
+        simple-audio-card,frame-master = <&simple1_cpu>;
+        status = "disabled";
+
+        simple1_cpu: simple-audio-card,cpu {
+            sound-dai = <&sai2>;
+            /* Simple I2S: 2 channels (stereo) on TX_DATA0 */
+            dai-tdm-slot-num = <2>;
+            dai-tdm-slot-width = <32>;
+            dai-tdm-slot-tx-mask = <0x3>;  /* Use slots 0-1, will map to TX_DATA0 */
+        };
+
+        simple-audio-card,codec {
+            sound-dai = <&dummy_codec>;
+        };
+    };
+
+    /* Simple I2S Sound Card #2 - TX_DATA1 only - for scope testing */
+    sound-simple2 {
+        compatible = "simple-audio-card";
+        simple-audio-card,name = "simple-i2s-1";
+        simple-audio-card,format = "i2s";
+        simple-audio-card,bitclock-master = <&simple2_cpu>;
+        simple-audio-card,frame-master = <&simple2_cpu>;
+        status = "disabled";
+
+        simple2_cpu: simple-audio-card,cpu {
+            sound-dai = <&sai2>;
+            /* Simple I2S: 2 channels (stereo) on TX_DATA1 */
+            dai-tdm-slot-num = <2>;
+            dai-tdm-slot-width = <32>;
+            dai-tdm-slot-tx-mask = <0x3>;  /* Use slots 0-1, will map to TX_DATA1 */
+        };
+
+        simple-audio-card,codec {
+            sound-dai = <&dummy_codec>;
+        };
+    };
+
+    /* Volumetric Sound Card #2 - SAI7 based */
+    sound-volumetric-2 {
+        compatible = "simple-audio-card";
+        simple-audio-card,name = "volumetric-audio-2";
+        simple-audio-card,format = "dsp_a";
+        simple-audio-card,bitclock-master = <&volumetric2_cpu>;
+        simple-audio-card,frame-master = <&volumetric2_cpu>;
+        status = "okay";
+
+        volumetric2_cpu: simple-audio-card,cpu {
+            sound-dai = <&sai7>;
+            dai-tdm-slot-num = <16>;         /* 16 slots per frame */
+            dai-tdm-slot-width = <32>;       /* 32 bits per slot */
+            dai-tdm-slot-tx-mask = <0xFFFF>; /* All 16 slots active */
+        };
+
+        simple-audio-card,codec {
+            sound-dai = <&dummy_codec2>;
+        };
+    };
+};
+
+&dsp {
+	compatible = "fsl,imx8mp-hifi4";
+	reg = <0x0 0x3B6E8000 0x0 0x88000>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_uart4>;
+	clocks = <&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_OCRAMA_IPG>,
+			 <&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_DSP_ROOT>,
+			 <&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_DSPDBG_ROOT>,
+			 <&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_SDMA3_ROOT>,
+			 <&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_ASRC_IPG>,
+			 <&clk IMX8MP_CLK_UART4_ROOT>;
+	clock-names = "ocram", "core", "debug",
+				  "per_clk1", "per_clk2", "per_clk3",
+                  "per_clk5", "per_clk7";
+	firmware-name = "imx/dsp/hifi4.bin";
+	power-domains = <&audiomix_pd>;
+	mbox-names = "tx0", "rx0", "rxdb0";
+	mboxes = <&mu2 0 0>,
+			 <&mu2 1 0>,
+			 <&mu2 3 0>;
+	memory-region = <&dsp_vdev0buffer>, <&dsp_vdev0vring0>,
+					<&dsp_vdev0vring1>, <&dsp_reserved>;
+	syscon = <&audio_blk_ctrl>;
+	status = "okay";
+};
+
+&uart3 {
+	status = "disabled";
+};
+
+&ecspi2 {
+	status = "disabled";
+};
+
+&uart4 {
+	status = "disabled";
+};
+
+&wm8904 {
+	status = "disabled";
+};
+
+&pcie {
+    status = "disabled";
+};
+
+&pcie_ep {
+    status = "disabled";
+};
+
+&sound_hdmi {
+	status = "disabled";
+};
+
+&aud2htx {
+	status = "disabled";
+};
+
+&flexcan2 {
+	status = "disabled";
+};
+
+&irqsteer_hdmi {
+	status = "disabled";
+};
+
+&hdmi_blk_ctrl {
+	status = "disabled";
+};
+
+&hdmi_pavi {
+	status = "disabled";
+};
+
+&hdmi {
+	status = "disabled";
+};
+
+&hdmiphy {
+	status = "disabled";
+};
+
+/* MIPI-DSI */
+&lcdif1 {
+	status = "disabled";
+};
+
+/* LVDS */
+&lcdif2 {
+	status = "disabled";
+};
+
+/* HDMI */
+&lcdif3 {
+	status = "disabled";
+};
+
+&ldb {
+	status = "disabled";
+};
+
+&ldb_phy {
+	status = "disabled";
+};
+
+&mipi_dsi {
+	status = "disabled";
+};
+
+/* Force FEC ethernet to 100 Mbps */
+&fec {
+	max-speed = <100>;
+};
+
+/* Also limit the PHY to 100 Mbps */
+&ethphy1 {
+	max-speed = <100>;
+};
+
+/* configure eqos for priority queueing and DMA channel mapping */
+&eqos {
+	snps,force_thresh_dma_mode;
+	snps,mtl-tx-config = <&mtl_tx_setup>;
+	snps,mtl-rx-config = <&mtl_rx_setup>;
+
+	mtl_tx_setup: tx-queues-config {
+		snps,tx-queues-to-use = <4>;
+		snps,tx-sched-sp;
+
+		queue0 {
+			snps,dcb-algorithm;
+			snps,priority = <0x1>;
+		};
+
+		queue1 {
+			snps,dcb-algorithm;
+			snps,priority = <0x2>;
+		};
+
+		queue2 {
+			snps,dcb-algorithm;
+			snps,priority = <0x4>;
+		};
+
+		queue3 {
+			snps,dcb-algorithm;
+			snps,priority = <0xF8>;
+		};
+	};
+
+	mtl_rx_setup: rx-queues-config {
+		snps,rx-queues-to-use = <4>;
+		snps,rx-sched-sp;
+
+		queue0 {
+			snps,dcb-algorithm;
+			snps,priority = <0x1>;
+			snps,map-to-dma-channel = <0>;
+		};
+
+		queue1 {
+			snps,dcb-algorithm;
+			snps,priority = <0x2>;
+			snps,map-to-dma-channel = <1>;
+		};
+
+		queue2 {
+			snps,dcb-algorithm;
+			snps,priority = <0x4>;
+			snps,map-to-dma-channel = <2>;
+		};
+
+		queue3 {
+			snps,dcb-algorithm;
+			snps,priority = <0xF8>;
+			snps,map-to-dma-channel = <3>;
+		};
+	};
+};
