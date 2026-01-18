@@ -17,7 +17,7 @@
 &gpt1 {
 	compatible = "fsl,avb-gpt";
 	timer-channel = <1>; /* Use output compare channel 1*/
-	rec-channel = <1 0 1>; // capture channel, eth port, ENET TC id
+	sw-recovery = <0>; /* Use SW recovery mode for STMMAC (eth port 0) */
 	prescale = <1>;
 	domain = <0>;
 
