@@ -55,6 +55,114 @@
 #include "stmmac_frp.h"
 #include "stmmac_genavb_priv.h"
 
+#define STMMAC_AVB_TPID_8021Q	0x8100
+#define STMMAC_AVB_TPID_8021AD	0x88A8
+
+static bool stmmac_avb_get_ethertype(const void *pkt, int len, u16 *ethertype,
+				     bool *vlan_tagged)
+{
+	const u8 *p = pkt;
+	u16 proto;
+
+	if (!pkt || len < ETH_HLEN)
+		return false;
+
+	proto = ((u16)p[12] << 8) | p[13];
+
+	/* Handle VLAN (802.1Q) and provider VLAN (802.1ad). */
+	if ((proto == STMMAC_AVB_TPID_8021Q || proto == STMMAC_AVB_TPID_8021AD) &&
+	    len >= 18) {
+		if (vlan_tagged)
+			*vlan_tagged = true;
+
+		proto = ((u16)p[16] << 8) | p[17];
+
+		/* Handle QinQ (double tag) if present. */
+		if ((proto == STMMAC_AVB_TPID_8021Q || proto == STMMAC_AVB_TPID_8021AD) &&
+		    len >= 22)
+			proto = ((u16)p[20] << 8) | p[21];
+	} else if (vlan_tagged) {
+		*vlan_tagged = false;
+	}
+
+	if (ethertype)
+		*ethertype = proto;
+
+	return true;
+}
+
+static inline void stmmac_avb_count_rx_packet(struct stmmac_priv *priv,
+				      const void *pkt, int len)
+{
+	u16 proto;
+	bool vlan_tagged = false;
+
+	if (!priv)
+		return;
+	if (!stmmac_avb_get_ethertype(pkt, len, &proto, &vlan_tagged))
+		return;
+
+	if (vlan_tagged)
+		priv->avb_rx_vlan_tagged++;
+
+	switch (proto) {
+	case 0x88F7: /* PTP */
+		priv->avb_rx_ptp++;
+		break;
+	case 0x22F0: /* AVTP */
+		priv->avb_rx_avtp++;
+		break;
+	case 0x88F5: /* MVRP */
+		priv->avb_rx_mvrp++;
+		break;
+	case 0x88F6: /* MMRP */
+		priv->avb_rx_mmrp++;
+		break;
+	case 0x22EA: /* MSRP */
+		priv->avb_rx_msrp++;
+		break;
+	default:
+		priv->avb_rx_other++;
+		break;
+	}
+}
+
+static inline void stmmac_avb_count_tx_packet(struct stmmac_priv *priv,
+				      const void *pkt, int len)
+{
+	u16 proto;
+	bool vlan_tagged = false;
+
+	if (!priv)
+		return;
+	if (!stmmac_avb_get_ethertype(pkt, len, &proto, &vlan_tagged))
+		return;
+
+	if (vlan_tagged)
+		priv->avb_tx_vlan_tagged++;
+
+	switch (proto) {
+	case 0x88F7: /* PTP */
+		priv->avb_tx_ptp++;
+		break;
+	case 0x22F0: /* AVTP */
+		priv->avb_tx_avtp++;
+		break;
+	case 0x88F5: /* MVRP */
+		priv->avb_tx_mvrp++;
+		break;
+	case 0x88F6: /* MMRP */
+		priv->avb_tx_mmrp++;
+		break;
+	case 0x22EA: /* MSRP */
+		priv->avb_tx_msrp++;
+		break;
+	default:
+		priv->avb_tx_other++;
+		break;
+	}
+}
+
 static void stmmac_avb_print_hex_dump(const void *buf, size_t len, const char* msg)
 {
 	const unsigned char *p = buf;
@@ -4000,6 +4108,20 @@ static int __stmmac_open(struct net_device *dev,
 	if (stmmac_avb_enabled && priv->avb_enabled) {
 		priv->avb_rx_packets = 0;
 		priv->avb_tx_packets = 0;
+		priv->avb_rx_vlan_tagged = 0;
+		priv->avb_tx_vlan_tagged = 0;
+		priv->avb_rx_ptp = 0;
+		priv->avb_rx_avtp = 0;
+		priv->avb_rx_mvrp = 0;
+		priv->avb_rx_mmrp = 0;
+		priv->avb_rx_msrp = 0;
+		priv->avb_rx_other = 0;
+		priv->avb_tx_ptp = 0;
+		priv->avb_tx_avtp = 0;
+		priv->avb_tx_mvrp = 0;
+		priv->avb_tx_mmrp = 0;
+		priv->avb_tx_msrp = 0;
+		priv->avb_tx_other = 0;
 		priv->dma_avb_conf = stmmac_avb_init_dma_desc(priv);
 		if (IS_ERR(priv->dma_avb_conf)) {
 			netdev_err(priv->dev, "%s: AVB DMA descriptors allocation failed\n",
@@ -6459,6 +6581,22 @@ static int stmmac_avb_status_show(struct seq_file *seq, void *v)
 		   priv->avb_enabled ? "Y" : "N");
 	seq_printf(seq, "\tAVB RX Packets: %d\n", priv->avb_rx_packets);
 	seq_printf(seq, "\tAVB TX Packets: %d\n", priv->avb_tx_packets);
+	seq_printf(seq, "\tRX VLAN-tagged: %u\n", priv->avb_rx_vlan_tagged);
+	seq_printf(seq, "\tTX VLAN-tagged: %u\n", priv->avb_tx_vlan_tagged);
+	seq_printf(seq, "\n\tRX by EtherType (VLAN-aware):\n");
+	seq_printf(seq, "\t  PTP  (0x88F7): %u\n", priv->avb_rx_ptp);
+	seq_printf(seq, "\t  AVTP (0x22F0): %u\n", priv->avb_rx_avtp);
+	seq_printf(seq, "\t  MVRP (0x88F5): %u\n", priv->avb_rx_mvrp);
+	seq_printf(seq, "\t  MMRP (0x88F6): %u\n", priv->avb_rx_mmrp);
+	seq_printf(seq, "\t  MSRP (0x22EA): %u\n", priv->avb_rx_msrp);
+	seq_printf(seq, "\t  Other:         %u\n", priv->avb_rx_other);
+	seq_printf(seq, "\n\tTX by EtherType (VLAN-aware):\n");
+	seq_printf(seq, "\t  PTP  (0x88F7): %u\n", priv->avb_tx_ptp);
+	seq_printf(seq, "\t  AVTP (0x22F0): %u\n", priv->avb_tx_avtp);
+	seq_printf(seq, "\t  MVRP (0x88F5): %u\n", priv->avb_tx_mvrp);
+	seq_printf(seq, "\t  MMRP (0x88F6): %u\n", priv->avb_tx_mmrp);
+	seq_printf(seq, "\t  MSRP (0x22EA): %u\n", priv->avb_tx_msrp);
+	seq_printf(seq, "\t  Other:         %u\n", priv->avb_tx_other);
 	seq_printf(seq, "\tFRP Accept Count: %d\n", accept_count);
 	return 0;
 }
@@ -8230,6 +8368,9 @@ int stmmac_enet_rx_poll_avb(void *data)
 		prefetch(buf->vaddr + buf->offset);
 		dma_sync_single_for_cpu(priv->device, buf->dma_addr, len, DMA_FROM_DEVICE);
 
+		/* VLAN-aware EtherType stats (expects Ethernet header at vaddr+offset) */
+		stmmac_avb_count_rx_packet(priv, buf->vaddr + buf->offset, len);
+
 		avb_pkt_desc = (struct avb_rx_desc*)buf->vaddr;
 		avb_pkt_desc->common.len = len;
 
@@ -8332,6 +8473,8 @@ int stmmac_enet_start_xmit_avb(void *data, struct avb_tx_desc *avb_buff)
 	unsigned int entry = tx_q->cur_tx;
 	unsigned int next_entry = STMMAC_GET_ENTRY(entry, priv->dma_avb_conf->dma_tx_size);
 	struct dma_desc *tx_desc;
+	void *pkt = (void *)avb_buff + avb_buff->common.offset;
+	size_t dump_len;
 
 	// Check if there is space in the ring
 	if( next_entry == tx_q->dirty_tx) return -EAGAIN;
@@ -8348,6 +8491,12 @@ int stmmac_enet_start_xmit_avb(void *data, struct avb_tx_desc *avb_buff)
 	if (stmmac_avb_verbose & STMMAC_AVB_VERBOSE_TX)
 		pr_info("stmmac_enet_start_xmit_avb [%d] : buffer vaddr: 0x%p, dma_addr: 0x%lx, len: %d\n",
 				entry, avb_buff, avb_buff->dma_addr, avb_buff->common.len);
+
+	/* Dump first 32 bytes (Ethernet header + a bit) */
+	if (stmmac_avb_verbose & STMMAC_AVB_VERBOSE_TX) {
+		dump_len = min_t(size_t, (size_t)avb_buff->common.len, (size_t)32);
+		stmmac_avb_print_hex_dump(pkt, dump_len, "TX avb xmit (first 32 bytes)");
+	}
 
 	if (avb_buff->common.flags & AVB_TX_FLAG_HW_TS) {
 		stmmac_enable_tx_timestamp(priv, tx_desc);
@@ -8407,6 +8556,12 @@ int stmmac_enet_tx_avb(void *data)
 
 		priv->avb_tx_packets++;
 		avb_buff = tx_q->buf_pool[entry].vaddr;
+
+		/* VLAN-aware EtherType stats (expects Ethernet header at avb_buff+offset) */
+		if (avb_buff)
+			stmmac_avb_count_tx_packet(priv,
+						  (void *)avb_buff + avb_buff->common.offset,
+						  avb_buff->common.len);
 		if (stmmac_avb_verbose & STMMAC_AVB_VERBOSE_TX)
 			pr_info("stmmac_enet_tx_avb [%d] : buffer vaddr: 0x%p, dma_addr: 0x%lx, len: %d\n",
 					entry, avb_buff, avb_buff->dma_addr, avb_buff->common.len);

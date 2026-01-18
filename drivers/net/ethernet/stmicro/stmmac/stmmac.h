@@ -282,6 +282,21 @@ struct stmmac_priv {
 	unsigned int avb_enabled;
 	unsigned int avb_rx_packets;
 	unsigned int avb_tx_packets;
+	/* Debug counters: VLAN-aware ethertype classification */
+	unsigned int avb_rx_vlan_tagged;
+	unsigned int avb_tx_vlan_tagged;
+	unsigned int avb_rx_ptp;
+	unsigned int avb_rx_avtp;
+	unsigned int avb_rx_mvrp;
+	unsigned int avb_rx_mmrp;
+	unsigned int avb_rx_msrp;
+	unsigned int avb_rx_other;
+	unsigned int avb_tx_ptp;
+	unsigned int avb_tx_avtp;
+	unsigned int avb_tx_mvrp;
+	unsigned int avb_tx_mmrp;
+	unsigned int avb_tx_msrp;
+	unsigned int avb_tx_other;
 	//__ETHTOOL_DECLARE_LINK_MODE_MASK(phy_advertising);
 	struct stmmac_avb_dma_conf *dma_avb_conf;
 	raw_spinlock_t ptp_spinlock;
