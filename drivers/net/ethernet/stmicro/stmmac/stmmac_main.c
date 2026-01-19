@@ -187,7 +187,6 @@ static u32 stmmac_avb_verbose = 0;
 
 #ifdef CONFIG_STMMAC_GENAVB
 
-#define ETH_P_AVTP 0x22E0 /* Audio Video Transport Protocol */
 #define ETH_P_MSRP 0x22EA /* Multiple Stream Reservation Protocol */
 #define ETH_P_MMRP 0x88F6 /* Multiple MAC Registration Protocol */
 
@@ -198,8 +197,7 @@ static void stmmac_avb_free_dma_desc(struct stmmac_priv *priv,
 
 static inline void stmmac_avb_filter(struct stmmac_priv *priv, bool enable)
 {
-	u16 eth_types[] = { ETH_P_1588, ETH_P_TSN, ETH_P_MVRP, ETH_P_MMRP,
-			    ETH_P_AVTP, ETH_P_MSRP };
+	u16 eth_types[] = { ETH_P_1588, ETH_P_TSN, ETH_P_MVRP, ETH_P_MMRP, ETH_P_MSRP };
 
 	if (!priv || !priv->dev)
 		return;
@@ -6499,7 +6497,8 @@ static ssize_t stmmac_avb_filter_write(struct file *file, const char __user *buf
 			dwmac5_frp_dump_stats(priv->hw->pcsr);
 			break;
 		case 'Y': {
-				u16 eth_types[] = {ETH_P_1588, ETH_P_TSN, ETH_P_MVRP, 0x88F6, 0x22ea};  // avb ether types
+				u16 eth_types[] = {ETH_P_1588, ETH_P_TSN, ETH_P_MVRP,
+				ETH_P_MSRP, ETH_P_MMRP};  // avb ether types
 
 				pr_info("Adding AVB filter...\n");
 				if (stmmac_rxp_setup(priv, eth_types, ARRAY_SIZE(eth_types)))
@@ -8288,7 +8287,7 @@ int stmmac_enet_rx_poll_avb(void *data)
 			case ETH_P_1588:
 				priv->avb_rx_ptp_packets++;
 				break;
-			case ETH_P_AVTP:
+			case ETH_P_TSN:
 				priv->avb_rx_avtp_packets++;
 				break;
 			default:
@@ -8463,7 +8462,7 @@ int stmmac_enet_tx_avb(void *data)
 			case ETH_P_1588:
 				priv->avb_tx_ptp_packets++;
 				break;
-			case ETH_P_AVTP:
+			case ETH_P_TSN:
 				priv->avb_tx_avtp_packets++;
 				break;
 			default:
