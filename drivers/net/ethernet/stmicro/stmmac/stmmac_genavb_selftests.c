@@ -4,7 +4,7 @@
 #include "stmmac_frp.h"
 #ifdef CONFIG_STMMAC_GENAVB
 #include "stmmac_genavb_priv.h"
-#define STMMAC_AVB_TX_ROOT_CAUSE_TESTS 1
+#define STMMAC_AVB_TX_ROOT_CAUSE_TESTS 0
 
 static bool stmmac_avb_test_in_progress = false;
 
@@ -389,11 +389,80 @@ static int stmmac_send_avtp_packet(struct stmmac_priv *priv,  unsigned int queue
 	return ret;
 }
 
+static int stmmac_send_avtp_packet_vlan(struct stmmac_priv *priv,
+				       unsigned int queue_id,
+				       u16 vlan_tci)
+{
+	int ret = 0;
+	struct avb_tx_desc *desc;
+	/*
+	 * VLAN-tagged AVTP packet:
+	 *   DA(6) SA(6) TPID(0x8100) TCI(vlan_tci) EtherType(0x22f0) AVTP...
+	 */
+	u8 avtp_vlan[] = {
+		/* DA */
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		/* SA */
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		/* TPID */
+		0x81, 0x00,
+		/* TCI (filled below) */
+		0x00, 0x00,
+		/* EtherType */
+		0x22, 0xf0,
+		/* AVTPDU (minimal-ish) */
+		0xfa,  /* AVTP_SUBTYPE_ADP */
+		0x02,  /* Version, Sub-version */
+		0x00, 0x38, /* Length */
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00
+	};
+
+	/* DA/SA = device MAC for loopback */
+	memcpy(avtp_vlan, priv->dev->dev_addr, ETH_ALEN);
+	memcpy(avtp_vlan + ETH_ALEN, priv->dev->dev_addr, ETH_ALEN);
+	avtp_vlan[14] = (u8)(vlan_tci >> 8);
+	avtp_vlan[15] = (u8)(vlan_tci & 0xff);
+
+	desc = priv->avb->alloc(priv->avb_data);
+	if (!desc) {
+		netdev_err(priv->dev, "Failed to alloc tx buffer\n");
+		return -ENOMEM;
+	}
+
+	memcpy((void *)desc + desc->common.offset, avtp_vlan, sizeof(avtp_vlan));
+	desc->common.len = sizeof(avtp_vlan);
+
+	pr_info("Sending VLAN-tagged AVTP: TCI=0x%04x queue=%u\n", vlan_tci, queue_id);
+
+	ret = (queue_id == STMMAC_AVB_CHANNEL) ?
+		stmmac_enet_start_xmit_avb(priv, desc) :
+		stmmac_avb_xmit_avb_tx_desc(priv, queue_id, desc);
+	if (ret < 0) {
+		netdev_err(priv->dev, "Failed to start xmit (vlan)\n");
+		return ret;
+	}
+
+	return ret;
+}
+
 static int stmmac_avb_test_avtp_packet_as_avb_desc(struct stmmac_priv *priv)
 {
     int ret;
+	u32 before = 0, after = 0;
+	u16 vlan_tci = 0x6002; /* PCP=3, DEI=0, VID=2 */
 
     pr_info("Testing AVB packet ... queue 0\n");
+
+	dwmac5_frp_get_stats(priv->hw->pcsr, STMMAC_AVB_CHANNEL, &before);
 
     /* send an AVTP Discovery packet */
     ret = stmmac_send_avtp_packet(priv, 0);
@@ -408,6 +477,23 @@ static int stmmac_avb_test_avtp_packet_as_avb_desc(struct stmmac_priv *priv)
     if (ret) {
         pr_err("Failed to send AVTP packet\n");
     }
+
+	/* VLAN-tagged AVTP */
+	//pr_info("Testing VLAN-tagged AVTP packet ... queue 0\n");
+	//ret = stmmac_send_avtp_packet_vlan(priv, 0, vlan_tci);
+	//if (ret)
+	//	pr_err("Failed to send VLAN-tagged AVTP packet\n");
+
+	pr_info("Testing VLAN-tagged AVTP packet ... STMMAC_AVB_CHANNEL\n");
+	ret = stmmac_send_avtp_packet_vlan(priv, STMMAC_AVB_CHANNEL, vlan_tci);
+	if (ret)
+		pr_err("Failed to send VLAN-tagged AVTP packet\n");
+
+	/* Allow RX parser accept counter to update */
+	msleep(50);
+	dwmac5_frp_get_stats(priv->hw->pcsr, STMMAC_AVB_CHANNEL, &after);
+	pr_info("FRP accept count (DMA CH %u): before=%u after=%u delta=%d\n",
+		STMMAC_AVB_CHANNEL, before, after, (int)(after - before));
 
     return ret;
 }

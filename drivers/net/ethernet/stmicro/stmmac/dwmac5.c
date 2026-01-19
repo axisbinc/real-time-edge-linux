@@ -5,6 +5,7 @@
 #include <linux/bitops.h>
 #include <linux/iopoll.h>
 #include <linux/types.h>
+#include <linux/byteorder/generic.h>
 #include "common.h"
 #include "dwmac4.h"
 #include "dwmac5.h"
@@ -423,6 +424,94 @@ void dwmac5_frp_get_stats(void __iomem *ioaddr, uint8_t dma_channel,
         *accept_count = val;
 }
 
+static int dwmac5_rxp_iacc_read_word(void __iomem *base, u16 addr, u32 *data)
+{
+	u32 ctrl;
+	int ret;
+
+	if (!data)
+		return -EINVAL;
+
+	/* Wait for ready */
+	ret = readl_poll_timeout(base + MTL_RXP_IACC_CTRL_STATUS,
+				 ctrl, !(ctrl & STARTBUSY), 1, 10000);
+	if (ret)
+		return ret;
+
+	/* Program address (read op => WRRDN cleared) */
+	ctrl = addr & ADDR;
+	writel(ctrl, base + MTL_RXP_IACC_CTRL_STATUS);
+
+	/* Start read */
+	ctrl |= STARTBUSY;
+	writel(ctrl, base + MTL_RXP_IACC_CTRL_STATUS);
+
+	/* Wait for done */
+	ret = readl_poll_timeout(base + MTL_RXP_IACC_CTRL_STATUS,
+				 ctrl, !(ctrl & STARTBUSY), 1, 10000);
+	if (ret)
+		return ret;
+
+	*data = readl(base + MTL_RXP_IACC_DATA);
+	return 0;
+}
+
+void dwmac5_frp_dump_rxp(void __iomem *ioaddr)
+{
+	union frp_instruction instr;
+	u32 ctrl;
+	u32 nve;
+	u32 npe;
+	int pos;
+
+	ctrl = readl(ioaddr + MTL_RXP_CONTROL_STATUS);
+	nve = ctrl & NVE;
+	npe = (ctrl & NPE) >> 16;
+
+	pr_info("FRP table: NVE=%u, NPE=0x%x, CTRL=0x%x\n", nve, npe, ctrl);
+
+	/* Keep output bounded in case something goes wrong */
+	if (nve > 64) {
+		pr_info("FRP table: limiting dump to first 64 entries (reported NVE=%u)\n", nve);
+		nve = 64;
+	}
+
+	for (pos = 0; pos < (int)nve; pos++) {
+		int ret;
+		u32 w0 = 0, w1 = 0, w2 = 0, w3 = 0;
+		u16 ethertype;
+
+		ret = dwmac5_rxp_iacc_read_word(ioaddr, (u16)(pos * 4 + 0), &w0);
+		ret |= dwmac5_rxp_iacc_read_word(ioaddr, (u16)(pos * 4 + 1), &w1);
+		ret |= dwmac5_rxp_iacc_read_word(ioaddr, (u16)(pos * 4 + 2), &w2);
+		ret |= dwmac5_rxp_iacc_read_word(ioaddr, (u16)(pos * 4 + 3), &w3);
+		if (ret) {
+			pr_info("FRP[%d]: read failed (%d)\n", pos, ret);
+			continue;
+		}
+
+		instr.as_array[0] = w0;
+		instr.as_array[1] = w1;
+		instr.as_array[2] = w2;
+		instr.as_array[3] = w3;
+
+		ethertype = be16_to_cpu((__force __be16)(instr.fields.match_data & 0xffff));
+
+		pr_info("FRP[%02d] raw: %08x %08x %08x %08x\n", pos, w0, w1, w2, w3);
+		pr_info("FRP[%02d] dec: af=%u rf=%u im=%u nc=%u off=%u ok=%u dma_mask=0x%02x match_en=0x%08x eth=0x%04x\n",
+			pos,
+			instr.fields.af,
+			instr.fields.rf,
+			instr.fields.im,
+			instr.fields.nc,
+			instr.fields.frame_offset,
+			instr.fields.ok_index,
+			instr.fields.dma_ch_no,
+			instr.fields.match_en,
+			ethertype);
+	}
+}
+
 void dwmac5_frp_dump_stats(void __iomem *ioaddr)
 {
     u32 val;
@@ -479,8 +568,16 @@ int dwmac5_frp_update_num_entries(void __iomem *ioaddr, uint32_t num_entries)
     u32 val;
 
     val = readl(ioaddr + MTL_RXP_CONTROL_STATUS);
-    val |= num_entries & NVE;
-    writel(val, ioaddr + MTL_RXP_CONTROL_STATUS);
+
+	/*
+	 * Program Number of Valid Entries (NVE) and Number of Parsable Entries
+	 * (NPE). Do not OR-in: stale values lead to bogus table sizes and
+	 * unpredictable matching.
+	 */
+	val &= ~(NVE | NPE);
+	val |= num_entries & NVE;
+	val |= (num_entries << 16) & NPE;
+	writel(val, ioaddr + MTL_RXP_CONTROL_STATUS);
 
     return 0;
 }
