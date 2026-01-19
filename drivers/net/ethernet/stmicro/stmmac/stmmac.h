@@ -297,6 +297,11 @@ struct stmmac_priv {
 	unsigned int avb_tx_mmrp;
 	unsigned int avb_tx_msrp;
 	unsigned int avb_tx_other;
+	/* AVB DMA debug counters */
+	unsigned int avb_rx_discard;      /* DMA discard frames (CRC/overflow) */
+	unsigned int avb_rx_alloc_fail;   /* Buffer alloc failures */
+	unsigned int avb_rx_dispatched;   /* Successfully dispatched to AVB module */
+	unsigned int avb_tx_ring_full;    /* TX ring full (EAGAIN) */
 	//__ETHTOOL_DECLARE_LINK_MODE_MASK(phy_advertising);
 	struct stmmac_avb_dma_conf *dma_avb_conf;
 	raw_spinlock_t ptp_spinlock;

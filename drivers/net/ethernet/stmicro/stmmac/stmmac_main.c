@@ -4122,6 +4122,11 @@ static int __stmmac_open(struct net_device *dev,
 		priv->avb_tx_mmrp = 0;
 		priv->avb_tx_msrp = 0;
 		priv->avb_tx_other = 0;
+		/* DMA debug counters */
+		priv->avb_rx_discard = 0;
+		priv->avb_rx_alloc_fail = 0;
+		priv->avb_rx_dispatched = 0;
+		priv->avb_tx_ring_full = 0;
 		priv->dma_avb_conf = stmmac_avb_init_dma_desc(priv);
 		if (IS_ERR(priv->dma_avb_conf)) {
 			netdev_err(priv->dev, "%s: AVB DMA descriptors allocation failed\n",
@@ -6598,6 +6603,11 @@ static int stmmac_avb_status_show(struct seq_file *seq, void *v)
 	seq_printf(seq, "\t  MSRP (0x22EA): %u\n", priv->avb_tx_msrp);
 	seq_printf(seq, "\t  Other:         %u\n", priv->avb_tx_other);
 	seq_printf(seq, "\tFRP Accept Count: %d\n", accept_count);
+	seq_printf(seq, "\n\tDMA Debug Counters:\n");
+	seq_printf(seq, "\t  RX Discard frames: %u\n", priv->avb_rx_discard);
+	seq_printf(seq, "\t  RX Alloc failures: %u\n", priv->avb_rx_alloc_fail);
+	seq_printf(seq, "\t  RX Dispatched:     %u\n", priv->avb_rx_dispatched);
+	seq_printf(seq, "\t  TX Ring full:      %u\n", priv->avb_tx_ring_full);
 	return 0;
 }
 DEFINE_SHOW_ATTRIBUTE(stmmac_avb_status);
@@ -6615,6 +6625,10 @@ static ssize_t stmmac_avb_filter_write(struct file *file, const char __user *buf
 		case 'D':
 			pr_info("Dump FRP stats...\n");
 			dwmac5_frp_dump_stats(priv->hw->pcsr);
+			break;
+		case 'E':
+			pr_info("Dump FRP table...\n");
+			dwmac5_frp_dump_rxp(priv->hw->pcsr);
 			break;
 		case 'Y': {
 				u16 eth_types[] = {ETH_P_1588, ETH_P_TSN, ETH_P_MVRP, 0x88F6, 0x22ea};  // avb ether types
@@ -8359,6 +8373,7 @@ int stmmac_enet_rx_poll_avb(void *data)
 				priv->dma_avb_conf->dma_rx_size);
 
 		if (unlikely(status == discard_frame)) {
+			priv->avb_rx_discard++;
 			// recycle the frame
 			dma_wmb();
 			stmmac_set_rx_owner(priv, desc, true); /* give back to the DMA */
@@ -8382,6 +8397,7 @@ int stmmac_enet_rx_poll_avb(void *data)
 		/* replace the rx_buffer */
 		new_avb_buf = priv->avb->alloc(priv->avb_data);
 		if (!new_avb_buf) {
+			priv->avb_rx_alloc_fail++;
 			netdev_err(priv->dev, "Failed to alloc rx buffer (dropping frame)\n");
 			/* Do not stall the AVB DMA ring. Drop this frame and return the 
              * descriptor to DMA ownership */
@@ -8407,6 +8423,7 @@ int stmmac_enet_rx_poll_avb(void *data)
 		// 			, len, "RX avb poll");
 
 		/* dispatch the inbound packet */
+		priv->avb_rx_dispatched++;
 		rc |= priv->avb->rx(priv->avb_data, avb_pkt_desc);
 	}
 
@@ -8477,7 +8494,10 @@ int stmmac_enet_start_xmit_avb(void *data, struct avb_tx_desc *avb_buff)
 	size_t dump_len;
 
 	// Check if there is space in the ring
-	if( next_entry == tx_q->dirty_tx) return -EAGAIN;
+	if (next_entry == tx_q->dirty_tx) {
+		priv->avb_tx_ring_full++;
+		return -EAGAIN;
+	}
 
 	dma_sync_single_for_device(priv->device, avb_buff->dma_addr,
 			avb_buff->common.len, DMA_BIDIRECTIONAL);
