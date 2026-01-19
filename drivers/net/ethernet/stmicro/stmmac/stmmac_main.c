@@ -189,6 +189,41 @@ static u32 stmmac_avb_verbose = 0;
 
 #define ETH_P_MSRP 0x22EA /* Multiple Stream Reservation Protocol */
 #define ETH_P_MMRP 0x88F6 /* Multiple MAC Registration Protocol */
+#define STMMAC_AVB_TPID_8021Q	0x8100
+#define STMMAC_AVB_TPID_8021AD	0x88A8
+
+static bool stmmac_avb_get_ethertype(const void *pkt, int len, u16 *ethertype,
+				     bool *vlan_tagged)
+{
+	const u8 *p = pkt;
+	u16 proto;
+
+	if (!pkt || len < ETH_HLEN)
+		return false;
+
+	proto = ((u16)p[12] << 8) | p[13];
+
+	/* Handle VLAN (802.1Q) and provider VLAN (802.1ad). */
+	if ((proto == STMMAC_AVB_TPID_8021Q || proto == STMMAC_AVB_TPID_8021AD) &&
+	    len >= 18) {
+		if (vlan_tagged)
+			*vlan_tagged = true;
+
+		proto = ((u16)p[16] << 8) | p[17];
+
+		/* Handle QinQ (double tag) if present. */
+		if ((proto == STMMAC_AVB_TPID_8021Q || proto == STMMAC_AVB_TPID_8021AD) &&
+		    len >= 22)
+			proto = ((u16)p[20] << 8) | p[21];
+	} else if (vlan_tagged) {
+		*vlan_tagged = false;
+	}
+
+	if (ethertype)
+		*ethertype = proto;
+
+	return true;
+}
 
 static struct stmmac_avb_dma_conf* stmmac_avb_init_dma_desc(struct stmmac_priv *priv);
 static int stmmac_avb_init_dma_engine(struct stmmac_priv *priv);
@@ -4009,8 +4044,12 @@ static int __stmmac_open(struct net_device *dev,
 		priv->avb_tx_avtp_packets = 0;
 		priv->avb_rx_ptp_packets = 0;
 		priv->avb_tx_ptp_packets = 0;
-		priv->avb_rx_other_packets = 0;
-		priv->avb_tx_other_packets = 0;
+		priv->avb_rx_mmrp_packets = 0;
+		priv->avb_tx_mmrp_packets = 0;
+		priv->avb_rx_mvrp_packets = 0;
+		priv->avb_tx_mvrp_packets = 0;
+		priv->avb_rx_msrp_packets = 0;
+		priv->avb_tx_msrp_packets = 0;
 		
 		priv->dma_avb_conf = stmmac_avb_init_dma_desc(priv);
 		if (IS_ERR(priv->dma_avb_conf)) {
@@ -6475,8 +6514,12 @@ static int stmmac_avb_status_show(struct seq_file *seq, void *v)
 	seq_printf(seq, "\tAVB TX AVTP Packets: %d\n", priv->avb_tx_avtp_packets);
 	seq_printf(seq, "\tAVB RX PTP Packets: %d\n", priv->avb_rx_ptp_packets);
 	seq_printf(seq, "\tAVB TX PTP Packets: %d\n", priv->avb_tx_ptp_packets);
-	seq_printf(seq, "\tAVB RX Other Packets: %d\n", priv->avb_rx_other_packets);
-	seq_printf(seq, "\tAVB TX Other Packets: %d\n", priv->avb_tx_other_packets);
+	seq_printf(seq, "\tAVB RX MSRP Packets: %d\n", priv->avb_rx_msrp_packets);
+	seq_printf(seq, "\tAVB TX MSRP Packets: %d\n", priv->avb_tx_msrp_packets);
+	seq_printf(seq, "\tAVB RX MMRP Packets: %d\n", priv->avb_rx_mmrp_packets);
+	seq_printf(seq, "\tAVB TX MMRP Packets: %d\n", priv->avb_tx_mmrp_packets);
+	seq_printf(seq, "\tAVB RX MVRP Packets: %d\n", priv->avb_rx_mvrp_packets);
+	seq_printf(seq, "\tAVB TX MVRP Packets: %d\n", priv->avb_tx_mvrp_packets);
 	seq_printf(seq, "\tFRP Accept Count: %d\n", accept_count);
 	return 0;
 }
@@ -8281,17 +8324,30 @@ int stmmac_enet_rx_poll_avb(void *data)
 		rx_q->rx_count_bytes += len;
 
 		void* packet_data = (void*)avb_pkt_desc + avb_pkt_desc->common.offset;
-		struct ethhdr* eth = (struct ethhdr*)packet_data;
+		// struct ethhdr* eth = (struct ethhdr*)packet_data;
+		u16 ether_type;
+		bool vlan_tagged = false;
+		if(!stmmac_avb_get_ethertype(packet_data, len, &ether_type, 
+			&vlan_tagged))
+			pr_err("stmmac_enet_rx_poll_avb: failed to get ethertype\n");
 
-		switch(ntohs(eth->h_proto)) {
+		switch(ntohs(ether_type)) {
 			case ETH_P_1588:
 				priv->avb_rx_ptp_packets++;
 				break;
 			case ETH_P_TSN:
 				priv->avb_rx_avtp_packets++;
 				break;
+			case ETH_P_MMRP:
+				priv->avb_rx_mmrp_packets++;
+				break;
+			case ETH_P_MVRP:
+				priv->avb_rx_mvrp_packets++;
+				break;
+			case ETH_P_MSRP:
+				priv->avb_rx_msrp_packets++;
+				break;
 			default:
-				priv->avb_rx_other_packets++;
 				break;
 		}
 
