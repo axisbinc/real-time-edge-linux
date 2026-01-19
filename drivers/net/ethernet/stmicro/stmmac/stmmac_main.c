@@ -8521,8 +8521,16 @@ int stmmac_enet_tx_avb(void *data)
 			case ETH_P_TSN:
 				priv->avb_tx_avtp_packets++;
 				break;
+			case ETH_P_MMRP:
+				priv->avb_rx_mmrp_packets++;
+				break;
+			case ETH_P_MVRP:
+				priv->avb_rx_mvrp_packets++;
+				break;
+			case ETH_P_MSRP:
+				priv->avb_rx_msrp_packets++;
+				break;
 			default:
-				priv->avb_tx_other_packets++;
 				break;
 		}
 
