@@ -334,7 +334,3 @@
 		};
 	};
 };
-
-&fec {
-	status = "disabled";
-};
