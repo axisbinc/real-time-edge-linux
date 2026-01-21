@@ -1,4 +1,7 @@
-// Copyright AxisB Inc 2024
+/*
+ * Copyright AxisB Inc 2024 - 2025
+ * All rights reserved
+ */
 
 #include "imx8mp-var-som-symphony.dts"
 
@@ -49,7 +52,7 @@
 		>;
 	};
 
-    gpio4_21: gpio_perf_grp {
+    pinctrl_gpio4_21: gpio_perf_grp {
         fsl,pins = <
 			MX8MP_IOMUXC_SAI2_RXFS__GPIO4_IO21			            0xd6
         >;
@@ -60,7 +63,7 @@
 	compatible = "fsl,imx8mp-hifi4";
 	reg = <0x0 0x3B6E8000 0x0 0x88000>;
 	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_sai2>, <&pinctrl_i2c5>, <&pinctrl_uart4>, <&gpio4_21>;
+	pinctrl-0 = <&pinctrl_sai2>, <&pinctrl_i2c5>, <&pinctrl_uart4>, <&pinctrl_gpio4_21>;
 	assigned-clocks = <&clk IMX8MP_CLK_SAI2>;
 	assigned-clock-parents = <&clk IMX8MP_AUDIO_PLL1_OUT>;
 	assigned-clock-rates = <24576000>;
