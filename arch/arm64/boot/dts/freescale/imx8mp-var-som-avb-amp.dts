@@ -334,3 +334,13 @@
 		};
 	};
 };
+
+/* Force FEC ethernet to 100 Mbps */
+&fec {
+	max-speed = <100>;
+};
+
+/* Also limit the PHY to 100 Mbps */
+&ethphy1 {
+	max-speed = <100>;
+};
