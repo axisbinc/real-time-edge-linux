@@ -915,6 +915,12 @@ config SND_SOC_DMIC
 	help
 	  Enable support for the Generic Digital Microphone CODEC.
 	  Select this if your sound card has DMICs.
+	
+config SND_SOC_DUMMY_CODEC
+	tristate "Dummy Codec with Device Tree Support"
+	help
+	  Enable support for a dummy codec driver with device tree support.
+	  This is useful for testing audio interfaces without a physical codec.
 
 config SND_SOC_HDMI_CODEC
 	tristate
