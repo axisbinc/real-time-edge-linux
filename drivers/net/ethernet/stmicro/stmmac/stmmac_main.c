@@ -8329,12 +8329,78 @@ alloc_error:
 
 int stmmac_enet_set_idle_slope(void *data, unsigned int queue_id, u32 idle_slope)
 {
-	pr_info("[%d] %s: queue %d, idle_slope: %u\n", __LINE__, __func__,
-		queue_id, idle_slope);
-	/*
-	 * TODO: Enable HW CBS (credit-based shaper).
-	 */
-	return -EOPNOTSUPP;
+	struct stmmac_priv *priv = data;
+	u32 queue = queue_id;
+	u32 ptr, speed_div;
+	u64 value;
+	s32 send_slope;
+	int ret;
+
+	pr_info("%s: queue %d, idle_slope: %u bps\n", __func__, queue_id, idle_slope);
+
+	/* Basic validation */
+	if (!priv) {
+		pr_err("%s: Invalid priv pointer\n", __func__);
+		return -EINVAL;
+	}
+
+	if (!priv->dma_cap.av) {
+		pr_warn("%s: Hardware CBS not supported\n", __func__);
+		return -EOPNOTSUPP;
+	}
+
+	/* Determine speed parameters */
+	switch (priv->speed) {
+	case SPEED_1000:
+		ptr = 8;
+		speed_div = 1000000;
+		break;
+	case SPEED_100:
+		ptr = 4;
+		speed_div = 100000;
+		break;
+	default:
+		pr_err("%s: Unsupported link speed %d\n", __func__, priv->speed);
+		return -EOPNOTSUPP;
+	}
+
+	/* Calculate CBS parameters */
+	value = div_s64((s64)idle_slope * 1024ll * ptr, speed_div);
+	priv->plat->tx_queues_cfg[queue].idle_slope = value & GENMASK(31, 0);
+
+	send_slope = -(s32)(speed_div - idle_slope);
+	value = div_s64((s64)send_slope * 1024ll * ptr, speed_div);
+	priv->plat->tx_queues_cfg[queue].send_slope = value & GENMASK(31, 0);
+
+	/* Use default credit limits */
+	priv->plat->tx_queues_cfg[queue].high_credit = 1500 * 1024 * 8;
+	priv->plat->tx_queues_cfg[queue].low_credit = -1500 * 1024 * 8;
+
+	/* Switch queue to AVB mode and configure CBS */
+	ret = stmmac_dma_qmode(priv, priv->ioaddr, queue, MTL_QUEUE_AVB);
+	if (ret) {
+		pr_err("%s: Failed to set queue to AVB mode\n", __func__);
+		return ret;
+	}
+
+	priv->plat->tx_queues_cfg[queue].mode_to_use = MTL_QUEUE_AVB;
+
+	/* Program hardware CBS registers */
+	ret = stmmac_config_cbs(priv, priv->hw,
+				priv->plat->tx_queues_cfg[queue].send_slope,
+				priv->plat->tx_queues_cfg[queue].idle_slope,
+				priv->plat->tx_queues_cfg[queue].high_credit,
+				priv->plat->tx_queues_cfg[queue].low_credit,
+				queue);
+	if (ret) {
+		pr_err("%s: Failed to configure CBS\n", __func__);
+		return ret;
+	}
+
+	pr_info("%s: CBS configured for queue %d - idle_slope: %u bps\n",
+		__func__, queue, idle_slope);
+
+	return 0;
 }
 EXPORT_SYMBOL(stmmac_enet_set_idle_slope);
 
