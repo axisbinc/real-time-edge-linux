@@ -243,11 +243,11 @@ struct stmmac_avb_dma_conf {
 	unsigned int dma_buf_sz;
 
 	/* RX Queue */
-	struct stmmac_avb_rx_queue rx_queue;
+	struct stmmac_avb_rx_queue rx_queue[MTL_MAX_AVB_RX_QUEUES];
 	unsigned int dma_rx_size;
 
 	/* TX Queue */
-	struct stmmac_avb_tx_queue tx_queue;
+	struct stmmac_avb_tx_queue tx_queue[MTL_MAX_AVB_TX_QUEUES];
 	unsigned int dma_tx_size;
 };
 #endif

@@ -7,7 +7,9 @@
 #include <linux/stmmac_genavb.h>
 
 // todo: priv->plat->avb_dma_cfg->avb_dma_chan
-#define STMMAC_AVB_CHANNEL 4
+#define STMMAC_AVB_CHANNEL_BASE 3
+#define STMMAC_AVB_CHANNEL_PRIORITY STMMAC_AVB_CHANNEL_BASE
+#define STMMAC_AVB_CHANNEL_CBS 4
 
 // selftests
 int stmmac_avb_test_rxp(struct stmmac_priv *priv);
