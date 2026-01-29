@@ -18,12 +18,12 @@ int stmmac_rxp_setup(struct stmmac_priv *priv, u16 eth_types[], u16 count)
         u16 eth_type = eth_types[i];
 
         // Set up FRP instruction for standard Ethernet header (non-VLAN)
-        stmmac_frp_set_ethertype_match(&instr, eth_type, false, STMMAC_AVB_CHANNEL);
+        stmmac_frp_set_ethertype_match(&instr, eth_type, false, STMMAC_AVB_CHANNEL_PRIORITY);
         ret |= dwmac5_frp_update_single_entry(priv->hw->pcsr, &instr,
                 entry_index++);
         
         // Set up FRP instruction for VLAN-tagged Ethernet header
-        stmmac_frp_set_ethertype_match(&instr, eth_type, true, STMMAC_AVB_CHANNEL);
+        stmmac_frp_set_ethertype_match(&instr, eth_type, true, STMMAC_AVB_CHANNEL_PRIORITY);
         ret |= dwmac5_frp_update_single_entry(priv->hw->pcsr, &instr,
                 entry_index++);
     }
