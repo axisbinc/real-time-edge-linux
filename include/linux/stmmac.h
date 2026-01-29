@@ -23,6 +23,11 @@
 #define STMMAC_RX_COE_TYPE1	1
 #define STMMAC_RX_COE_TYPE2	2
 
+#ifdef CONFIG_STMMAC_GENAVB
+#define MTL_MAX_AVB_RX_QUEUES	2
+#define MTL_MAX_AVB_TX_QUEUES	2
+#endif
+
 /* Define the macros for CSR clock range parameters to be passed by
  * platform code.
  * This could also be configured at run time using CPU freq framework. */

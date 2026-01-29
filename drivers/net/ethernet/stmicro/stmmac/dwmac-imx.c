@@ -598,9 +598,12 @@ int stmmac_enet_get_tx_queue_properties(int ifindex, struct tx_queue_properties 
 
 	priv = netdev_priv(ndev);
 	/* Advertise single queue with CBS support */
-	prop->num_queues = 1;
+	prop->num_queues = 2;
 	prop->queue[0].priority = 0;
-	prop->queue[0].flags = TX_QUEUE_FLAGS_CREDIT_SHAPER;
+	prop->queue[0].flags = TX_QUEUE_FLAGS_STRICT_PRIORITY;
+
+	prop->queue[1].priority = 1;
+	prop->queue[1].flags = TX_QUEUE_FLAGS_CREDIT_SHAPER;
 
 	dev_put(ndev);
 

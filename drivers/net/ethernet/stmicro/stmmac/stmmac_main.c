@@ -2776,7 +2776,7 @@ static int stmmac_tx_clean(struct stmmac_priv *priv, int budget, u32 queue)
 			skb = tx_q->tx_skbuff[entry];
 			if (stmmac_avb_test_is_in_progress() && (stmmac_avb_verbose & STMMAC_SKB_VERBOSE_TX)) {
 				uint32_t accept_count = 0;
-				dwmac5_frp_get_stats(priv->hw->pcsr, STMMAC_AVB_CHANNEL, &accept_count);
+				dwmac5_frp_get_stats(priv->hw->pcsr, STMMAC_AVB_CHANNEL_PRIORITY, &accept_count);
 				pr_info("TX skb cleanup: AVB accept_count=%d\n", accept_count);
 				stmmac_avb_print_hex_dump(skb->data, skb->len, "TX skb cleanup");
 			}
@@ -4224,8 +4224,8 @@ static int stmmac_release(struct net_device *dev)
 		stmmac_avb_filter(priv, false);
 
 		/* Stop AVB DMA and free the descriptors */
-		stmmac_stop_rx_dma(priv, STMMAC_AVB_CHANNEL);
-		stmmac_stop_tx_dma(priv, STMMAC_AVB_CHANNEL);
+		stmmac_stop_rx_dma(priv, STMMAC_AVB_CHANNEL_PRIORITY);
+		stmmac_stop_tx_dma(priv, STMMAC_AVB_CHANNEL_PRIORITY);
 		stmmac_avb_free_dma_desc(priv, priv->dma_avb_conf);
 		kfree(priv->dma_avb_conf);
 		priv->dma_avb_conf = NULL;
@@ -5161,7 +5161,7 @@ static struct sk_buff *stmmac_xdp_run_prog(struct stmmac_priv *priv,
 
 	if (stmmac_avb_test_is_in_progress() && (stmmac_avb_verbose & STMMAC_SKB_VERBOSE_RX)) {
 		uint32_t accept_count = 0;
-		dwmac5_frp_get_stats(priv->hw->pcsr, STMMAC_AVB_CHANNEL, &accept_count);
+		dwmac5_frp_get_stats(priv->hw->pcsr, STMMAC_AVB_CHANNEL_PRIORITY, &accept_count);
 		pr_info("RX: AVB accept_count=%d\n", accept_count);
 		stmmac_avb_print_hex_dump(xdp->data, xdp->data_end - xdp->data, "RX pkt");
 	}
@@ -6574,7 +6574,7 @@ static int stmmac_avb_status_show(struct seq_file *seq, void *v)
 	struct net_device *dev = seq->private;
 	struct stmmac_priv *priv = netdev_priv(dev);
 	int accept_count = 0;
-	dwmac5_frp_get_stats(priv->hw->pcsr, STMMAC_AVB_CHANNEL, &accept_count);
+	dwmac5_frp_get_stats(priv->hw->pcsr, STMMAC_AVB_CHANNEL_PRIORITY, &accept_count);
 
 	seq_printf(seq, "==============================\n");
 	seq_printf(seq, "\tAVB Status\n");
@@ -8095,27 +8095,31 @@ EXPORT_SYMBOL_GPL(stmmac_resume);
 
 static int stmmac_avb_init_dma_engine(struct stmmac_priv *priv)
 {
-	u32 avb_chan = STMMAC_AVB_CHANNEL;
+	u32 chan, i;
 	struct stmmac_avb_rx_queue *rx_q;
 	struct stmmac_avb_tx_queue *tx_q;
 	u32 num_rx_descs = priv->dma_avb_conf->dma_rx_size;
 	u32 num_tx_descs = priv->dma_avb_conf->dma_tx_size;
 
 	pr_info("[%d] %s\n", __LINE__, __func__);
-	stmmac_init_chan(priv, priv->ioaddr, priv->plat->dma_cfg, avb_chan);
-	stmmac_disable_dma_irq(priv, priv->ioaddr, avb_chan, 1, 1);
 
-	stmmac_set_dma_bfsize(priv, priv->ioaddr, priv->dma_avb_conf->dma_buf_sz, avb_chan);
+	/* AVB DMA RX Channel Configuration */
+	/* Only 2 AVB channels are set */
+	for(i = 0; i < 2; i++){
+		chan = i + STMMAC_AVB_CHANNEL_BASE;
+		stmmac_init_chan(priv, priv->ioaddr, priv->plat->dma_cfg, chan);
+		stmmac_disable_dma_irq(priv, priv->ioaddr, chan, 1, 1);
+		stmmac_set_dma_bfsize(priv, priv->ioaddr, priv->dma_avb_conf->dma_buf_sz, chan);
+		/* no split header - aiming for one frame per packet */
+		stmmac_enable_sph(priv, priv->ioaddr, false, chan);
 
-	/* no split header - aiming for one frame per packet */
-	stmmac_enable_sph(priv, priv->ioaddr, false, avb_chan);
-
-	rx_q = &priv->dma_avb_conf->rx_queue;
-	rx_q->avb_chan = avb_chan;
-	stmmac_init_rx_chan(priv, priv->ioaddr, priv->plat->dma_cfg,
-			rx_q->dma_rx_phy, avb_chan);
-	rx_q->rx_tail_addr = rx_q->dma_rx_phy + (num_rx_descs * sizeof(struct dma_desc));
-	stmmac_set_rx_tail_ptr(priv, priv->ioaddr, rx_q->rx_tail_addr, avb_chan);
+		rx_q = &priv->dma_avb_conf->rx_queue[chan - STMMAC_AVB_CHANNEL_PRIORITY];
+		rx_q->avb_chan = chan;
+		stmmac_init_rx_chan(priv, priv->ioaddr, priv->plat->dma_cfg,
+				rx_q->dma_rx_phy, chan);
+		rx_q->rx_tail_addr = rx_q->dma_rx_phy + (num_rx_descs * sizeof(struct dma_desc));
+		stmmac_set_rx_tail_ptr(priv, priv->ioaddr, rx_q->rx_tail_addr, chan);
+	}
 
 	/* install buffers in the DMA descriptor */
 	for (int i = 0; i < num_rx_descs; i++) {
@@ -8130,26 +8134,33 @@ static int stmmac_avb_init_dma_engine(struct stmmac_priv *priv)
 		dma_wmb();
 		stmmac_set_rx_owner(priv, desc, true); /* DMA owns this descriptor */
 	}
-	stmmac_set_rx_ring_len(priv, priv->ioaddr, (num_rx_descs - 1), avb_chan);
 
-	/* setup the tx channel */
-	tx_q = &priv->dma_avb_conf->tx_queue;
-	tx_q->avb_chan = avb_chan;
-	stmmac_init_tx_chan(priv, priv->ioaddr, priv->plat->dma_cfg,
-			tx_q->dma_tx_phy, avb_chan);
-	// todo: enable TBS, switch to use of the struct dma_edesc
-	//if (tx_q->tbs & STMMAC_TBS_AVAIL)
-	//	stmmac_enable_tbs(priv, priv->ioaddr, 1, avb_chan);
-	tx_q->tx_tail_addr = tx_q->dma_tx_phy;
-	stmmac_set_tx_tail_ptr(priv, priv->ioaddr, tx_q->tx_tail_addr, avb_chan);
-	stmmac_set_tx_ring_len(priv, priv->ioaddr, (num_tx_descs - 1), avb_chan);
-	stmmac_dma_tx_mode(priv, priv->ioaddr, 64, avb_chan, (256 * 3) /* todo: TBD */,
+	for(i = 0; i < 2; i++){
+		chan = i + STMMAC_AVB_CHANNEL_BASE;
+
+		/* Setup RX ring length */
+		stmmac_set_rx_ring_len(priv, priv->ioaddr, (num_rx_descs - 1), chan);
+
+		/* AVB DMA TX Channel Configuration */
+		tx_q = &priv->dma_avb_conf->tx_queue[i];
+		tx_q->avb_chan = chan;
+		stmmac_init_tx_chan(priv, priv->ioaddr, priv->plat->dma_cfg,
+				tx_q->dma_tx_phy, chan);
+		
+		// todo: enable TBS, switch to use of the struct dma_edesc
+		//if (tx_q->tbs & STMMAC_TBS_AVAIL)
+		//	stmmac_enable_tbs(priv, priv->ioaddr, 1, avb_chan);
+		tx_q->tx_tail_addr = tx_q->dma_tx_phy;
+		stmmac_set_tx_tail_ptr(priv, priv->ioaddr, tx_q->tx_tail_addr, chan);
+		stmmac_set_tx_ring_len(priv, priv->ioaddr, (num_tx_descs - 1), chan);
+		stmmac_dma_tx_mode(priv, priv->ioaddr, 64, chan, (256 * 3) /* todo: TBD */,
 			MTL_QUEUE_DCB /* todo: MTL_QUEUE_AVB */);
-
-	/* Start the ball rolling... */
-	netdev_info(priv->dev, "AVB Tx/Rx processes started in channel %d\n", avb_chan);
-	stmmac_start_rx(priv, priv->ioaddr, avb_chan);
-	stmmac_start_tx(priv, priv->ioaddr, avb_chan);
+	
+		/* Start the ball rolling... */
+		netdev_info(priv->dev, "AVB Tx/Rx processes started in channel %d\n", chan);
+		stmmac_start_rx(priv, priv->ioaddr, chan);
+		stmmac_start_tx(priv, priv->ioaddr, chan);
+	}
 
 	return 0;
 }
@@ -8157,7 +8168,7 @@ static int stmmac_avb_init_dma_engine(struct stmmac_priv *priv)
 static int stmmac_avb_alloc_rx_desc(struct stmmac_priv *priv,
 				    struct stmmac_avb_dma_conf *dma_conf)
 {
-	struct stmmac_avb_rx_queue *rx_q = &dma_conf->rx_queue;
+	struct stmmac_avb_rx_queue *rx_q = &dma_conf->rx_queue[STMMAC_AVB_CHANNEL_PRIORITY - STMMAC_AVB_CHANNEL_BASE];
 
 	rx_q->priv_data = priv;
 	rx_q->cur_rx = 0;
@@ -8210,7 +8221,7 @@ err_alloc_coherent:
 static int stmmac_avb_alloc_tx_desc(struct stmmac_priv *priv,
 				    struct stmmac_avb_dma_conf *dma_conf)
 {
-	struct stmmac_avb_tx_queue *tx_q = &dma_conf->tx_queue;
+	struct stmmac_avb_tx_queue *tx_q = &dma_conf->tx_queue[STMMAC_AVB_CHANNEL_PRIORITY - STMMAC_AVB_CHANNEL_BASE];
 
 	tx_q->priv_data = priv;
 
@@ -8250,8 +8261,8 @@ static int stmmac_avb_alloc_tx_desc(struct stmmac_priv *priv,
 static void stmmac_avb_free_dma_desc(struct stmmac_priv *priv,
 				     struct stmmac_avb_dma_conf *dma_conf)
 {
-	struct stmmac_avb_rx_queue *rx_q = &dma_conf->rx_queue;
-	struct stmmac_avb_tx_queue *tx_q = &dma_conf->tx_queue;
+	struct stmmac_avb_rx_queue *rx_q = &dma_conf->rx_queue[STMMAC_AVB_CHANNEL_PRIORITY - STMMAC_AVB_CHANNEL_BASE];
+	struct stmmac_avb_tx_queue *tx_q = &dma_conf->tx_queue[STMMAC_AVB_CHANNEL_PRIORITY - STMMAC_AVB_CHANNEL_BASE];
 
 	if (rx_q->dma_rx) {
 		dma_free_coherent(priv->device,
@@ -8303,7 +8314,7 @@ static struct stmmac_avb_dma_conf* stmmac_avb_init_dma_desc(struct stmmac_priv *
 	dma_conf->dma_rx_size = DEFAULT_AVB_RX_DESC_CNT;
 
 	/* Time based shaper available on the tx-q*/
-	dma_conf->tx_queue.tbs = STMMAC_TBS_AVAIL;
+	dma_conf->tx_queue[STMMAC_AVB_CHANNEL_PRIORITY - STMMAC_AVB_CHANNEL_BASE].tbs = STMMAC_TBS_AVAIL;
 
 	ret = stmmac_avb_alloc_rx_desc(priv, dma_conf);
 	if (ret < 0) {
@@ -8416,7 +8427,7 @@ int stmmac_enet_rx_poll_avb(void *data)
 	unsigned int count;
 	unsigned int rc = 0;
 
-	rx_q = &priv->dma_avb_conf->rx_queue;
+	rx_q = &priv->dma_avb_conf->rx_queue[STMMAC_AVB_CHANNEL_PRIORITY - STMMAC_AVB_CHANNEL_BASE];
 
 	/* 20 packets per 125us > 64 bytes packets @ 100Mbps */
 	for (count = 0; count < 20; count++) {
@@ -8552,7 +8563,7 @@ int stmmac_avb_xmit_avb_tx_desc(struct stmmac_priv *priv, int queue,
 int stmmac_enet_start_xmit_avb(void *data, struct avb_tx_desc *avb_buff)
 {
 	struct stmmac_priv* priv = data;
-	struct stmmac_avb_tx_queue *tx_q = &priv->dma_avb_conf->tx_queue;
+	struct stmmac_avb_tx_queue *tx_q = &priv->dma_avb_conf->tx_queue[STMMAC_AVB_CHANNEL_PRIORITY - STMMAC_AVB_CHANNEL_BASE];
 	unsigned int entry = tx_q->cur_tx;
 	unsigned int next_entry = STMMAC_GET_ENTRY(entry, priv->dma_avb_conf->dma_tx_size);
 	struct dma_desc *tx_desc;
@@ -8621,7 +8632,7 @@ EXPORT_SYMBOL(stmmac_enet_finish_xmit_avb);
 int stmmac_enet_tx_avb(void *data)
 {
 	struct stmmac_priv* priv = data;
-	struct stmmac_avb_tx_queue *tx_q = &priv->dma_avb_conf->tx_queue;
+	struct stmmac_avb_tx_queue *tx_q = &priv->dma_avb_conf->tx_queue[STMMAC_AVB_CHANNEL_PRIORITY - STMMAC_AVB_CHANNEL_BASE];
 	unsigned int entry = tx_q->dirty_tx;
 	int rc = 0;
 
