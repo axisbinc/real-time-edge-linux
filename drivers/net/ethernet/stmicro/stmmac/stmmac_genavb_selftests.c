@@ -379,7 +379,7 @@ static int stmmac_send_avtp_packet(struct stmmac_priv *priv,  unsigned int queue
 	/* print the device MAC address */
 	pr_info("Destination MAC: %pM\n", priv->dev->dev_addr);
 
-	ret = (queue_id == STMMAC_AVB_CHANNEL) ? stmmac_enet_start_xmit_avb(priv, desc)
+	ret = (queue_id == STMMAC_AVB_CHANNEL_PRIORITY) ? stmmac_enet_start_xmit_avb(priv, desc)
 		: stmmac_avb_xmit_avb_tx_desc(priv, queue_id, desc);
 	if (ret < 0) {
 		netdev_err(priv->dev, "Failed to start xmit\n");
@@ -443,7 +443,7 @@ static int stmmac_send_avtp_packet_vlan(struct stmmac_priv *priv,
 
 	pr_info("Sending VLAN-tagged AVTP: TCI=0x%04x queue=%u\n", vlan_tci, queue_id);
 
-	ret = (queue_id == STMMAC_AVB_CHANNEL) ?
+	ret = (queue_id == STMMAC_AVB_CHANNEL_PRIORITY) ?
 		stmmac_enet_start_xmit_avb(priv, desc) :
 		stmmac_avb_xmit_avb_tx_desc(priv, queue_id, desc);
 	if (ret < 0) {
@@ -462,7 +462,7 @@ static int stmmac_avb_test_avtp_packet_as_avb_desc(struct stmmac_priv *priv)
 
     pr_info("Testing AVB packet ... queue 0\n");
 
-	dwmac5_frp_get_stats(priv->hw->pcsr, STMMAC_AVB_CHANNEL, &before);
+	dwmac5_frp_get_stats(priv->hw->pcsr, STMMAC_AVB_CHANNEL_PRIORITY, &before);
 
     /* send an AVTP Discovery packet */
     ret = stmmac_send_avtp_packet(priv, 0);
@@ -470,10 +470,10 @@ static int stmmac_avb_test_avtp_packet_as_avb_desc(struct stmmac_priv *priv)
         pr_err("Failed to send AVTP packet\n");
     }
 
-    pr_info("stmmac_avb_test_avtp_packet_as_avb_desc ... STMMAC_AVB_CHANNEL\n");
+    pr_info("stmmac_avb_test_avtp_packet_as_avb_desc ... STMMAC_AVB_CHANNEL_PRIORITY\n");
 
     /* send an AVTP Discovery packet */
-    ret = stmmac_send_avtp_packet(priv, STMMAC_AVB_CHANNEL);
+    ret = stmmac_send_avtp_packet(priv, STMMAC_AVB_CHANNEL_PRIORITY);
     if (ret) {
         pr_err("Failed to send AVTP packet\n");
     }
@@ -484,16 +484,16 @@ static int stmmac_avb_test_avtp_packet_as_avb_desc(struct stmmac_priv *priv)
 	//if (ret)
 	//	pr_err("Failed to send VLAN-tagged AVTP packet\n");
 
-	pr_info("Testing VLAN-tagged AVTP packet ... STMMAC_AVB_CHANNEL\n");
-	ret = stmmac_send_avtp_packet_vlan(priv, STMMAC_AVB_CHANNEL, vlan_tci);
+	pr_info("Testing VLAN-tagged AVTP packet ... STMMAC_AVB_CHANNEL_PRIORITY\n");
+	ret = stmmac_send_avtp_packet_vlan(priv, STMMAC_AVB_CHANNEL_PRIORITY, vlan_tci);
 	if (ret)
 		pr_err("Failed to send VLAN-tagged AVTP packet\n");
 
 	/* Allow RX parser accept counter to update */
 	msleep(50);
-	dwmac5_frp_get_stats(priv->hw->pcsr, STMMAC_AVB_CHANNEL, &after);
+	dwmac5_frp_get_stats(priv->hw->pcsr, STMMAC_AVB_CHANNEL_PRIORITY, &after);
 	pr_info("FRP accept count (DMA CH %u): before=%u after=%u delta=%d\n",
-		STMMAC_AVB_CHANNEL, before, after, (int)(after - before));
+		STMMAC_AVB_CHANNEL_PRIORITY, before, after, (int)(after - before));
 
     return ret;
 }
