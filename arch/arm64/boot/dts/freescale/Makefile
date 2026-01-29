@@ -112,6 +112,7 @@ dtb-$(CONFIG_ARCH_MXC) += imx8mp-var-som-symphony.dtb \
 			  imx8mp-var-som-dsp.dtb \
 			  imx8mp-var-som-avb.dtb \
 			  imx8mp-var-som-avb-amp.dtb \
+			  imx8mp-var-som-avb-amp-rxp.dtb \
 			  imx8mp-var-som-dual-avb.dtb
 dtb-$(CONFIG_ARCH_MXC) += imx8mm-evk-ak4497.dtb imx8mm-evk-ak5558.dtb imx8mm-evk-audio-tdm.dtb
 dtb-$(CONFIG_ARCH_MXC) += imx8mm-evk-8mic-revE.dtb imx8mm-evk-8mic-swpdm.dtb \
