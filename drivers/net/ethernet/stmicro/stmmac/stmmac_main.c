@@ -8113,26 +8113,26 @@ static int stmmac_avb_init_dma_engine(struct stmmac_priv *priv)
 		/* no split header - aiming for one frame per packet */
 		stmmac_enable_sph(priv, priv->ioaddr, false, chan);
 
-		rx_q = &priv->dma_avb_conf->rx_queue[chan - STMMAC_AVB_CHANNEL_PRIORITY];
+		rx_q = &priv->dma_avb_conf->rx_queue[i];
 		rx_q->avb_chan = chan;
 		stmmac_init_rx_chan(priv, priv->ioaddr, priv->plat->dma_cfg,
 				rx_q->dma_rx_phy, chan);
 		rx_q->rx_tail_addr = rx_q->dma_rx_phy + (num_rx_descs * sizeof(struct dma_desc));
 		stmmac_set_rx_tail_ptr(priv, priv->ioaddr, rx_q->rx_tail_addr, chan);
-	}
 
-	/* install buffers in the DMA descriptor */
-	for (int i = 0; i < num_rx_descs; i++) {
-		struct stmmac_avb_buffer *buf = &rx_q->buf_pool[i];
-		struct dma_desc *desc = &rx_q->dma_rx[i];
+		/* install buffers in the DMA descriptor for this queue */
+		for (int j = 0; j < num_rx_descs; j++) {
+			struct stmmac_avb_buffer *buf = &rx_q->buf_pool[j];
+			struct dma_desc *desc = &rx_q->dma_rx[j];
 
-		stmmac_set_desc_addr(priv, desc, buf->dma_addr);
-		if (stmmac_avb_verbose)
-			pr_info("descriptor[%d] addr: 0x%llx: 0x%x 0x%x | 0x%x 0x%x\n",
-					i, buf->dma_addr, desc->des0, desc->des1,
-					desc->des2, desc->des3);
-		dma_wmb();
-		stmmac_set_rx_owner(priv, desc, true); /* DMA owns this descriptor */
+			stmmac_set_desc_addr(priv, desc, buf->dma_addr);
+			if (stmmac_avb_verbose)
+				pr_info("descriptor[%d] addr: 0x%llx: 0x%x 0x%x | 0x%x 0x%x\n",
+						j, buf->dma_addr, desc->des0, desc->des1,
+						desc->des2, desc->des3);
+			dma_wmb();
+			stmmac_set_rx_owner(priv, desc, true); /* DMA owns this descriptor */
+		}
 	}
 
 	for(i = 0; i < 2; i++){
@@ -8168,131 +8168,200 @@ static int stmmac_avb_init_dma_engine(struct stmmac_priv *priv)
 static int stmmac_avb_alloc_rx_desc(struct stmmac_priv *priv,
 				    struct stmmac_avb_dma_conf *dma_conf)
 {
-	struct stmmac_avb_rx_queue *rx_q = &dma_conf->rx_queue[STMMAC_AVB_CHANNEL_PRIORITY - STMMAC_AVB_CHANNEL_BASE];
+	struct stmmac_avb_rx_queue *rx_q;
+	int q;
 
-	rx_q->priv_data = priv;
-	rx_q->cur_rx = 0;
+	/* Allocate for both AVB queues */
+	for (q = 0; q < MTL_MAX_AVB_RX_QUEUES; q++) {
+		rx_q = &dma_conf->rx_queue[q];
 
-	rx_q->buf_pool = kcalloc(dma_conf->dma_rx_size, sizeof(*rx_q->buf_pool),
-			GFP_KERNEL);
-	if (!rx_q->buf_pool)
-		return -ENOMEM;
+		rx_q->priv_data = priv;
+		rx_q->cur_rx = 0;
 
-	rx_q->dma_rx = dma_alloc_coherent(priv->device,
-			dma_conf->dma_rx_size * sizeof(struct dma_desc),
-			&rx_q->dma_rx_phy,
-			GFP_KERNEL);
-	if (!rx_q->dma_rx) {
-		netdev_err(priv->dev, "Failed to alloc rx_desc\n");
-		goto err_alloc_coherent;
-	}
+		rx_q->buf_pool = kcalloc(dma_conf->dma_rx_size, sizeof(*rx_q->buf_pool),
+				GFP_KERNEL);
+		if (!rx_q->buf_pool)
+			goto err_alloc_pool;
 
-	/* Allocate rx buffers */
-	pr_info("[%d] %s buffers: %d, rxoffset: %d\n", __LINE__, __func__,
-			dma_conf->dma_rx_size, stmmac_rx_offset(priv));
-	for (int i = 0; i < dma_conf->dma_rx_size; i++) {
-		struct stmmac_avb_buffer *buf;
-		struct avb_rx_desc *avb_desc;
-
-		buf = &rx_q->buf_pool[i];
-		buf->vaddr = priv->avb->alloc(priv->avb_data);
-		if (!buf->vaddr) {
-			netdev_err(priv->dev, "Failed to alloc rx buffer\n");
-			goto err_alloc;
+		rx_q->dma_rx = dma_alloc_coherent(priv->device,
+				dma_conf->dma_rx_size * sizeof(struct dma_desc),
+				&rx_q->dma_rx_phy,
+				GFP_KERNEL);
+		if (!rx_q->dma_rx) {
+			netdev_err(priv->dev, "Failed to alloc rx_desc for queue %d\n", q);
+			goto err_alloc_coherent;
 		}
-		avb_desc = (struct avb_rx_desc *)buf->vaddr;
-		buf->dma_addr = avb_desc->dma_addr;
-		buf->offset = avb_desc->common.offset;
-		avb_desc->common.len = 0;
-		avb_desc->queue_id = 0;     /* todo: irrelevant? */
+
+		/* Allocate rx buffers */
+		pr_info("[%d] %s queue %d buffers: %d, rxoffset: %d\n", __LINE__, __func__,
+				q, dma_conf->dma_rx_size, stmmac_rx_offset(priv));
+		for (int i = 0; i < dma_conf->dma_rx_size; i++) {
+			struct stmmac_avb_buffer *buf;
+			struct avb_rx_desc *avb_desc;
+
+			buf = &rx_q->buf_pool[i];
+			buf->vaddr = priv->avb->alloc(priv->avb_data);
+			if (!buf->vaddr) {
+				netdev_err(priv->dev, "Failed to alloc rx buffer\n");
+				goto err_alloc_buf;
+			}
+			avb_desc = (struct avb_rx_desc *)buf->vaddr;
+			buf->dma_addr = avb_desc->dma_addr;
+			buf->offset = avb_desc->common.offset;
+			avb_desc->common.len = 0;
+			avb_desc->queue_id = q;
+		}
 	}
 
 	return 0;
 
-err_alloc:
-	/* todo:
-	   stmmac_avb_free_buffers(ndev); */
-	return -ENOMEM;
+err_alloc_buf:
+	/* Free already allocated buffers for this queue */
+	for (int i = 0; i < dma_conf->dma_rx_size; i++) {
+		struct stmmac_avb_buffer *buf = &rx_q->buf_pool[i];
+		if (buf->vaddr)
+			priv->avb->free(priv->avb_data, buf->vaddr);
+	}
 err_alloc_coherent:
-	kfree(rx_q->buf_pool);
+	if (rx_q->dma_rx) {
+		dma_free_coherent(priv->device,
+				dma_conf->dma_rx_size * sizeof(struct dma_desc),
+				rx_q->dma_rx, rx_q->dma_rx_phy);
+		rx_q->dma_rx = NULL;
+	}
+err_alloc_pool:
+	if (rx_q->buf_pool) {
+		kfree(rx_q->buf_pool);
+		rx_q->buf_pool = NULL;
+	}
+	/* Free previously allocated queues */
+	while (--q >= 0) {
+		rx_q = &dma_conf->rx_queue[q];
+		for (int i = 0; i < dma_conf->dma_rx_size; i++) {
+			struct stmmac_avb_buffer *buf = &rx_q->buf_pool[i];
+			if (buf->vaddr)
+				priv->avb->free(priv->avb_data, buf->vaddr);
+		}
+		dma_free_coherent(priv->device,
+				dma_conf->dma_rx_size * sizeof(struct dma_desc),
+				rx_q->dma_rx, rx_q->dma_rx_phy);
+		rx_q->dma_rx = NULL;
+		kfree(rx_q->buf_pool);
+		rx_q->buf_pool = NULL;
+	}
 	return -ENOMEM;
 }
 
 static int stmmac_avb_alloc_tx_desc(struct stmmac_priv *priv,
 				    struct stmmac_avb_dma_conf *dma_conf)
 {
-	struct stmmac_avb_tx_queue *tx_q = &dma_conf->tx_queue[STMMAC_AVB_CHANNEL_PRIORITY - STMMAC_AVB_CHANNEL_BASE];
+	struct stmmac_avb_tx_queue *tx_q;
+	int q;
 
-	tx_q->priv_data = priv;
+	/* Allocate for both AVB queues */
+	for (q = 0; q < MTL_MAX_AVB_TX_QUEUES; q++) {
+		tx_q = &dma_conf->tx_queue[q];
 
-	tx_q->dma_tx = dma_alloc_coherent(priv->device,
-			dma_conf->dma_tx_size * sizeof(struct dma_desc),
-			&tx_q->dma_tx_phy,
-			GFP_KERNEL);
-	if (!tx_q->dma_tx) {
-		netdev_err(priv->dev, "Failed to alloc tx_desc\n");
-		return -ENOMEM;
+		tx_q->priv_data = priv;
+
+		tx_q->dma_tx = dma_alloc_coherent(priv->device,
+				dma_conf->dma_tx_size * sizeof(struct dma_desc),
+				&tx_q->dma_tx_phy,
+				GFP_KERNEL);
+		if (!tx_q->dma_tx) {
+			netdev_err(priv->dev, "Failed to alloc tx_desc for queue %d\n", q);
+			goto err_alloc_dma;
+		}
+
+		tx_q->buf_pool = kcalloc(dma_conf->dma_tx_size, sizeof(*tx_q->buf_pool),
+				GFP_KERNEL);
+		if (!tx_q->buf_pool) {
+			netdev_err(priv->dev, "Failed to alloc tx_buf_pool for queue %d\n", q);
+			goto err_alloc_pool;
+		}
+
+		for (int i = 0; i < dma_conf->dma_tx_size; i++) {
+			struct dma_desc *desc = &tx_q->dma_tx[i];
+
+			stmmac_init_tx_desc(priv, desc, priv->mode, 0);
+
+			tx_q->buf_pool[i].vaddr = 0;
+			tx_q->buf_pool[i].dma_addr = 0;
+			tx_q->buf_pool[i].offset = 0;
+		}
+
+		tx_q->cur_tx = 0;
+		tx_q->dirty_tx = 0;
+		tx_q->mss = 0;
 	}
-
-	tx_q->buf_pool = kcalloc(dma_conf->dma_tx_size, sizeof(*tx_q->buf_pool),
-			GFP_KERNEL);
-	if (!tx_q->buf_pool) {
-		netdev_err(priv->dev, "Failed to alloc tx_buf_pool\n");
-		return -ENOMEM;
-	}
-
-	for (int i = 0; i < dma_conf->dma_tx_size; i++) {
-		struct dma_desc *desc = &tx_q->dma_tx[i];
-
-		stmmac_init_tx_desc(priv, desc, priv->mode, 0);
-
-		tx_q->buf_pool[i].vaddr = 0;
-		tx_q->buf_pool[i].dma_addr = 0;
-		tx_q->buf_pool[i].offset = 0;
-	}
-
-	tx_q->cur_tx = 0;
-	tx_q->dirty_tx = 0;
-	tx_q->mss = 0;
 
 	return 0;
+
+err_alloc_pool:
+	dma_free_coherent(priv->device,
+			dma_conf->dma_tx_size * sizeof(struct dma_desc),
+			tx_q->dma_tx, tx_q->dma_tx_phy);
+	tx_q->dma_tx = NULL;
+err_alloc_dma:
+	/* Free previously allocated queues */
+	while (--q >= 0) {
+		tx_q = &dma_conf->tx_queue[q];
+		dma_free_coherent(priv->device,
+				dma_conf->dma_tx_size * sizeof(struct dma_desc),
+				tx_q->dma_tx, tx_q->dma_tx_phy);
+		tx_q->dma_tx = NULL;
+		kfree(tx_q->buf_pool);
+		tx_q->buf_pool = NULL;
+	}
+	return -ENOMEM;
 }
 
 static void stmmac_avb_free_dma_desc(struct stmmac_priv *priv,
 				     struct stmmac_avb_dma_conf *dma_conf)
 {
-	struct stmmac_avb_rx_queue *rx_q = &dma_conf->rx_queue[STMMAC_AVB_CHANNEL_PRIORITY - STMMAC_AVB_CHANNEL_BASE];
-	struct stmmac_avb_tx_queue *tx_q = &dma_conf->tx_queue[STMMAC_AVB_CHANNEL_PRIORITY - STMMAC_AVB_CHANNEL_BASE];
+	struct stmmac_avb_rx_queue *rx_q;
+	struct stmmac_avb_tx_queue *tx_q;
+	int q;
 
-	if (rx_q->dma_rx) {
-		dma_free_coherent(priv->device,
-				dma_conf->dma_rx_size * sizeof(struct dma_desc),
-				rx_q->dma_rx,
-				rx_q->dma_rx_phy);
-		rx_q->dma_rx = NULL;
-	}
+	/* Free both AVB queues */
+	for (q = 0; q < MTL_MAX_AVB_RX_QUEUES; q++) {
+		rx_q = &dma_conf->rx_queue[q];
 
-	/* free the avb buffers and buffer pool */
-	if (rx_q->buf_pool) {
-		for (int i = 0; i < dma_conf->dma_rx_size; i++) {
-			struct stmmac_avb_buffer *buf = &rx_q->buf_pool[i];
-			priv->avb->free(priv->avb_data, buf->vaddr);
+		if (rx_q->dma_rx) {
+			dma_free_coherent(priv->device,
+					dma_conf->dma_rx_size * sizeof(struct dma_desc),
+					rx_q->dma_rx,
+					rx_q->dma_rx_phy);
+			rx_q->dma_rx = NULL;
 		}
-		kfree(rx_q->buf_pool);
-		rx_q->buf_pool = NULL;
+
+		/* free the avb buffers and buffer pool */
+		if (rx_q->buf_pool) {
+			for (int i = 0; i < dma_conf->dma_rx_size; i++) {
+				struct stmmac_avb_buffer *buf = &rx_q->buf_pool[i];
+				if (buf->vaddr)
+					priv->avb->free(priv->avb_data, buf->vaddr);
+			}
+			kfree(rx_q->buf_pool);
+			rx_q->buf_pool = NULL;
+		}
 	}
 
-	/* free any pending tx */
-	if (tx_q->dma_tx) {
-		dma_free_coherent(priv->device,
-				dma_conf->dma_tx_size * sizeof(struct dma_desc),
-				tx_q->dma_tx,
-				tx_q->dma_tx_phy);
-		tx_q->dma_tx = NULL;
-	}
-	if (tx_q->buf_pool) {
-		kfree(tx_q->buf_pool);
-		tx_q->buf_pool = NULL;
+	for (q = 0; q < MTL_MAX_AVB_TX_QUEUES; q++) {
+		tx_q = &dma_conf->tx_queue[q];
+
+		/* free any pending tx */
+		if (tx_q->dma_tx) {
+			dma_free_coherent(priv->device,
+					dma_conf->dma_tx_size * sizeof(struct dma_desc),
+					tx_q->dma_tx,
+					tx_q->dma_tx_phy);
+			tx_q->dma_tx = NULL;
+		}
+		if (tx_q->buf_pool) {
+			kfree(tx_q->buf_pool);
+			tx_q->buf_pool = NULL;
+		}
 	}
 }
 
@@ -8313,8 +8382,9 @@ static struct stmmac_avb_dma_conf* stmmac_avb_init_dma_desc(struct stmmac_priv *
 	dma_conf->dma_tx_size = DEFAULT_AVB_TX_DESC_CNT;
 	dma_conf->dma_rx_size = DEFAULT_AVB_RX_DESC_CNT;
 
-	/* Time based shaper available on the tx-q*/
-	dma_conf->tx_queue[STMMAC_AVB_CHANNEL_PRIORITY - STMMAC_AVB_CHANNEL_BASE].tbs = STMMAC_TBS_AVAIL;
+	/* Time based shaper available on both tx queues */
+	for (int q = 0; q < MTL_MAX_AVB_TX_QUEUES; q++)
+		dma_conf->tx_queue[q].tbs = STMMAC_TBS_AVAIL;
 
 	ret = stmmac_avb_alloc_rx_desc(priv, dma_conf);
 	if (ret < 0) {
