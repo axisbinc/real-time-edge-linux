@@ -97,6 +97,12 @@
 			/* Use MULTI-FIFO DMA for 32-channel operation (2x TDM16) */
 			dmas = <&sdma2 2 25 0>, <&sdma2 3 25 0>; /* 25 = IMX_DMATYPE_MULTI_SAI */
 			dma-names = "rx", "tx";
+
+			/* Synchronous mode: TX is master, RX uses TX clocks (shared BCLK/FSYNC)
+            * i.MX8MP is GLOBAL MASTER - generates clocks for both directions
+            * Raspberry Pi must be configured as I2S SLAVE
+            */
+			fsl,sai-synchronous-rx;
 };
 
 /* ------------------------------------------------------------------------ */
