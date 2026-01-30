@@ -58,6 +58,16 @@
 			MX8MP_IOMUXC_SAI2_RXFS__AUDIOMIX_SAI2_RX_SYNC			0xd6
 		>;
 	};
+
+	pinctrl_usdhc2_gpio: usdhc2grp-gpio {
+		fsl,pins = <
+			MX8MP_IOMUXC_GPIO1_IO14__GPIO1_IO14				0x1c4
+			MX8MP_IOMUXC_GPIO1_IO09__GPIO1_IO09				0x10  /* SD card power control */
+			/* GPIO4_IO22 (SAI2_RXC) now used for audio, not SD card regulator */
+			/* MX8MP_IOMUXC_SAI2_RXC__GPIO4_IO22				0x10 */
+			MX8MP_IOMUXC_SD2_CD_B__GPIO2_IO12				0xc0
+		>;
+	};
 };
 
 /*   Enable SAI2 with TDM16 on both TX_DATA0 and TX_DATA1                  */
