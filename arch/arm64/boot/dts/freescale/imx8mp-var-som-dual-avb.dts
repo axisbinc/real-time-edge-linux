@@ -21,65 +21,45 @@
 	compatible = "fsl,avb-gpt";
 	timer-channel = <1>; /* Use output compare channel 1*/
 	sw-recovery = <0>; /* Use SW recovery mode for STMMAC (eth port 0) */
-	/* rec-channel = <1 0 1>; // capture channel, eth port, ENET TC id */
 	prescale = <1>;
 	domain = <0>;
 
 	clocks = <&clk IMX8MP_CLK_GPT1_ROOT>,
-		<&clk IMX8MP_CLK_GPT1_ROOT>,
-			<&clk IMX8MP_AUDIO_PLL1>;
-			clock-names = "ipg", "per", "audio_pll";
+		 <&clk IMX8MP_CLK_GPT1_ROOT>,
+		 <&clk IMX8MP_AUDIO_PLL1>;
+	clock-names = "ipg", "per", "audio_pll";
 
-			/* Make the GPT clk root derive from the audio PLL*/
-			assigned-clocks = <&clk IMX8MP_CLK_GPT1>;
-			assigned-clock-parents = <&clk IMX8MP_AUDIO_PLL1_OUT>;
-			assigned-clock-rates = <0>;
+	/* Make the GPT clk root derive from the audio PLL*/
+	assigned-clocks = <&clk IMX8MP_CLK_GPT1>;
+	assigned-clock-parents = <&clk IMX8MP_AUDIO_PLL1_OUT>;
+	assigned-clock-rates = <0>;
 
-			gpt1_capin1_sel = <&gpr 0x4 2>;
+	gpt1_capin1_sel = <&gpr 0x4 2>;
 
-			status = "okay";
+	status = "okay";
 };
 
 &iomuxc {
 	pinctrl_i2c5: i2c5grp {
 		fsl,pins = <
-			MX8MP_IOMUXC_HDMI_DDC_SCL__I2C5_SCL				0x400001c6
-			MX8MP_IOMUXC_HDMI_DDC_SDA__I2C5_SDA				0x400001c6
+			MX8MP_IOMUXC_HDMI_DDC_SCL__I2C5_SCL				0x400001c2
+			MX8MP_IOMUXC_HDMI_DDC_SDA__I2C5_SDA				0x400001c2
 		>;
 	};
 
 	pinctrl_sai2: sai2grp {
 		fsl,pins = <
+			MX8MP_IOMUXC_SAI2_MCLK__AUDIOMIX_SAI2_MCLK			    0xd6
 			MX8MP_IOMUXC_SAI2_TXFS__AUDIOMIX_SAI2_TX_SYNC			0xd6
 			MX8MP_IOMUXC_SAI2_TXC__AUDIOMIX_SAI2_TX_BCLK			0xd6
-			MX8MP_IOMUXC_SAI2_TXD0__AUDIOMIX_SAI2_TX_DATA00			0x116
-			MX8MP_IOMUXC_SAI2_RXD0__AUDIOMIX_SAI2_TX_DATA01			0x116
-			MX8MP_IOMUXC_SAI2_MCLK__AUDIOMIX_SAI2_MCLK			    0xd6
+			MX8MP_IOMUXC_SAI2_TXD0__AUDIOMIX_SAI2_TX_DATA00			0xd6
+			MX8MP_IOMUXC_SAI2_RXD0__AUDIOMIX_SAI2_RX_DATA00 		0xd6
+			MX8MP_IOMUXC_SAI2_RXC__AUDIOMIX_SAI2_RX_BCLK			0xd6
+			MX8MP_IOMUXC_SAI2_RXFS__AUDIOMIX_SAI2_RX_SYNC			0xd6
 		>;
 	};
 };
 
-/* ------------------------------------------------------------------------ */
-&i2c5 {
-	status = "okay";
-	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_i2c5>;
-	clock-frequency = <100000>;  /* 100kHz for reliability */
-	scl-gpios = <&gpio3 26 GPIO_ACTIVE_HIGH>;
-	sda-gpios = <&gpio3 27 GPIO_ACTIVE_HIGH>;
-
-	/* -------------------------------------------------------------------- */
-	/* PCA9548 I2C Multiplexer - 8 channels, 2 TAS5825M per channel        */
-	/* -------------------------------------------------------------------- */
-	i2c-mux@70 {
-		compatible = "nxp,pca9548";
-		#address-cells = <1>;
-		#size-cells = <0>;
-		reg = <0x70>;
-	};
-};
-
-/* ------------------------------------------------------------------------ */
 /*   Enable SAI2 with TDM16 on both TX_DATA0 and TX_DATA1                  */
 &sai2 {
 	status = "okay";
@@ -118,7 +98,21 @@
 		#sound-dai-cells = <0>;
 	};
 
-	/* TAS5825M #0: Channels 0-1 (TDM slots 0-1 on TX_DATA0) */
+	/* Override SD card regulator to use GPIO1_IO09 instead of GPIO4_IO22
+	 * (GPIO4_IO22/SAI2_RXC is now used for audio)
+	 */
+	reg_usdhc2_vmmc: regulator-usdhc2-vmmc {
+		compatible = "regulator-fixed";
+		regulator-name = "VSD_3V3";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		gpio = <&gpio1 9 GPIO_ACTIVE_HIGH>;  /* Changed from GPIO4_IO22 */
+		enable-active-high;
+		startup-delay-us = <100>;
+		off-on-delay-us = <12000>;
+	};
+
+	/* TAS5825M #0: Channels 0-1 (TDM slots 0-1 on TX_DATA0) - BIDIRECTIONAL */
 	sound-amp-0 {
 		compatible = "simple-audio-card";
 		simple-audio-card,name = "tas5825m-ch0-1";
@@ -132,11 +126,33 @@
 			dai-tdm-slot-num = <16>;         // 16 slots per TDM frame 
 			dai-tdm-slot-width = <32>;       // 32 bits per slot 
 			dai-tdm-slot-tx-mask = <0xffff>; // Slots 0-1: bits 0-1 set
+			dai-tdm-slot-rx-mask = <0xffff>;
 		};
 
 		simple-audio-card,codec {
 			sound-dai = <&dummy_codec>;
 		};
+	};
+};
+
+/* ------------------------------------------------------------------------ */
+/*   Enable I2C5 for TAS5825M amplifiers via PCA9548 I2C Multiplexer      */
+&i2c5 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_i2c5>;
+	clock-frequency = <100000>;  /* 100kHz for reliability */
+	scl-gpios = <&gpio3 26 GPIO_ACTIVE_HIGH>;
+	sda-gpios = <&gpio3 27 GPIO_ACTIVE_HIGH>;
+
+	/* -------------------------------------------------------------------- */
+	/* PCA9548 I2C Multiplexer - 8 channels, 2 TAS5825M per channel        */
+	/* -------------------------------------------------------------------- */
+	i2c-mux@70 {
+		compatible = "nxp,pca9548";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0x70>;
 	};
 };
 
@@ -146,11 +162,11 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_uart4>;
 	clocks = <&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_OCRAMA_IPG>,
-		<&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_DSP_ROOT>,
-		<&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_DSPDBG_ROOT>,
-		<&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_SDMA3_ROOT>,
-		<&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_ASRC_IPG>,
-		<&clk IMX8MP_CLK_UART4_ROOT>;
+			<&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_DSP_ROOT>,
+			<&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_DSPDBG_ROOT>,
+			<&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_SDMA3_ROOT>,
+			<&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_ASRC_IPG>,
+			<&clk IMX8MP_CLK_UART4_ROOT>;
 	clock-names = "ocram", "core", "debug",
 			"per_clk1", "per_clk2", "per_clk3",
 			"per_clk5", "per_clk7";
@@ -158,21 +174,12 @@
 	power-domains = <&audiomix_pd>;
 	mbox-names = "tx0", "rx0", "rxdb0";
 	mboxes = <&mu2 0 0>,
-		<&mu2 1 0>,
-		<&mu2 3 0>;
+			<&mu2 1 0>,
+			<&mu2 3 0>;
 	memory-region = <&dsp_vdev0buffer>, <&dsp_vdev0vring0>,
-			<&dsp_vdev0vring1>, <&dsp_reserved>;
+				<&dsp_vdev0vring1>, <&dsp_reserved>;
 	syscon = <&audio_blk_ctrl>;
 	status = "okay";
-};
-
-/* Disable conflicting peripherals from symphony base */
-&uart3 {
-	status = "disabled";
-};
-
-&ecspi2 {
-	status = "disabled";
 };
 
 &uart4 {
