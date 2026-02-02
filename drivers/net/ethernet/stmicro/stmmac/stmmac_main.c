@@ -14,6 +14,7 @@
 	https://bugzilla.stlinux.com/
 *******************************************************************************/
 
+#include "linux/stmmac.h"
 #include <linux/clk.h>
 #include <linux/kernel.h>
 #include <linux/interrupt.h>
@@ -2777,6 +2778,7 @@ static int stmmac_tx_clean(struct stmmac_priv *priv, int budget, u32 queue)
 			if (stmmac_avb_test_is_in_progress() && (stmmac_avb_verbose & STMMAC_SKB_VERBOSE_TX)) {
 				uint32_t accept_count = 0;
 				dwmac5_frp_get_stats(priv->hw->pcsr, STMMAC_AVB_CHANNEL_PRIORITY, &accept_count);
+				dwmac5_frp_get_stats(priv->hw->pcsr, STMMAC_AVB_CHANNEL_CBS, &accept_count);
 				pr_info("TX skb cleanup: AVB accept_count=%d\n", accept_count);
 				stmmac_avb_print_hex_dump(skb->data, skb->len, "TX skb cleanup");
 			}
@@ -4226,6 +4228,8 @@ static int stmmac_release(struct net_device *dev)
 		/* Stop AVB DMA and free the descriptors */
 		stmmac_stop_rx_dma(priv, STMMAC_AVB_CHANNEL_PRIORITY);
 		stmmac_stop_tx_dma(priv, STMMAC_AVB_CHANNEL_PRIORITY);
+		stmmac_stop_rx_dma(priv, STMMAC_AVB_CHANNEL_CBS);
+		stmmac_stop_tx_dma(priv, STMMAC_AVB_CHANNEL_CBS);
 		stmmac_avb_free_dma_desc(priv, priv->dma_avb_conf);
 		kfree(priv->dma_avb_conf);
 		priv->dma_avb_conf = NULL;
@@ -5162,6 +5166,7 @@ static struct sk_buff *stmmac_xdp_run_prog(struct stmmac_priv *priv,
 	if (stmmac_avb_test_is_in_progress() && (stmmac_avb_verbose & STMMAC_SKB_VERBOSE_RX)) {
 		uint32_t accept_count = 0;
 		dwmac5_frp_get_stats(priv->hw->pcsr, STMMAC_AVB_CHANNEL_PRIORITY, &accept_count);
+		dwmac5_frp_get_stats(priv->hw->pcsr, STMMAC_AVB_CHANNEL_CBS, &accept_count);
 		pr_info("RX: AVB accept_count=%d\n", accept_count);
 		stmmac_avb_print_hex_dump(xdp->data, xdp->data_end - xdp->data, "RX pkt");
 	}
@@ -6573,8 +6578,10 @@ static int stmmac_avb_status_show(struct seq_file *seq, void *v)
 {
 	struct net_device *dev = seq->private;
 	struct stmmac_priv *priv = netdev_priv(dev);
-	int accept_count = 0;
-	dwmac5_frp_get_stats(priv->hw->pcsr, STMMAC_AVB_CHANNEL_PRIORITY, &accept_count);
+	int priority_accept_count = 0;
+	int cbs_accept_count = 0;
+	dwmac5_frp_get_stats(priv->hw->pcsr, STMMAC_AVB_CHANNEL_PRIORITY, &priority_accept_count);
+	dwmac5_frp_get_stats(priv->hw->pcsr, STMMAC_AVB_CHANNEL_CBS, &cbs_accept_count);
 
 	seq_printf(seq, "==============================\n");
 	seq_printf(seq, "\tAVB Status\n");
@@ -6602,7 +6609,8 @@ static int stmmac_avb_status_show(struct seq_file *seq, void *v)
 	seq_printf(seq, "\t  MMRP (0x88F6): %u\n", priv->avb_tx_mmrp);
 	seq_printf(seq, "\t  MSRP (0x22EA): %u\n", priv->avb_tx_msrp);
 	seq_printf(seq, "\t  Other:         %u\n", priv->avb_tx_other);
-	seq_printf(seq, "\tFRP Accept Count: %d\n", accept_count);
+	seq_printf(seq, "\tFRP Accept Count from priority channel: %d\n", priority_accept_count);
+	seq_printf(seq, "\tFRP Accept Count from cbs channel: %d\n", cbs_accept_count);
 	seq_printf(seq, "\n\tDMA Debug Counters:\n");
 	seq_printf(seq, "\t  RX Discard frames: %u\n", priv->avb_rx_discard);
 	seq_printf(seq, "\t  RX Alloc failures: %u\n", priv->avb_rx_alloc_fail);
@@ -8633,7 +8641,8 @@ int stmmac_avb_xmit_avb_tx_desc(struct stmmac_priv *priv, int queue,
 int stmmac_enet_start_xmit_avb(void *data, struct avb_tx_desc *avb_buff)
 {
 	struct stmmac_priv* priv = data;
-	struct stmmac_avb_tx_queue *tx_q = &priv->dma_avb_conf->tx_queue[STMMAC_AVB_CHANNEL_PRIORITY - STMMAC_AVB_CHANNEL_BASE];
+	unsigned short queue_id = avb_buff->queue_id;
+	struct stmmac_avb_tx_queue *tx_q = &priv->dma_avb_conf->tx_queue[queue_id];
 	unsigned int entry = tx_q->cur_tx;
 	unsigned int next_entry = STMMAC_GET_ENTRY(entry, priv->dma_avb_conf->dma_tx_size);
 	struct dma_desc *tx_desc;
@@ -8702,73 +8711,79 @@ EXPORT_SYMBOL(stmmac_enet_finish_xmit_avb);
 int stmmac_enet_tx_avb(void *data)
 {
 	struct stmmac_priv* priv = data;
-	struct stmmac_avb_tx_queue *tx_q = &priv->dma_avb_conf->tx_queue[STMMAC_AVB_CHANNEL_PRIORITY - STMMAC_AVB_CHANNEL_BASE];
-	unsigned int entry = tx_q->dirty_tx;
+	struct stmmac_avb_tx_queue *tx_q;
+	unsigned int entry;
+	u16 queue_id;
 	int rc = 0;
 
 	/* try to clean all TX complete frames */
-	while (entry != tx_q->cur_tx) {
-		struct dma_desc *tx_desc;
-		int status;
-		struct avb_tx_desc *avb_buff;
-		u64 ns = 0;
+	for(queue_id = 0; queue_id < MTL_MAX_AVB_TX_QUEUES; queue_id++)
+	{
+		tx_q = &priv->dma_avb_conf->tx_queue[queue_id];
+		entry = tx_q->dirty_tx;
+		while (entry != tx_q->cur_tx) {
+			struct dma_desc *tx_desc;
+			int status;
+			struct avb_tx_desc *avb_buff;
+			u64 ns = 0;
 
-		tx_desc = &tx_q->dma_tx[entry];
-		status = stmmac_tx_status(priv, &priv->dev->stats, &priv->xstats,
-				tx_desc, priv->ioaddr);
-		if (unlikely(status & dma_own))
-			break; /* no more packets to clean */
+			tx_desc = &tx_q->dma_tx[entry];
+			status = stmmac_tx_status(priv, &priv->dev->stats, &priv->xstats,
+					tx_desc, priv->ioaddr);
+			if (unlikely(status & dma_own))
+				break; /* no more packets to clean */
 
-		dma_rmb();
+			dma_rmb();
 
-		priv->avb_tx_packets++;
-		avb_buff = tx_q->buf_pool[entry].vaddr;
+			priv->avb_tx_packets++;
+			avb_buff = tx_q->buf_pool[entry].vaddr;
 
-		/* VLAN-aware EtherType stats (expects Ethernet header at avb_buff+offset) */
-		if (avb_buff)
-			stmmac_avb_count_tx_packet(priv,
-						  (void *)avb_buff + avb_buff->common.offset,
-						  avb_buff->common.len);
-		if (stmmac_avb_verbose & STMMAC_AVB_VERBOSE_TX)
-			pr_info("stmmac_enet_tx_avb [%d] : buffer vaddr: 0x%p, dma_addr: 0x%lx, len: %d\n",
-					entry, avb_buff, avb_buff->dma_addr, avb_buff->common.len);
-		// if ((stmmac_avb_verbose & STMMAC_AVB_VERBOSE_TX) || stmmac_avb_test_is_in_progress()) {
-		// 	// print the hwts_tx_en and hwts_rx_en
-		// 	pr_info("stmmac_enet_tx_avb [%d] : hwts_tx_en: %d, hwts_rx_en: %d\n",
-		// 			entry, priv->hwts_tx_en, priv->hwts_rx_en);
-		//
-		// 	stmmac_avb_print_hex_dump(
-		// 			(void*)avb_buff + avb_buff->common.offset,
-		// 			avb_buff->common.len,
-		// 			"AVB desc cleanup");
-		// }
-
-		/* get hw tstamp */
-		ns = __stmmac_get_tx_hwstamp(priv, tx_desc);
-
-		dma_unmap_single(priv->device, avb_buff->dma_addr, avb_buff->common.len,
-				DMA_TO_DEVICE);
-		/* free or return the tx buffer */
-		if (ns && (avb_buff->common.flags & AVB_TX_FLAG_HW_TS)) {
+			/* VLAN-aware EtherType stats (expects Ethernet header at avb_buff+offset) */
+			if (avb_buff)
+				stmmac_avb_count_tx_packet(priv,
+							(void *)avb_buff + avb_buff->common.offset,
+							avb_buff->common.len);
 			if (stmmac_avb_verbose & STMMAC_AVB_VERBOSE_TX)
-				pr_info("stmmac_enet_tx_avb [%d] : ts: %llu\n", entry, ns);
-			avb_buff->common.ts = ns;
-			rc |= priv->avb->tx_ts(priv->avb_data, &avb_buff->common);
+				pr_info("stmmac_enet_tx_avb [%d] : buffer vaddr: 0x%p, dma_addr: 0x%lx, len: %d\n",
+						entry, avb_buff, avb_buff->dma_addr, avb_buff->common.len);
+			// if ((stmmac_avb_verbose & STMMAC_AVB_VERBOSE_TX) || stmmac_avb_test_is_in_progress()) {
+			// 	// print the hwts_tx_en and hwts_rx_en
+			// 	pr_info("stmmac_enet_tx_avb [%d] : hwts_tx_en: %d, hwts_rx_en: %d\n",
+			// 			entry, priv->hwts_tx_en, priv->hwts_rx_en);
+			//
+			// 	stmmac_avb_print_hex_dump(
+			// 			(void*)avb_buff + avb_buff->common.offset,
+			// 			avb_buff->common.len,
+			// 			"AVB desc cleanup");
+			// }
+
+			/* get hw tstamp */
+			ns = __stmmac_get_tx_hwstamp(priv, tx_desc);
+
+			dma_unmap_single(priv->device, avb_buff->dma_addr, avb_buff->common.len,
+					DMA_TO_DEVICE);
+			/* free or return the tx buffer */
+			if (ns && (avb_buff->common.flags & AVB_TX_FLAG_HW_TS)) {
+				if (stmmac_avb_verbose & STMMAC_AVB_VERBOSE_TX)
+					pr_info("stmmac_enet_tx_avb [%d] : ts: %llu\n", entry, ns);
+				avb_buff->common.ts = ns;
+				rc |= priv->avb->tx_ts(priv->avb_data, &avb_buff->common);
+			}
+			else {
+				priv->avb->free(priv->avb_data, &avb_buff->common);
+			}
+
+			tx_q->buf_pool[entry].vaddr = 0;
+			tx_q->buf_pool[entry].dma_addr = 0;
+			tx_q->buf_pool[entry].offset = 0;
+
+			/* clean the descriptor */
+			stmmac_release_tx_desc(priv, tx_desc, priv->mode);
+
+			entry = STMMAC_GET_ENTRY(entry, priv->dma_avb_conf->dma_tx_size);
 		}
-		else {
-			priv->avb->free(priv->avb_data, &avb_buff->common);
-		}
-
-		tx_q->buf_pool[entry].vaddr = 0;
-		tx_q->buf_pool[entry].dma_addr = 0;
-		tx_q->buf_pool[entry].offset = 0;
-
-		/* clean the descriptor */
-		stmmac_release_tx_desc(priv, tx_desc, priv->mode);
-
-		entry = STMMAC_GET_ENTRY(entry, priv->dma_avb_conf->dma_tx_size);
+		tx_q->dirty_tx = entry;
 	}
-	tx_q->dirty_tx = entry;
 
 	return rc;
 }
