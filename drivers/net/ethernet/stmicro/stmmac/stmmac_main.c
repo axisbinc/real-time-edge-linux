@@ -8493,19 +8493,16 @@ int stmmac_enet_set_idle_slope(void *data, unsigned int queue_id, u32 idle_slope
 }
 EXPORT_SYMBOL(stmmac_enet_set_idle_slope);
 
-int stmmac_enet_rx_poll_avb(void *data)
+static unsigned int stmmac_enet_rx_poll_avb_queue(struct stmmac_priv *priv,
+						  struct stmmac_avb_rx_queue *rx_q)
 {
 	int entry, status = 0, len = 0;
 	struct stmmac_avb_buffer *buf;
-	struct stmmac_avb_rx_queue *rx_q;
 	struct avb_rx_desc *avb_pkt_desc;
-	struct stmmac_priv *priv = data;
 	void *new_avb_buf;
 	struct dma_desc *desc;
 	unsigned int count;
 	unsigned int rc = 0;
-
-	rx_q = &priv->dma_avb_conf->rx_queue[STMMAC_AVB_CHANNEL_PRIORITY - STMMAC_AVB_CHANNEL_BASE];
 
 	/* 20 packets per 125us > 64 bytes packets @ 100Mbps */
 	for (count = 0; count < 20; count++) {
@@ -8580,6 +8577,22 @@ int stmmac_enet_rx_poll_avb(void *data)
 		/* dispatch the inbound packet */
 		priv->avb_rx_dispatched++;
 		rc |= priv->avb->rx(priv->avb_data, avb_pkt_desc);
+	}
+
+	return rc;
+}
+
+int stmmac_enet_rx_poll_avb(void *data)
+{
+	struct stmmac_priv *priv = data;
+	struct stmmac_avb_rx_queue *rx_q;
+	unsigned int rc = 0;
+	int q;
+
+	/* Poll both PRIORITY and CBS RX queues */
+	for (q = 0; q < MTL_MAX_AVB_RX_QUEUES; q++) {
+		rx_q = &priv->dma_avb_conf->rx_queue[q];
+		rc |= stmmac_enet_rx_poll_avb_queue(priv, rx_q);
 	}
 
 	return rc;
