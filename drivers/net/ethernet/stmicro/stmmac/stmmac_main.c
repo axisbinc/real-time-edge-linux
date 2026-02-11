@@ -8419,10 +8419,11 @@ alloc_error:
 int stmmac_enet_set_idle_slope(void *data, unsigned int queue_id, u32 idle_slope)
 {
 	struct stmmac_priv *priv = data;
-	u32 queue = queue_id;
+	u32 queue = queue_id + STMMAC_AVB_CHANNEL_BASE;
 	u32 ptr, speed_div;
+	u32 port_rate_bps;
 	u64 value;
-	s32 send_slope;
+	s64 send_slope;
 	int ret;
 
 	pr_info("%s: queue %d, idle_slope: %u bps\n", __func__, queue_id, idle_slope);
@@ -8453,17 +8454,21 @@ int stmmac_enet_set_idle_slope(void *data, unsigned int queue_id, u32 idle_slope
 		return -EOPNOTSUPP;
 	}
 
+	port_rate_bps = speed_div * 1000;
 	/* Calculate CBS parameters */
 	value = div_s64((s64)idle_slope * 1024ll * ptr, speed_div);
 	priv->plat->tx_queues_cfg[queue].idle_slope = value & GENMASK(31, 0);
 
-	send_slope = -(s32)(speed_div - idle_slope);
-	value = div_s64((s64)send_slope * 1024ll * ptr, speed_div);
+	send_slope = (s64)idle_slope - (s64)port_rate_bps;
+	value = div_s64(-send_slope * 1024ll * ptr, speed_div);
 	priv->plat->tx_queues_cfg[queue].send_slope = value & GENMASK(31, 0);
 
 	/* Use default credit limits */
-	priv->plat->tx_queues_cfg[queue].high_credit = 1500 * 1024 * 8;
-	priv->plat->tx_queues_cfg[queue].low_credit = -1500 * 1024 * 8;
+	value = 1500 * 1024ll * 8;
+	priv->plat->tx_queues_cfg[queue].high_credit = value & GENMASK(31, 0);
+
+	value |= 0x10000000; /* Set the sign bit for low credit */
+	priv->plat->tx_queues_cfg[queue].low_credit = value & GENMASK(31, 0);
 
 	/* Switch queue to AVB mode and configure CBS */
 	ret = stmmac_dma_qmode(priv, priv->ioaddr, queue, MTL_QUEUE_AVB);
