@@ -8149,6 +8149,14 @@ static int stmmac_avb_init_dma_engine(struct stmmac_priv *priv)
 		/* Setup RX ring length */
 		stmmac_set_rx_ring_len(priv, priv->ioaddr, (num_rx_descs - 1), chan);
 
+		if(chan == STMMAC_AVB_CHANNEL_PRIORITY){
+			stmmac_dma_rx_mode(priv, priv->ioaddr, 64, chan, (256 * 3) /* todo: TBD */,
+				MTL_QUEUE_DCB);
+		} else {
+			stmmac_dma_rx_mode(priv, priv->ioaddr, 64, chan, (256 * 3) /* todo: TBD */,
+				MTL_QUEUE_AVB);
+		}
+
 		/* AVB DMA TX Channel Configuration */
 		tx_q = &priv->dma_avb_conf->tx_queue[i];
 		tx_q->avb_chan = chan;
@@ -8161,8 +8169,14 @@ static int stmmac_avb_init_dma_engine(struct stmmac_priv *priv)
 		tx_q->tx_tail_addr = tx_q->dma_tx_phy;
 		stmmac_set_tx_tail_ptr(priv, priv->ioaddr, tx_q->tx_tail_addr, chan);
 		stmmac_set_tx_ring_len(priv, priv->ioaddr, (num_tx_descs - 1), chan);
-		stmmac_dma_tx_mode(priv, priv->ioaddr, 64, chan, (256 * 3) /* todo: TBD */,
-			MTL_QUEUE_DCB /* todo: MTL_QUEUE_AVB */);
+
+		if(chan == STMMAC_AVB_CHANNEL_PRIORITY){
+			stmmac_dma_tx_mode(priv, priv->ioaddr, 64, chan, (256 * 3) /* todo: TBD */,
+				MTL_QUEUE_DCB);
+		} else {
+			stmmac_dma_tx_mode(priv, priv->ioaddr, 64, chan, (256 * 3) /* todo: TBD */,
+				MTL_QUEUE_AVB);
+		}
 	
 		/* Start the ball rolling... */
 		netdev_info(priv->dev, "AVB Tx/Rx processes started in channel %d\n", chan);
@@ -8420,7 +8434,7 @@ int stmmac_enet_set_idle_slope(void *data, unsigned int queue_id, u32 idle_slope
 {
 	struct stmmac_priv *priv = data;
 	u32 queue = queue_id + STMMAC_AVB_CHANNEL_BASE;
-	u32 ptr, speed_div;
+	u32 ptr, speed_div_kbps;
 	u32 port_rate_bps;
 	u64 value;
 	s64 send_slope;
@@ -8443,33 +8457,18 @@ int stmmac_enet_set_idle_slope(void *data, unsigned int queue_id, u32 idle_slope
 	switch (priv->speed) {
 	case SPEED_1000:
 		ptr = 8;
-		speed_div = 1000000;
+		speed_div_kbps = 1000000;
 		break;
 	case SPEED_100:
 		ptr = 4;
-		speed_div = 100000;
+		speed_div_kbps = 100000;
 		break;
 	default:
 		pr_err("%s: Unsupported link speed %d\n", __func__, priv->speed);
 		return -EOPNOTSUPP;
 	}
 
-	port_rate_bps = speed_div * 1000;
-	/* Calculate CBS parameters */
-	value = div_s64((s64)idle_slope * 1024ll * ptr, speed_div);
-	priv->plat->tx_queues_cfg[queue].idle_slope = value & GENMASK(31, 0);
-
-	send_slope = (s64)idle_slope - (s64)port_rate_bps;
-	value = div_s64(-send_slope * 1024ll * ptr, speed_div);
-	priv->plat->tx_queues_cfg[queue].send_slope = value & GENMASK(31, 0);
-
-	/* Use default credit limits */
-	value = 1500 * 1024ll * 8;
-	priv->plat->tx_queues_cfg[queue].high_credit = value & GENMASK(31, 0);
-
-	value |= 0x10000000; /* Set the sign bit for low credit */
-	priv->plat->tx_queues_cfg[queue].low_credit = value & GENMASK(31, 0);
-
+	priv->plat->tx_queues_cfg[queue].mode_to_use = MTL_QUEUE_AVB;
 	/* Switch queue to AVB mode and configure CBS */
 	ret = stmmac_dma_qmode(priv, priv->ioaddr, queue, MTL_QUEUE_AVB);
 	if (ret) {
@@ -8477,7 +8476,23 @@ int stmmac_enet_set_idle_slope(void *data, unsigned int queue_id, u32 idle_slope
 		return ret;
 	}
 
-	priv->plat->tx_queues_cfg[queue].mode_to_use = MTL_QUEUE_AVB;
+	port_rate_bps = speed_div_kbps * 1000;
+	/* Calculate CBS parameters */
+	value = div_s64((s64)idle_slope * 1024ll * ptr, speed_div_kbps);
+	priv->plat->tx_queues_cfg[queue].idle_slope = value & GENMASK(31, 0);
+
+	send_slope = (s64)idle_slope - (s64)port_rate_bps;
+	value = div_s64(-send_slope * 1024ll * ptr, speed_div_kbps);
+	priv->plat->tx_queues_cfg[queue].send_slope = value & GENMASK(31, 0);
+
+	/* Use default credit limits */
+	/* TODO: follow the equations mentioned in net/sched/sch_cbs.c */
+	value = 1500 * 1024ll * 8;
+	value = value & GENMASK(31, 0);
+	priv->plat->tx_queues_cfg[queue].high_credit = value;
+
+	/* RM 11.7.6.1.453: Set low credit to the 2's complement of high credit */
+	priv->plat->tx_queues_cfg[queue].low_credit = (u32)(-((s32)value));
 
 	/* Program hardware CBS registers */
 	ret = stmmac_config_cbs(priv, priv->hw,
@@ -8491,8 +8506,8 @@ int stmmac_enet_set_idle_slope(void *data, unsigned int queue_id, u32 idle_slope
 		return ret;
 	}
 
-	pr_info("%s: CBS configured for queue %d - idle_slope: %u bps\n",
-		__func__, queue, idle_slope);
+	pr_info("%s: CBS configured for queue %d - idle_slope: %u bps, send_slope: %lld bps\n",
+		__func__, queue, idle_slope, send_slope);
 
 	return 0;
 }
