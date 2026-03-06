@@ -8095,11 +8095,11 @@ EXPORT_SYMBOL_GPL(stmmac_resume);
 #ifdef CONFIG_STMMAC_GENAVB
 
 #define DEFAULT_AVB_BUFSIZE 2048
-// #define DEFAULT_AVB_RX_DESC_CNT 256
-// #define DEFAULT_AVB_TX_DESC_CNT 256
+#define DEFAULT_AVB_RX_DESC_CNT 512
+#define DEFAULT_AVB_TX_DESC_CNT 512
 // todo: remove, reduced for debugging
-#define DEFAULT_AVB_RX_DESC_CNT 32
-#define DEFAULT_AVB_TX_DESC_CNT 32
+// #define DEFAULT_AVB_RX_DESC_CNT 32
+// #define DEFAULT_AVB_TX_DESC_CNT 32
 
 static int stmmac_avb_init_dma_engine(struct stmmac_priv *priv)
 {
