@@ -271,9 +271,12 @@
 
 /* configure eqos for priority queueing and DMA channel mapping */
 &eqos {
+	phy-mode = "rgmii-id";
+	phy-handle = <&ethphy0>;
 	snps,force_thresh_dma_mode;
 	snps,mtl-tx-config = <&mtl_tx_setup>;
 	snps,mtl-rx-config = <&mtl_rx_setup>;
+	status = "okay";
 
 	mtl_tx_setup: tx-queues-config {
 		snps,tx-queues-to-use = <3>;
