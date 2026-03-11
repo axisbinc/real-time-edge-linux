@@ -31,15 +31,15 @@ MODULE_LICENSE("GPL");
 #define MAX_MIDI_DEVICES	2
 
 /* defaults */
-#define MAX_BUFFER_SIZE		(64*1024)
+#define MAX_BUFFER_SIZE		(512*1024)
 #define MIN_PERIOD_SIZE		64
 #define MAX_PERIOD_SIZE		MAX_BUFFER_SIZE
-#define USE_FORMATS 		(SNDRV_PCM_FMTBIT_U8 | SNDRV_PCM_FMTBIT_S16_LE)
+#define USE_FORMATS 		(SNDRV_PCM_FMTBIT_U8 | SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S32_LE)
 #define USE_RATE		SNDRV_PCM_RATE_CONTINUOUS | SNDRV_PCM_RATE_8000_48000
 #define USE_RATE_MIN		5500
 #define USE_RATE_MAX		48000
 #define USE_CHANNELS_MIN 	1
-#define USE_CHANNELS_MAX 	2
+#define USE_CHANNELS_MAX 	96
 #define USE_PERIODS_MIN 	1
 #define USE_PERIODS_MAX 	1024
 #define USE_MIXER_VOLUME_LEVEL_MIN	-50
@@ -211,6 +211,29 @@ static const struct dummy_model model_ca0106 = {
 	.rate_max = 192000,
 };
 
+/*
+ * TDM-16 x 6 data-lanes model (96 interleaved channels)
+ * Simulates the workload of 6 parallel TDM-16 streams at 48 kHz / S32_LE
+ * without touching any SAI hardware.
+ *
+ * Frame size : 96 ch x 4 B = 384 B
+ * Buffer     : 512 KB  (~1365 frames)
+ * Period     : 256 KB  (~682 frames ~14.2 ms)
+ */
+static const struct dummy_model model_tdm96 = {
+	.name = "tdm96",
+	.formats = SNDRV_PCM_FMTBIT_S32_LE,
+	.buffer_bytes_max = 512 * 1024,
+	.period_bytes_max = 256 * 1024,
+	.periods_min = 2,
+	.periods_max = 8,
+	.channels_min = 96,
+	.channels_max = 96,
+	.rates = SNDRV_PCM_RATE_48000,
+	.rate_min = 48000,
+	.rate_max = 48000,
+};
+
 static const struct dummy_model *dummy_models[] = {
 	&model_emu10k1,
 	&model_rme9652,
@@ -218,6 +241,7 @@ static const struct dummy_model *dummy_models[] = {
 	&model_uda1341,
 	&model_ac97,
 	&model_ca0106,
+	&model_tdm96,
 	NULL
 };
 
