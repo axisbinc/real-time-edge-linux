@@ -83,26 +83,24 @@
 	assigned-clock-rates = <24576000>; /* Standard 24.576 MHz */
 	clocks = <&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_SAI2_IPG>, <&clk IMX8MP_CLK_DUMMY>,
 		<&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_SAI2_MCLK1>, <&clk IMX8MP_CLK_DUMMY>,
-			<&clk IMX8MP_CLK_DUMMY>;
-			clock-names = "bus", "mclk0", "mclk1", "mclk2", "mclk3";
-			fsl,sai-mclk-direction-output;
+		<&clk IMX8MP_CLK_DUMMY>;
+	clock-names = "bus", "mclk0", "mclk1", "mclk2", "mclk3";
+	fsl,sai-mclk-direction-output;
 
-			/* Dataline configuration for 32 channels via 2x TDM16:
-			* - Type 0 = Default/TDM mode
-			* - RX mask 0x1 = RX_DATA0
-			* - TX mask 0x3 = TX_DATA0 and TX_DATA1 (both enabled for 2x TDM16)
-			*/
-			fsl,dataline = <0 0x1 0x3>;
+	/* Dataline configuration for 32 channels via 2x TDM16:
+	* - Type 0 = Default/TDM mode
+	* - RX mask 0x1 = RX_DATA0
+	* - TX mask 0x3 = TX_DATA0 and TX_DATA1 (both enabled for 2x TDM16)
+	*/
+	fsl,dataline = <0 0x1 0x3>;
 
-			/* Use MULTI-FIFO DMA for 32-channel operation (2x TDM16) */
-			dmas = <&sdma2 2 25 0>, <&sdma2 3 25 0>; /* 25 = IMX_DMATYPE_MULTI_SAI */
-			dma-names = "rx", "tx";
+	/* Use MULTI-FIFO DMA for 32-channel operation (2x TDM16) */
+	dmas = <&sdma2 2 25 0>, <&sdma2 3 25 0>; /* 25 = IMX_DMATYPE_MULTI_SAI */
+	dma-names = "rx", "tx";
 
-			/* Synchronous mode: TX is master, RX uses TX clocks (shared BCLK/FSYNC)
-            * i.MX8MP is GLOBAL MASTER - generates clocks for both directions
-            * Raspberry Pi must be configured as I2S SLAVE
-            */
-			fsl,sai-synchronous-rx;
+	/* Synchronous mode: TX is master, RX uses TX clocks (shared BCLK/FSYNC)
+	* i.MX8MP is GLOBAL MASTER - generates clocks for both directions
+	*/
 };
 
 /* ------------------------------------------------------------------------ */
