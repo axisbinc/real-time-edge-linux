@@ -519,10 +519,10 @@ int stmmac_enet_avb_register(const char *ifname, const struct avb_ops *avb, void
 	priv->avb_rx_packets = 0;
 	ifindex = ndev->ifindex;
 
-	if (up) {
+	if (up)
 		/* In case of error, device is closed but avb interface is registered */
 		dev_open(ndev, NULL);
-	}
+	
 
 	rtnl_unlock();
 
@@ -597,11 +597,12 @@ int stmmac_enet_get_tx_queue_properties(int ifindex, struct tx_queue_properties 
 		goto err_ndev;
 
 	priv = netdev_priv(ndev);
-	/* Advertise single queue with CBS support */
+
 	prop->num_queues = 2;
 	prop->queue[0].priority = 0;
 	prop->queue[0].flags = TX_QUEUE_FLAGS_STRICT_PRIORITY;
 
+	/* Advertise single queue with CBS support */
 	prop->queue[1].priority = 1;
 	prop->queue[1].flags = TX_QUEUE_FLAGS_CREDIT_SHAPER;
 

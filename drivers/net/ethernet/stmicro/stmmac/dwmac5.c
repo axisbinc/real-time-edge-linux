@@ -338,13 +338,13 @@ int dwmac5_disable_rx(void __iomem *ioaddr, uint32_t *config)
 	*config = old_val = readl(ioaddr + GMAC_CONFIG);
 	val = old_val & ~GMAC_CONFIG_RE;
 	writel(val, ioaddr + GMAC_CONFIG);
-    return 0;
+	return 0;
 }
 
 int dwmac5_restore_rx(void __iomem *ioaddr, uint32_t config)
 {
 	writel(config, ioaddr + GMAC_CONFIG);
-    return 0;
+	return 0;
 }
 
 int dwmac5_rxp_disable(void __iomem *ioaddr)
@@ -374,54 +374,54 @@ void dwmac5_rxp_enable(void __iomem *ioaddr)
 
 static void _dwmac4_dump_dma_regs(void __iomem *ioaddr, u32 channel)
 {
-    pr_info("    DMA_CHAN_CONTROL: 0x%x\n",
-        readl(ioaddr + DMA_CHAN_CONTROL(channel)));
-    pr_info("    DMA_CHAN_TX_CONTROL: 0x%x\n",
-        readl(ioaddr + DMA_CHAN_TX_CONTROL(channel)));
-    pr_info("    DMA_CHAN_RX_CONTROL: 0x%x\n",
-        readl(ioaddr + DMA_CHAN_RX_CONTROL(channel)));
-    pr_info("    DMA_CHAN_TX_BASE_ADDR: 0x%x\n",
-        readl(ioaddr + DMA_CHAN_TX_BASE_ADDR(channel)));
-    pr_info("    DMA_CHAN_RX_BASE_ADDR: 0x%x\n",
-        readl(ioaddr + DMA_CHAN_RX_BASE_ADDR(channel)));
-    pr_info("    DMA_CHAN_TX_END_ADDR: 0x%x\n",
-        readl(ioaddr + DMA_CHAN_TX_END_ADDR(channel)));
-    pr_info("    DMA_CHAN_RX_END_ADDR: 0x%x\n",
-        readl(ioaddr + DMA_CHAN_RX_END_ADDR(channel)));
-    pr_info("    DMA_CHAN_TX_RING_LEN: 0x%x\n",
-        readl(ioaddr + DMA_CHAN_TX_RING_LEN(channel)));
-    pr_info("    DMA_CHAN_RX_RING_LEN: 0x%x\n",
-        readl(ioaddr + DMA_CHAN_RX_RING_LEN(channel)));
-    pr_info("    DMA_CHAN_INTR_ENA: 0x%x\n",
-        readl(ioaddr + DMA_CHAN_INTR_ENA(channel)));
-    pr_info("    DMA_CHAN_RX_WATCHDOG: 0x%x\n",
-        readl(ioaddr + DMA_CHAN_RX_WATCHDOG(channel)));
-    pr_info("    DMA_CHAN_SLOT_CTRL_STATUS: 0x%x\n",
-        readl(ioaddr + DMA_CHAN_SLOT_CTRL_STATUS(channel)));
-    pr_info("    DMA_CHAN_CUR_TX_DESC: 0x%x\n",
-        readl(ioaddr + DMA_CHAN_CUR_TX_DESC(channel)));
-    pr_info("    DMA_CHAN_CUR_RX_DESC: 0x%x\n",
-        readl(ioaddr + DMA_CHAN_CUR_RX_DESC(channel)));
-    pr_info("    DMA_CHAN_CUR_TX_BUF_ADDR: 0x%x\n",
-        readl(ioaddr + DMA_CHAN_CUR_TX_BUF_ADDR(channel)));
-    pr_info("    DMA_CHAN_CUR_RX_BUF_ADDR: 0x%x\n",
-        readl(ioaddr + DMA_CHAN_CUR_RX_BUF_ADDR(channel)));
-    pr_info("    DMA_CHAN_STATUS: 0x%x\n",
-        readl(ioaddr + DMA_CHAN_STATUS(channel)));
+	pr_debug("    DMA_CHAN_CONTROL: 0x%x\n",
+			readl(ioaddr + DMA_CHAN_CONTROL(channel)));
+	pr_debug("    DMA_CHAN_TX_CONTROL: 0x%x\n",
+			readl(ioaddr + DMA_CHAN_TX_CONTROL(channel)));
+	pr_debug("    DMA_CHAN_RX_CONTROL: 0x%x\n",
+			readl(ioaddr + DMA_CHAN_RX_CONTROL(channel)));
+	pr_debug("    DMA_CHAN_TX_BASE_ADDR: 0x%x\n",
+			readl(ioaddr + DMA_CHAN_TX_BASE_ADDR(channel)));
+	pr_debug("    DMA_CHAN_RX_BASE_ADDR: 0x%x\n",
+			readl(ioaddr + DMA_CHAN_RX_BASE_ADDR(channel)));
+	pr_debug("    DMA_CHAN_TX_END_ADDR: 0x%x\n",
+			readl(ioaddr + DMA_CHAN_TX_END_ADDR(channel)));
+	pr_debug("    DMA_CHAN_RX_END_ADDR: 0x%x\n",
+			readl(ioaddr + DMA_CHAN_RX_END_ADDR(channel)));
+	pr_debug("    DMA_CHAN_TX_RING_LEN: 0x%x\n",
+			readl(ioaddr + DMA_CHAN_TX_RING_LEN(channel)));
+	pr_debug("    DMA_CHAN_RX_RING_LEN: 0x%x\n",
+			readl(ioaddr + DMA_CHAN_RX_RING_LEN(channel)));
+	pr_debug("    DMA_CHAN_INTR_ENA: 0x%x\n",
+			readl(ioaddr + DMA_CHAN_INTR_ENA(channel)));
+	pr_debug("    DMA_CHAN_RX_WATCHDOG: 0x%x\n",
+			readl(ioaddr + DMA_CHAN_RX_WATCHDOG(channel)));
+	pr_debug("    DMA_CHAN_SLOT_CTRL_STATUS: 0x%x\n",
+			readl(ioaddr + DMA_CHAN_SLOT_CTRL_STATUS(channel)));
+	pr_debug("    DMA_CHAN_CUR_TX_DESC: 0x%x\n",
+			readl(ioaddr + DMA_CHAN_CUR_TX_DESC(channel)));
+	pr_debug("    DMA_CHAN_CUR_RX_DESC: 0x%x\n",
+			readl(ioaddr + DMA_CHAN_CUR_RX_DESC(channel)));
+	pr_debug("    DMA_CHAN_CUR_TX_BUF_ADDR: 0x%x\n",
+			readl(ioaddr + DMA_CHAN_CUR_TX_BUF_ADDR(channel)));
+	pr_debug("    DMA_CHAN_CUR_RX_BUF_ADDR: 0x%x\n",
+			readl(ioaddr + DMA_CHAN_CUR_RX_BUF_ADDR(channel)));
+	pr_debug("    DMA_CHAN_STATUS: 0x%x\n",
+			readl(ioaddr + DMA_CHAN_STATUS(channel)));
 }
 
 void dwmac5_frp_get_stats(void __iomem *ioaddr, uint8_t dma_channel,
         uint32_t *accept_count)
 {
-    u32 val;
-    if (dma_channel >= DWC_EQOS_NUM_DMA_RX_CH) {
-        pr_err("Invalid DMA channel: %d\n", dma_channel);
-        return;
-    }
+	u32 val;
+	if (dma_channel >= DWC_EQOS_NUM_DMA_RX_CH) {
+		pr_err("Invalid DMA channel: %d\n", dma_channel);
+		return;
+	}
 
-    val = readl(ioaddr + DMA_CHAN_RXP_ACCEPT_CNT(dma_channel));
-    if (accept_count)
-        *accept_count = val;
+	val = readl(ioaddr + DMA_CHAN_RXP_ACCEPT_CNT(dma_channel));
+	if (accept_count)
+		*accept_count = val;
 }
 
 static int dwmac5_rxp_iacc_read_word(void __iomem *base, u16 addr, u32 *data)
@@ -434,7 +434,7 @@ static int dwmac5_rxp_iacc_read_word(void __iomem *base, u16 addr, u32 *data)
 
 	/* Wait for ready */
 	ret = readl_poll_timeout(base + MTL_RXP_IACC_CTRL_STATUS,
-				 ctrl, !(ctrl & STARTBUSY), 1, 10000);
+			ctrl, !(ctrl & STARTBUSY), 1, 10000);
 	if (ret)
 		return ret;
 
@@ -448,7 +448,7 @@ static int dwmac5_rxp_iacc_read_word(void __iomem *base, u16 addr, u32 *data)
 
 	/* Wait for done */
 	ret = readl_poll_timeout(base + MTL_RXP_IACC_CTRL_STATUS,
-				 ctrl, !(ctrl & STARTBUSY), 1, 10000);
+			ctrl, !(ctrl & STARTBUSY), 1, 10000);
 	if (ret)
 		return ret;
 
@@ -468,11 +468,11 @@ void dwmac5_frp_dump_rxp(void __iomem *ioaddr)
 	nve = ctrl & NVE;
 	npe = (ctrl & NPE) >> 16;
 
-	pr_info("FRP table: NVE=%u, NPE=0x%x, CTRL=0x%x\n", nve, npe, ctrl);
+	pr_debug("FRP table: NVE=%u, NPE=0x%x, CTRL=0x%x\n", nve, npe, ctrl);
 
 	/* Keep output bounded in case something goes wrong */
 	if (nve > 64) {
-		pr_info("FRP table: limiting dump to first 64 entries (reported NVE=%u)\n", nve);
+		pr_debug("FRP table: limiting dump to first 64 entries (reported NVE=%u)\n", nve);
 		nve = 64;
 	}
 
@@ -486,7 +486,7 @@ void dwmac5_frp_dump_rxp(void __iomem *ioaddr)
 		ret |= dwmac5_rxp_iacc_read_word(ioaddr, (u16)(pos * 4 + 2), &w2);
 		ret |= dwmac5_rxp_iacc_read_word(ioaddr, (u16)(pos * 4 + 3), &w3);
 		if (ret) {
-			pr_info("FRP[%d]: read failed (%d)\n", pos, ret);
+			pr_debug("FRP[%d]: read failed (%d)\n", pos, ret);
 			continue;
 		}
 
@@ -497,77 +497,71 @@ void dwmac5_frp_dump_rxp(void __iomem *ioaddr)
 
 		ethertype = be16_to_cpu((__force __be16)(instr.fields.match_data & 0xffff));
 
-		pr_info("FRP[%02d] raw: %08x %08x %08x %08x\n", pos, w0, w1, w2, w3);
-		pr_info("FRP[%02d] dec: af=%u rf=%u im=%u nc=%u off=%u ok=%u dma_mask=0x%02x match_en=0x%08x eth=0x%04x\n",
-			pos,
-			instr.fields.af,
-			instr.fields.rf,
-			instr.fields.im,
-			instr.fields.nc,
-			instr.fields.frame_offset,
-			instr.fields.ok_index,
-			instr.fields.dma_ch_no,
-			instr.fields.match_en,
-			ethertype);
+		pr_debug("FRP[%02d] raw: %08x %08x %08x %08x\n", pos, w0, w1, w2, w3);
+		pr_debug("FRP[%02d] dec: af=%u rf=%u im=%u nc=%u off=%u ok=%u dma_mask=0x%02x match_en=0x%08x eth=0x%04x\n",
+				pos,
+				instr.fields.af,
+				instr.fields.rf,
+				instr.fields.im,
+				instr.fields.nc,
+				instr.fields.frame_offset,
+				instr.fields.ok_index,
+				instr.fields.dma_ch_no,
+				instr.fields.match_en,
+				ethertype);
 	}
 }
 
 void dwmac5_frp_dump_stats(void __iomem *ioaddr)
 {
-    u32 val;
+	u32 val;
 
 	val = readl(ioaddr + GMAC_CONFIG);
-    pr_info("GMAC_CONFIG: 0x%x\n", val);
+	pr_debug("GMAC_CONFIG: 0x%x\n", val);
 
-    val = readl(ioaddr + MTL_RXQ_DMA_MAP0);
-    pr_info("MTL_RXQ_DMA_MAP0: 0x%x\n", val);
-    val = readl(ioaddr + MTL_RXQ_DMA_MAP1);
-    pr_info("MTL_RXQ_DMA_MAP1: 0x%x\n", val);
+	val = readl(ioaddr + MTL_RXQ_DMA_MAP0);
+	pr_debug("MTL_RXQ_DMA_MAP0: 0x%x\n", val);
+	val = readl(ioaddr + MTL_RXQ_DMA_MAP1);
+	pr_debug("MTL_RXQ_DMA_MAP1: 0x%x\n", val);
 
-    val = readl(ioaddr + MTL_RXP_CONTROL_STATUS);
-    pr_info("MTL_RXP_CONTROL_STATUS: 0x%x\n", val);
-    val = readl(ioaddr + MTL_OPERATION_MODE);
-    pr_info("MTL_OPERATION_MODE: 0x%x\n", val);
+	val = readl(ioaddr + MTL_RXP_CONTROL_STATUS);
+	pr_debug("MTL_RXP_CONTROL_STATUS: 0x%x\n", val);
+	val = readl(ioaddr + MTL_OPERATION_MODE);
+	pr_debug("MTL_OPERATION_MODE: 0x%x\n", val);
 
-    val = readl(ioaddr + MTL_RXP_DROP_CNT);
-    pr_info("MTL_RXP_DROP_CNT: 0x%x\n", val);
-    val = readl(ioaddr + MTL_RXP_ERROR_CNT);
-    pr_info("MTL_RXP_ERROR_CNT: 0x%x\n", val);
+	val = readl(ioaddr + MTL_RXP_DROP_CNT);
+	pr_debug("MTL_RXP_DROP_CNT: 0x%x\n", val);
+	val = readl(ioaddr + MTL_RXP_ERROR_CNT);
+	pr_debug("MTL_RXP_ERROR_CNT: 0x%x\n", val);
 
-    val = readl(ioaddr + DMA_CH0_RXP_ACCEPT_CNT);
-    pr_info("DMA_CH0_RXP_ACCEPT_CNT: 0x%x\n", val);
-    val = readl(ioaddr + DMA_CH1_RXP_ACCEPT_CNT);
-    pr_info("DMA_CH1_RXP_ACCEPT_CNT: 0x%x\n", val);
-    val = readl(ioaddr + DMA_CH2_RXP_ACCEPT_CNT);
-    pr_info("DMA_CH2_RXP_ACCEPT_CNT: 0x%x\n", val);
-    val = readl(ioaddr + DMA_CH3_RXP_ACCEPT_CNT);
-    pr_info("DMA_CH3_RXP_ACCEPT_CNT: 0x%x\n", val);
-    val = readl(ioaddr + DMA_CH4_RXP_ACCEPT_CNT);
-    pr_info("DMA_CH4_RXP_ACCEPT_CNT: 0x%x\n", val);
+	val = readl(ioaddr + DMA_CH0_RXP_ACCEPT_CNT);
+	pr_debug("DMA_CH0_RXP_ACCEPT_CNT: 0x%x\n", val);
+	val = readl(ioaddr + DMA_CH1_RXP_ACCEPT_CNT);
+	pr_debug("DMA_CH1_RXP_ACCEPT_CNT: 0x%x\n", val);
+	val = readl(ioaddr + DMA_CH2_RXP_ACCEPT_CNT);
+	pr_debug("DMA_CH2_RXP_ACCEPT_CNT: 0x%x\n", val);
+	val = readl(ioaddr + DMA_CH3_RXP_ACCEPT_CNT);
+	pr_debug("DMA_CH3_RXP_ACCEPT_CNT: 0x%x\n", val);
+	val = readl(ioaddr + DMA_CH4_RXP_ACCEPT_CNT);
+	pr_debug("DMA_CH4_RXP_ACCEPT_CNT: 0x%x\n", val);
 
-    for (int i = 0; i < 5; i++) {
-        pr_info("DMA_CHANNEL(%d) Registers\n", i);
-        _dwmac4_dump_dma_regs(ioaddr, i);
-        val = readl(ioaddr + MTL_CHAN_TX_OP_MODE(i));
-        pr_info("    MTL_CHAN_TX_OP_MODE(%d): 0x%x\n", i, val);
-        // print MTL_CHAN_TX_DEBUG
-        //val = readl(ioaddr + DMA_CHAN_CONTROL(i));
-        //pr_info("DMA_CHAN_CONTROL(%d): 0x%x\n", i, val);
-        //val = readl(ioaddr + DMA_CHAN_TX_CONTROL(i));
-        //pr_info("DMA_CHAN_TX_CONTROL(%d): 0x%x\n", i, val);
-        val = readl(ioaddr + MTL_CHAN_TX_DEBUG(i));
-        pr_info("    MTL_CHAN_TX_DEBUG(%d): 0x%x\n", i, val);
-    }
+	for (int i = 0; i < 5; i++) {
+		pr_debug("DMA_CHANNEL(%d) Registers\n", i);
+		_dwmac4_dump_dma_regs(ioaddr, i);
+		val = readl(ioaddr + MTL_CHAN_TX_OP_MODE(i));
+		pr_debug("    MTL_CHAN_TX_OP_MODE(%d): 0x%x\n", i, val);
+		val = readl(ioaddr + MTL_CHAN_TX_DEBUG(i));
+		pr_debug("    MTL_CHAN_TX_DEBUG(%d): 0x%x\n", i, val);
+	}
 
-
-    return;
+	return;
 }
 
 int dwmac5_frp_update_num_entries(void __iomem *ioaddr, uint32_t num_entries)
 {
-    u32 val;
+	u32 val;
 
-    val = readl(ioaddr + MTL_RXP_CONTROL_STATUS);
+	val = readl(ioaddr + MTL_RXP_CONTROL_STATUS);
 
 	/*
 	 * Program Number of Valid Entries (NVE) and Number of Parsable Entries
@@ -579,52 +573,52 @@ int dwmac5_frp_update_num_entries(void __iomem *ioaddr, uint32_t num_entries)
 	val |= (num_entries << 16) & NPE;
 	writel(val, ioaddr + MTL_RXP_CONTROL_STATUS);
 
-    return 0;
+	return 0;
 }
 
 int dwmac5_frp_update_single_entry(void __iomem *ioaddr, 
         union frp_instruction *instr, int pos)
 {
-    int ret, i;
+	int ret, i;
 
-    pr_info("dwmac5_frp_update_single_entry... pos: %d\n", pos);
+	pr_debug("dwmac5_frp_update_single_entry... pos: %d\n", pos);
 
-    // Iterate through the 4 x 32-bit parts of the instruction
-    for (i = 0; i < 4; i++) {
-        int real_pos = pos * 4 + i;
-        u32 val;
+	// Iterate through the 4 x 32-bit parts of the instruction
+	for (i = 0; i < 4; i++) {
+		int real_pos = pos * 4 + i;
+		u32 val;
 
-        /* Wait for ready */
-        ret = readl_poll_timeout(ioaddr + MTL_RXP_IACC_CTRL_STATUS,
-                val, !(val & STARTBUSY), 1, 10000);
-        if (ret)
-            return ret;
+		/* Wait for ready */
+		ret = readl_poll_timeout(ioaddr + MTL_RXP_IACC_CTRL_STATUS,
+				val, !(val & STARTBUSY), 1, 10000);
+		if (ret)
+			return ret;
 
-        /* Write data */
-        val = instr->as_array[i];
-        pr_info("Writing data: 0x%x\n", val);
-        writel(val, ioaddr + MTL_RXP_IACC_DATA);
+		/* Write data */
+		val = instr->as_array[i];
+		pr_debug("Writing data: 0x%x\n", val);
+		writel(val, ioaddr + MTL_RXP_IACC_DATA);
 
-        /* Write pos */
-        val = real_pos & ADDR;
-        writel(val, ioaddr + MTL_RXP_IACC_CTRL_STATUS);
+		/* Write pos */
+		val = real_pos & ADDR;
+		writel(val, ioaddr + MTL_RXP_IACC_CTRL_STATUS);
 
-        /* Write OP */
-        val |= WRRDN;
-        writel(val, ioaddr + MTL_RXP_IACC_CTRL_STATUS);
+		/* Write OP */
+		val |= WRRDN;
+		writel(val, ioaddr + MTL_RXP_IACC_CTRL_STATUS);
 
-        /* Start Write */
-        val |= STARTBUSY;
-        writel(val, ioaddr + MTL_RXP_IACC_CTRL_STATUS);
+		/* Start Write */
+		val |= STARTBUSY;
+		writel(val, ioaddr + MTL_RXP_IACC_CTRL_STATUS);
 
-        /* Wait for done */
-        ret = readl_poll_timeout(ioaddr + MTL_RXP_IACC_CTRL_STATUS,
-                val, !(val & STARTBUSY), 1, 10000);
-        if (ret)
-            return ret;
-    }
+		/* Wait for done */
+		ret = readl_poll_timeout(ioaddr + MTL_RXP_IACC_CTRL_STATUS,
+				val, !(val & STARTBUSY), 1, 10000);
+		if (ret)
+			return ret;
+	}
 
-    return 0;  // Success
+	return 0;  // Success
 }
 
 static int dwmac5_rxp_update_single_entry(void __iomem *ioaddr,
@@ -731,7 +725,6 @@ dwmac5_rxp_get_next_entry(struct stmmac_tc_entry *entries, unsigned int count,
 
 	if (found)
 		return &entries[min_prio_idx];
-
 	return NULL;
 }
 
@@ -744,12 +737,12 @@ int dwmac5_rxp_config(void __iomem *ioaddr, struct stmmac_tc_entry *entries,
 	u32 old_val, val;
 	bool has_valid_entry = false;
 
-    pr_info("dwmac5_rxp_config... %d entries\n", count);
+	pr_debug("dwmac5_rxp_config... %d entries\n", count);
 	/* Force disable RX */
 	old_val = readl(ioaddr + GMAC_CONFIG);
 	val = old_val & ~GMAC_CONFIG_RE;
 	writel(val, ioaddr + GMAC_CONFIG);
-	pr_info("dwmac5_rxp_config: RX disabled (GMAC_CONFIG)\n");
+	pr_debug("dwmac5_rxp_config: RX disabled (GMAC_CONFIG)\n");
 
 	/* Disable RX Parser */
 	ret = dwmac5_rxp_disable(ioaddr);
@@ -777,9 +770,9 @@ int dwmac5_rxp_config(void __iomem *ioaddr, struct stmmac_tc_entry *entries,
 	/* Update entries by reverse order */
 	while (1) {
 		entry = dwmac5_rxp_get_next_entry(entries, count, curr_prio);
-		pr_info("Checking for next RX entry: prio=%d, count=%d\n", curr_prio, count);
+		pr_debug("Checking for next RX entry: prio=%d, count=%d\n", curr_prio, count);
 		if (!entry) {
-			pr_info("No RX entry found for priority %d. Exiting loop.\n", curr_prio);
+			pr_debug("No RX entry found for priority %d. Exiting loop.\n", curr_prio);
 			break;
 		}
 		
