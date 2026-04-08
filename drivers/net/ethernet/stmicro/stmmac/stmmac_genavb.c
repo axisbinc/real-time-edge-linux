@@ -2,68 +2,69 @@
 #include "stmmac_genavb_priv.h"
 #include "stmmac_frp.h"
 
+// TODO: Add avtp protocol macro in appropriate header file
 /* AVTP Ethertype - audio/video streams go to CBS channel */
 #define ETH_P_AVTP 0x22F0
 
 int stmmac_rxp_setup(struct stmmac_priv *priv, u16 eth_types[], u16 count)
 {
-    union frp_instruction instr = { };
-    int ret = 0;
-    uint32_t config = 0;
-    int entry_index = 0;
-    uint8_t dma_channel;
+	union frp_instruction instr = { };
+	int ret = 0;
+	uint32_t config = 0;
+	int entry_index = 0;
+	uint8_t dma_channel;
 
-    // Disable the RXP for configuration
-    dwmac5_disable_rx(priv->hw->pcsr, &config);
-    dwmac5_rxp_disable(priv->hw->pcsr);
+	// Disable the RXP for configuration
+	dwmac5_disable_rx(priv->hw->pcsr, &config);
+	dwmac5_rxp_disable(priv->hw->pcsr);
 
-    // Iterate over each Ethertype in the array
-    for (int i = 0; i < count; i++) {
-        u16 eth_type = eth_types[i];
+	// Iterate over each Ethertype in the array
+	for (int i = 0; i < count; i++) {
+		u16 eth_type = eth_types[i];
 
-        /*
-         * Route AVTP (audio/video transport) packets to CBS channel for 
-         * bandwidth-managed streaming. All other AVB control protocols 
-         * (PTP, MSRP, MVRP, MMRP) go to the PRIORITY channel.
-         */
-        if (eth_type == ETH_P_AVTP)
-            dma_channel = STMMAC_AVB_CHANNEL_CBS;
-        else
-            dma_channel = STMMAC_AVB_CHANNEL_PRIORITY;
+		/*
+		 * Route AVTP (audio/video transport) packets to CBS channel for 
+		 * bandwidth-managed streaming. All other AVB control protocols 
+		 * (PTP, MSRP, MVRP, MMRP) go to the PRIORITY channel.
+		 */
+		if (eth_type == ETH_P_AVTP)
+			dma_channel = STMMAC_AVB_CHANNEL_CBS;
+		else
+			dma_channel = STMMAC_AVB_CHANNEL_PRIORITY;
 
-        // Set up FRP instruction for standard Ethernet header (non-VLAN)
-        stmmac_frp_set_ethertype_match(&instr, eth_type, false, dma_channel);
-        ret |= dwmac5_frp_update_single_entry(priv->hw->pcsr, &instr,
-                entry_index++);
-        
-        // Set up FRP instruction for VLAN-tagged Ethernet header
-        stmmac_frp_set_ethertype_match(&instr, eth_type, true, dma_channel);
-        ret |= dwmac5_frp_update_single_entry(priv->hw->pcsr, &instr,
-                entry_index++);
-    }
+		// Set up FRP instruction for standard Ethernet header (non-VLAN)
+		stmmac_frp_set_ethertype_match(&instr, eth_type, false, dma_channel);
+		ret |= dwmac5_frp_update_single_entry(priv->hw->pcsr, &instr,
+				entry_index++);
 
-    // Add a final entry to accept all remaining packets
-    stmmac_frp_accept_all(&instr);
-    ret |= dwmac5_frp_update_single_entry(priv->hw->pcsr, &instr, entry_index);
+		// Set up FRP instruction for VLAN-tagged Ethernet header
+		stmmac_frp_set_ethertype_match(&instr, eth_type, true, dma_channel);
+		ret |= dwmac5_frp_update_single_entry(priv->hw->pcsr, &instr,
+				entry_index++);
+	}
 
-    // Update the number of FRP entries
-    dwmac5_frp_update_num_entries(priv->hw->pcsr, entry_index + 1);
+	// Add a final entry to accept all remaining packets
+	stmmac_frp_accept_all(&instr);
+	ret |= dwmac5_frp_update_single_entry(priv->hw->pcsr, &instr, entry_index);
 
-    // Re-enable RXP
-    dwmac5_rxp_enable(priv->hw->pcsr);
-    dwmac5_restore_rx(priv->hw->pcsr, config);
+	// Update the number of FRP entries
+	dwmac5_frp_update_num_entries(priv->hw->pcsr, entry_index + 1);
 
-    return ret;
+	// Re-enable RXP
+	dwmac5_rxp_enable(priv->hw->pcsr);
+	dwmac5_restore_rx(priv->hw->pcsr, config);
+
+	return ret;
 }
 
 int stmmac_rxp_clear(struct stmmac_priv *priv)
 {
-    uint32_t config = 0;
-    dwmac5_disable_rx(priv->hw->pcsr, &config);
+	uint32_t config = 0;
+	dwmac5_disable_rx(priv->hw->pcsr, &config);
 
-    dwmac5_rxp_disable(priv->hw->pcsr);
-    dwmac5_frp_update_num_entries(priv->hw->pcsr, 0);
-    //dwmac5_rxp_enable(priv->hw->pcsr);
-    dwmac5_restore_rx(priv->hw->pcsr, config);
-    return 0;
+	dwmac5_rxp_disable(priv->hw->pcsr);
+	dwmac5_frp_update_num_entries(priv->hw->pcsr, 0);
+	//dwmac5_rxp_enable(priv->hw->pcsr);
+	dwmac5_restore_rx(priv->hw->pcsr, config);
+	return 0;
 }
