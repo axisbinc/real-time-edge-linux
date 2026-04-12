@@ -55,8 +55,8 @@
 			MX8MP_IOMUXC_SAI1_TXD1__AUDIOMIX_SAI1_TX_DATA01			0xd6
 			MX8MP_IOMUXC_SAI1_TXD2__AUDIOMIX_SAI1_TX_DATA02			0xd6
 			MX8MP_IOMUXC_SAI1_TXD3__AUDIOMIX_SAI1_TX_DATA03			0xd6
-			/* MX8MP_IOMUXC_SAI1_RXC__AUDIOMIX_SAI1_RX_BCLK			0xd6 */
-			/* MX8MP_IOMUXC_SAI1_RXFS__AUDIOMIX_SAI1_RX_SYNC			0xd6 */
+			MX8MP_IOMUXC_SAI1_RXC__AUDIOMIX_SAI1_RX_BCLK			0xd6
+			MX8MP_IOMUXC_SAI1_RXFS__AUDIOMIX_SAI1_RX_SYNC			0xd6
 		>;
 	};
 	
@@ -140,7 +140,7 @@
 	fsl,dataline = <0 0x1 0x3>;
 
 	/* Use MULTI-FIFO DMA for 32-channel operation (2x TDM16) */
-	dmas = <&sdma2 2 25 0>, <&sdma2 3 25 0>; /* 25 = IMX_DMATYPE_MULTI_SAI */
+	dmas = <&sdma2 0 25 0>, <&sdma2 1 25 0>; /* 25 = IMX_DMATYPE_MULTI_SAI */
 	dma-names = "rx", "tx";
 
 	/* Synchronous mode: TX is master, RX uses TX clocks (shared BCLK/FSYNC)
