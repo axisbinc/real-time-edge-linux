@@ -126,21 +126,18 @@
 	clock-names = "bus", "mclk0", "mclk1", "mclk2", "mclk3";
 	fsl,sai-mclk-direction-output;
 
-	/* Dataline configuration for 32 channels via 2x TDM16:
-	* - Type 0 = Default/TDM mode
-	* - RX mask 0x1 = RX_DATA0
-	* - TX mask 0x3 = TX_DATA0 and TX_DATA1 (both enabled for 2x TDM16)
-	*/
-	fsl,dataline = <0 0x1 0x3>;
+	/* TX-only, 6 data lanes (TX_DATA0-5) */
+	fsl,dataline = <0 0x1 0x3f>;
 
 	/* Use MULTI-FIFO DMA for 32-channel operation (2x TDM16) */
-	dmas = <&sdma2 0 25 0>, <&sdma2 1 25 0>; /* 25 = IMX_DMATYPE_MULTI_SAI */
-	dma-names = "rx", "tx";
+	dmas = <&sdma2 1 25 0>; /* 25 = IMX_DMATYPE_MULTI_SAI */
+	dma-names = "tx";
 
 	/* Synchronous mode: TX is master, RX uses TX clocks (shared BCLK/FSYNC)
 	* i.MX8MP is GLOBAL MASTER - generates clocks for both directions
 	*/
 };
+
 /* ------------------------------------------------------------------------ */
 // Dummy sound codec for TAS5825M amplifiers
 / {
