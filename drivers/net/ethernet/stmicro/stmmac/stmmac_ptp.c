@@ -382,7 +382,7 @@ EXPORT_SYMBOL(stmmac_ptp_read_cnt);
  */
 int stmmac_ptp_tc_start(void *data, u8 id, u32 ts_0, u32 ts_1, u32 tcsr_val)
 {
-	pr_info("[%d] %s\n", __LINE__, __func__);
+	pr_debug("[%d] %s\n", __LINE__, __func__);
 	/* TODO: */
 	return -EOPNOTSUPP;
 }
@@ -397,7 +397,7 @@ EXPORT_SYMBOL(stmmac_ptp_tc_start);
  */
 void stmmac_ptp_tc_stop(void *data, u8 id)
 {
-	pr_info("[%d] %s\n", __LINE__, __func__);
+	pr_debug("[%d] %s\n", __LINE__, __func__);
 	/* TODO: */
 }
 EXPORT_SYMBOL(stmmac_ptp_tc_stop);
@@ -413,7 +413,7 @@ EXPORT_SYMBOL(stmmac_ptp_tc_stop);
  */
 int stmmac_ptp_tc_reload(void *data, u8 id, u32 ts)
 {
-	pr_info("[%d] %s\n", __LINE__, __func__);
+	pr_debug("[%d] %s\n", __LINE__, __func__);
 	/* TODO: */
 	return -EOPNOTSUPP;
 }
