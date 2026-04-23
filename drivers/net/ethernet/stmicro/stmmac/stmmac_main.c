@@ -8097,7 +8097,7 @@ static int stmmac_avb_init_dma_engine(struct stmmac_priv *priv)
 	pr_info("[%d] %s\n", __LINE__, __func__);
 
 	/* AVB DMA RX Channel Configuration */
-	for(i = 0; i < MTL_MAX_RX_QUEUES; i++){
+	for(i = 0; i < MTL_MAX_AVB_RX_QUEUES; i++){
 		chan = i + STMMAC_AVB_CHANNEL_BASE;
 		stmmac_init_chan(priv, priv->ioaddr, priv->plat->dma_cfg, chan);
 		stmmac_disable_dma_irq(priv, priv->ioaddr, chan, 1, 1);
@@ -8169,6 +8169,8 @@ static int stmmac_avb_init_dma_engine(struct stmmac_priv *priv)
 		stmmac_start_rx(priv, priv->ioaddr, chan);
 		stmmac_start_tx(priv, priv->ioaddr, chan);
 	}
+
+	// TODO: enable tbs only for the PTP queue
 
 	return 0;
 }
@@ -8472,7 +8474,7 @@ int stmmac_enet_set_idle_slope(void *data, unsigned int queue_id, u32 idle_slope
 
 	/* Use default credit limits */
 	/* TODO: follow the equations mentioned in net/sched/sch_cbs.c */
-	value = 1500 * 1024ll * 8;
+	value = 1500 * 1024ll * 8; // 1500 bytes is the MTU size for the port
 	value = value & GENMASK(31, 0);
 	priv->plat->tx_queues_cfg[queue].high_credit = value;
 
@@ -8601,6 +8603,7 @@ int stmmac_enet_rx_poll_avb(void *data)
 EXPORT_SYMBOL(stmmac_enet_rx_poll_avb);
 
 /* TODO: lock queue */
+/* Used by selftests */
 int stmmac_avb_xmit_avb_tx_desc(struct stmmac_priv *priv, int queue,
 				struct avb_tx_desc *avb_desc)
 {
