@@ -247,6 +247,25 @@
 
 /* ------------------------------------------------------------------------ */
 /*   Enable I2C5 for TAS5825M amplifiers via PCA9548 I2C Multiplexer      */
+
+&i2c3 {
+	i2c-mux@70 {
+		compatible = "nxp,pca9548";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0x70>;
+	};
+};
+
+&i2c4 {
+	i2c-mux@70 {
+		compatible = "nxp,pca9548";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0x70>;
+	};
+};
+
 &i2c5 {
 	status = "okay";
 	pinctrl-names = "default";
