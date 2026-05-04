@@ -8148,9 +8148,6 @@ static int stmmac_avb_init_dma_engine(struct stmmac_priv *priv)
 		stmmac_init_tx_chan(priv, priv->ioaddr, priv->plat->dma_cfg,
 				tx_q->dma_tx_phy, chan);
 		
-		// TODO: enable TBS, switch to use of the struct dma_edesc
-		//if (tx_q->tbs & STMMAC_TBS_AVAIL)
-		//	stmmac_enable_tbs(priv, priv->ioaddr, 1, avb_chan);
 		tx_q->tx_tail_addr = tx_q->dma_tx_phy;
 		stmmac_set_tx_tail_ptr(priv, priv->ioaddr, tx_q->tx_tail_addr, chan);
 		stmmac_set_tx_ring_len(priv, priv->ioaddr, (num_tx_descs - 1), chan);
@@ -8170,7 +8167,9 @@ static int stmmac_avb_init_dma_engine(struct stmmac_priv *priv)
 		stmmac_start_tx(priv, priv->ioaddr, chan);
 	}
 
-	// TODO: enable tbs only for the PTP queue
+	// enable tbs only for the PTP queue
+	if (tx_q->tbs & STMMAC_TBS_AVAIL)
+			stmmac_enable_tbs(priv, priv->ioaddr, 1, STMMAC_AVB_CHANNEL_PRIORITY);
 
 	return 0;
 }
@@ -8435,6 +8434,11 @@ int stmmac_enet_set_idle_slope(void *data, unsigned int queue_id, u32 idle_slope
 		return -EINVAL;
 	}
 
+	if (!priv->dev) {
+		pr_err("%s: Invalid net_device pointer\n", __func__);
+		return -EINVAL;
+	}
+
 	if (!priv->dma_cap.av) {
 		pr_warn("%s: Hardware CBS not supported\n", __func__);
 		return -EOPNOTSUPP;
@@ -8472,9 +8476,9 @@ int stmmac_enet_set_idle_slope(void *data, unsigned int queue_id, u32 idle_slope
 	value = div_s64(-send_slope * 1024ll * ptr, speed_div_kbps);
 	priv->plat->tx_queues_cfg[queue].send_slope = value & GENMASK(31, 0);
 
-	/* Use default credit limits */
+	/* Use MTU-based credit limits */
 	/* TODO: follow the equations mentioned in net/sched/sch_cbs.c */
-	value = 1500 * 1024ll * 8; // 1500 bytes is the MTU size for the port
+	value = (u64)priv->dev->mtu * 1024ULL * 8; /* configured MTU payload */
 	value = value & GENMASK(31, 0);
 	priv->plat->tx_queues_cfg[queue].high_credit = value;
 
@@ -8717,7 +8721,7 @@ int stmmac_enet_start_xmit_avb(void *data, struct avb_tx_desc *avb_buff)
 }
 EXPORT_SYMBOL(stmmac_enet_start_xmit_avb);
 
-// TODO: Should this be removed?
+// Added for completeness
 void stmmac_enet_finish_xmit_avb(void *data, unsigned int queue_id)
 {
 	//pr_info("[%d] %s\n", __LINE__, __func__);
