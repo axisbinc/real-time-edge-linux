@@ -99,7 +99,7 @@
 	fsl,sai-mclk-direction-output;
 
 	/* TX-only, 2 data lanes (TX_DATA0 + TX_DATA1) */
-	fsl,dataline = <0 0x0 0x3>;
+	fsl,dataline = <1 0x0 0x3>;
 
 	/* Use MULTI-FIFO DMA for 2-lane operation */
 	dmas = <&sdma2 3 25 0>; /* 25 = IMX_DMATYPE_MULTI_SAI */
@@ -127,7 +127,7 @@
 	fsl,sai-mclk-direction-output;
 
 	/* TX-only, 6 data lanes (TX_DATA0-5) */
-	fsl,dataline = <0 0x1 0x3f>;
+	fsl,dataline = <1 0x1 0x3f>;
 
 	/* Use MULTI-FIFO DMA for 32-channel operation (2x TDM16) */
 	dmas = <&sdma2 1 25 0>; /* 25 = IMX_DMATYPE_MULTI_SAI */
