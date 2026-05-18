@@ -8167,7 +8167,8 @@ static int stmmac_avb_init_dma_engine(struct stmmac_priv *priv)
 		stmmac_start_tx(priv, priv->ioaddr, chan);
 	}
 
-	// enable tbs only for the PTP queue
+	// enable tbs only for the PTP queue (PRIORITY channel)
+	tx_q = &priv->dma_avb_conf->tx_queue[0]; // PRIORITY queue is index 0
 	if (tx_q->tbs & STMMAC_TBS_AVAIL)
 			stmmac_enable_tbs(priv, priv->ioaddr, 1, STMMAC_AVB_CHANNEL_PRIORITY);
 
