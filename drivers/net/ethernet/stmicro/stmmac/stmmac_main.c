@@ -8167,10 +8167,17 @@ static int stmmac_avb_init_dma_engine(struct stmmac_priv *priv)
 		stmmac_start_tx(priv, priv->ioaddr, chan);
 	}
 
-	// enable tbs only for the PTP queue (PRIORITY channel)
+	/*
+	 * Do NOT enable TBS on the PRIORITY (PTP) channel: the AVB tx ring is
+	 * allocated as basic dma_desc and enabling TBS makes the HW write back
+	 * timestamp/TTSS words at offsets that the basic-descriptor reader in
+	 * stmmac_enet_tx_avb() does not look at, dropping ~half of fgptp's TX
+	 * HW timestamps. Pdelay/PTP frames are sent ad-hoc and do not require
+	 * a launch time anyway. TBS for AVTP is enabled on the CBS queue
+	 * elsewhere when needed.
+	 */
 	tx_q = &priv->dma_avb_conf->tx_queue[0]; // PRIORITY queue is index 0
-	if (tx_q->tbs & STMMAC_TBS_AVAIL)
-			stmmac_enable_tbs(priv, priv->ioaddr, 1, STMMAC_AVB_CHANNEL_PRIORITY);
+	(void)tx_q;
 
 	return 0;
 }
@@ -8391,9 +8398,20 @@ static struct stmmac_avb_dma_conf* stmmac_avb_init_dma_desc(struct stmmac_priv *
 	dma_conf->dma_tx_size = DEFAULT_AVB_TX_DESC_CNT;
 	dma_conf->dma_rx_size = DEFAULT_AVB_RX_DESC_CNT;
 
-	/* Time based shaper available on both tx queues */
-	for (int q = 0; q < MTL_MAX_AVB_TX_QUEUES; q++)
-		dma_conf->tx_queue[q].tbs = STMMAC_TBS_AVAIL;
+	/*
+	 * TBS (Time Based Shaper) is only enabled on the CBS/AVTP queue.
+	 *
+	 * The PRIORITY queue (index 0) carries gPTP/MSRP/MVRP/MMRP. The AVB
+	 * tx ring is allocated as basic 'struct dma_desc' (see stmmac_avb_
+	 * alloc_tx_desc()), but TBS makes the HW write back completions in the
+	 * enhanced (dma_entx) layout. That mismatch causes TTSS/timestamp
+	 * words to be read from the wrong offset in stmmac_enet_tx_avb(), so
+	 * ~half of TX HW timestamps are reported as zero and fgptp's
+	 * SENT_PDELAY_RESP_WAITING_FOR_TIMESTAMP state machine times out.
+	 * Keep TBS off here until the AVB ring is converted to enhanced
+	 * descriptors.
+	 */
+	dma_conf->tx_queue[1].tbs = STMMAC_TBS_AVAIL; /* CBS/AVTP only */
 
 	ret = stmmac_avb_alloc_rx_desc(priv, dma_conf);
 	if (ret < 0) {
