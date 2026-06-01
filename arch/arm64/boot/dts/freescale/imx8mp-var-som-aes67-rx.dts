@@ -1,0 +1,336 @@
+/*
+* Copyright AxisB Inc 2026
+* All rights reserved
+*
+* Device tree for AES67 TDM-8 RX capture
+* - SAI2 receives an 8-slot TDM stream (slots 0-7) from an external master
+* - SAI2 is clock slave (external BCLK/FS), RX synchronous
+* - eqos used for LARA/network
+*/
+
+#include "imx8mp-var-som-symphony.dts"
+
+/* Enable easrc */
+&easrc {
+	fsl,asrc-rate  = <48000>;
+	status = "okay";
+};
+
+/* AVB HW timer */
+&gpt1 {
+	compatible = "fsl,avb-gpt";
+	timer-channel = <1>; /* Use output compare channel 1*/
+	sw-recovery = <0>; /* Use SW recovery mode for STMMAC (eth port 0) */
+	prescale = <1>;
+	domain = <0>;
+
+	clocks = <&clk IMX8MP_CLK_GPT1_ROOT>,
+		 <&clk IMX8MP_CLK_GPT1_ROOT>,
+		 <&clk IMX8MP_AUDIO_PLL1>;
+	clock-names = "ipg", "per", "audio_pll";
+
+	/* Make the GPT clk root derive from the audio PLL*/
+	assigned-clocks = <&clk IMX8MP_CLK_GPT1>;
+	assigned-clock-parents = <&clk IMX8MP_AUDIO_PLL1_OUT>;
+	assigned-clock-rates = <0>;
+
+	gpt1_capin1_sel = <&gpr 0x4 2>;
+
+	status = "okay";
+};
+
+&iomuxc {
+	pinctrl_i2c5: i2c5grp {
+		fsl,pins = <
+			MX8MP_IOMUXC_HDMI_DDC_SCL__I2C5_SCL				0x400001c2
+			MX8MP_IOMUXC_HDMI_DDC_SDA__I2C5_SDA				0x400001c2
+		>;
+	};
+
+	pinctrl_sai2: sai2grp {
+		fsl,pins = <
+			MX8MP_IOMUXC_SAI2_MCLK__AUDIOMIX_SAI2_MCLK			    0xd6
+			MX8MP_IOMUXC_SAI2_TXFS__AUDIOMIX_SAI2_TX_SYNC			0xd6
+			MX8MP_IOMUXC_SAI2_TXC__AUDIOMIX_SAI2_TX_BCLK			0xd6
+			MX8MP_IOMUXC_SAI2_TXD0__AUDIOMIX_SAI2_TX_DATA00			0xd6
+			MX8MP_IOMUXC_SAI2_RXD0__AUDIOMIX_SAI2_RX_DATA00 		0xd6
+			MX8MP_IOMUXC_SAI2_RXC__AUDIOMIX_SAI2_RX_BCLK			0xd6
+			MX8MP_IOMUXC_SAI2_RXFS__AUDIOMIX_SAI2_RX_SYNC			0xd6
+		>;
+	};
+
+	pinctrl_usdhc2_gpio: usdhc2grp-gpio {
+		fsl,pins = <
+			MX8MP_IOMUXC_GPIO1_IO14__GPIO1_IO14				0x1c4
+			MX8MP_IOMUXC_GPIO1_IO09__GPIO1_IO09				0x10  /* SD card power control */
+			/* GPIO4_IO22 (SAI2_RXC) now used for audio, not SD card regulator */
+			/* MX8MP_IOMUXC_SAI2_RXC__GPIO4_IO22				0x10 */
+			MX8MP_IOMUXC_SD2_CD_B__GPIO2_IO12				0xc0
+		>;
+	};
+};
+
+/*   Enable SAI2 for TDM-8 RX capture (external BCLK/FS)                    */
+&sai2 {
+	status = "okay";
+	#sound-dai-cells = <0>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_sai2>;
+
+	/* External clocks from TDM master */
+	clocks = <&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_SAI2_IPG>, <&clk IMX8MP_CLK_DUMMY>,
+		 <&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_SAI2_MCLK1>, <&clk IMX8MP_CLK_DUMMY>,
+		 <&clk IMX8MP_CLK_DUMMY>;
+	clock-names = "bus", "mclk0", "mclk1", "mclk2", "mclk3";
+
+		/* Standard DMA for SAI capture/playback */
+		dmas = <&sdma2 2 24 0>, <&sdma2 3 24 0>; /* 24 = IMX_DMATYPE_SAI */
+		dma-names = "rx", "tx";
+
+		/* Clocking mode:
+		 * We use external BCLK/FS on the RX pins (RXC/RXFS).
+		 * Tell the driver to sync TX to RX so both directions follow RX clocks.
+		 */
+		fsl,sai-synchronous-rx;
+};
+
+/* ------------------------------------------------------------------------ */
+/* Dummy sound codec for TDM-8 capture path */
+/ {
+
+	dummy_codec: dummy-codec {
+		compatible = "linux,dummy-codec";
+		#sound-dai-cells = <0>;
+	};
+
+	/* Override SD card regulator to use GPIO1_IO09 instead of GPIO4_IO22
+	 * (GPIO4_IO22/SAI2_RXC is now used for audio)
+	 */
+	reg_usdhc2_vmmc: regulator-usdhc2-vmmc {
+		compatible = "regulator-fixed";
+		regulator-name = "VSD_3V3";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		gpio = <&gpio1 9 GPIO_ACTIVE_HIGH>;  /* Changed from GPIO4_IO22 */
+		enable-active-high;
+		startup-delay-us = <100>;
+		off-on-delay-us = <12000>;
+	};
+
+	/* SAI2 RX: TDM-8 capture from external master (BCLK/FS provided externally) */
+	sound-amp-0 {
+		compatible = "simple-audio-card";
+		simple-audio-card,name = "AES67-TDM8-SAI2-RX";
+		/* TDM uses DSP-A framing (single-bit frame-sync pulse) */
+		simple-audio-card,format = "dsp_a";
+	/*
+	 * External master provides BCLK/FS.
+	 * In simple-audio-card bindings, setting bitclock-master/frame-master
+	 * to the *codec subnode* makes the CPU DAI a slave (CBP/CFP).
+	 */
+		simple-audio-card,bitclock-master = <&rpi_codec>;
+		simple-audio-card,frame-master = <&rpi_codec>;
+		status = "okay";
+
+		rpi_cpu: simple-audio-card,cpu {
+			sound-dai = <&sai2>;
+			dai-tdm-slot-num = <8>;          /* TDM-8: 8 slots per frame */
+			dai-tdm-slot-width = <32>;       /* 32 bits per slot */
+			dai-tdm-slot-rx-mask = <0xff>;   /* Capture slots 0-7 */
+		};
+
+		rpi_codec: simple-audio-card,codec {
+			sound-dai = <&dummy_codec>;
+		};
+	};
+};
+
+/* ------------------------------------------------------------------------ */
+/*   Enable I2C5 via PCA9548 I2C Multiplexer                              */
+&i2c5 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_i2c5>;
+	clock-frequency = <100000>;  /* 100kHz for reliability */
+	scl-gpios = <&gpio3 26 GPIO_ACTIVE_HIGH>;
+	sda-gpios = <&gpio3 27 GPIO_ACTIVE_HIGH>;
+
+	/* -------------------------------------------------------------------- */
+	/* PCA9548 I2C Multiplexer - 8 channels                                */
+	/* -------------------------------------------------------------------- */
+	i2c-mux@70 {
+		compatible = "nxp,pca9548";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0x70>;
+	};
+};
+
+&dsp {
+	compatible = "fsl,imx8mp-hifi4";
+	reg = <0x0 0x3B6E8000 0x0 0x88000>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_uart4>;
+	clocks = <&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_OCRAMA_IPG>,
+			<&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_DSP_ROOT>,
+			<&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_DSPDBG_ROOT>,
+			<&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_SDMA3_ROOT>,
+			<&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_ASRC_IPG>,
+			<&clk IMX8MP_CLK_UART4_ROOT>;
+	clock-names = "ocram", "core", "debug",
+			"per_clk1", "per_clk2", "per_clk3",
+			"per_clk5", "per_clk7";
+	firmware-name = "imx/dsp/hifi4.bin";
+	power-domains = <&audiomix_pd>;
+	mbox-names = "tx0", "rx0", "rxdb0";
+	mboxes = <&mu2 0 0>,
+			<&mu2 1 0>,
+			<&mu2 3 0>;
+	memory-region = <&dsp_vdev0buffer>, <&dsp_vdev0vring0>,
+				<&dsp_vdev0vring1>, <&dsp_reserved>;
+	syscon = <&audio_blk_ctrl>;
+	status = "okay";
+};
+
+&uart4 {
+	status = "disabled";
+};
+
+&wm8904 {
+	status = "disabled";
+};
+
+&pcie {
+	status = "disabled";
+};
+
+&pcie_ep {
+	status = "disabled";
+};
+
+&sound_hdmi {
+	status = "disabled";
+};
+
+&aud2htx {
+	status = "disabled";
+};
+
+&flexcan2 {
+	status = "disabled";
+};
+
+&irqsteer_hdmi {
+	status = "disabled";
+};
+
+&hdmi_blk_ctrl {
+	status = "disabled";
+};
+
+&hdmi_pavi {
+	status = "disabled";
+};
+
+&hdmi {
+	status = "disabled";
+};
+
+&hdmiphy {
+	status = "disabled";
+};
+
+/* MIPI-DSI */
+&lcdif1 {
+	status = "disabled";
+};
+
+/* LVDS */
+&lcdif2 {
+	status = "disabled";
+};
+
+/* HDMI */
+&lcdif3 {
+	status = "disabled";
+};
+
+&ldb {
+	status = "disabled";
+};
+
+&ldb_phy {
+	status = "disabled";
+};
+
+&mipi_dsi {
+	status = "disabled";
+};
+
+/* configure eqos for priority queueing and DMA channel mapping */
+&eqos {
+	phy-mode = "rgmii";
+	phy-handle = <&ethphy0>;
+	snps,force_thresh_dma_mode;
+	snps,mtl-tx-config = <&mtl_tx_setup>;
+	snps,mtl-rx-config = <&mtl_rx_setup>;
+	status = "okay";
+
+	mtl_tx_setup: tx-queues-config {
+		snps,tx-queues-to-use = <3>;
+		snps,tx-sched-sp;
+
+		queue0 {
+			snps,dcb-algorithm;
+			snps,priority = <0x1>;
+		};
+
+		queue1 {
+			snps,dcb-algorithm;
+			snps,priority = <0x2>;
+		};
+
+		queue2 {
+			snps,dcb-algorithm;
+			snps,priority = <0xFC>;
+		};
+	};
+
+	mtl_rx_setup: rx-queues-config {
+		snps,rx-queues-to-use = <3>;
+		snps,rx-sched-sp;
+
+		queue0 {
+			snps,dcb-algorithm;
+			snps,priority = <0x1>;
+			snps,map-to-dma-channel = <0>;
+		};
+
+		queue1 {
+			snps,dcb-algorithm;
+			snps,priority = <0x2>;
+			snps,map-to-dma-channel = <1>;
+		};
+
+		queue2 {
+			snps,dcb-algorithm;
+			snps,priority = <0xFC>;
+			snps,map-to-dma-channel = <2>;
+		};
+	};
+};
+
+&reg_fec_phy_vsel {
+	/delete-property/ enable-active-high;
+	enable-active-low;
+};
+
+/* FEC disabled (no-fec equivalent) */
+&fec {
+	status = "disabled";
+};
+
+/* Also limit the PHY to 100 Mbps */
+&ethphy1 {
+	max-speed = <100>;
+};
