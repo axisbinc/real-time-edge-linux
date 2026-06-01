@@ -271,7 +271,7 @@
 
 /* configure eqos for priority queueing and DMA channel mapping */
 &eqos {
-	phy-mode = "rgmii-id";
+	phy-mode = "rgmii";
 	phy-handle = <&ethphy0>;
 	snps,force_thresh_dma_mode;
 	snps,mtl-tx-config = <&mtl_tx_setup>;
@@ -322,9 +322,9 @@
 	};
 };
 
-/* Force FEC ethernet to 100 Mbps */
+/* Disable FEC ethernet */
 &fec {
-	max-speed = <100>;
+	status = "disabled";
 };
 
 /* Also limit the PHY to 100 Mbps */
