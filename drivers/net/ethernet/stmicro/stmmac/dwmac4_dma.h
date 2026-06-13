@@ -235,5 +235,6 @@ void dwmac4_set_rx_ring_len(void __iomem *ioaddr, u32 len, u32 chan);
 void dwmac4_set_tx_ring_len(void __iomem *ioaddr, u32 len, u32 chan);
 void dwmac4_set_rx_tail_ptr(void __iomem *ioaddr, u32 tail_ptr, u32 chan);
 void dwmac4_set_tx_tail_ptr(void __iomem *ioaddr, u32 tail_ptr, u32 chan);
+int dwmac4_tx_is_suspended(void __iomem *ioaddr, u32 chan);
 
 #endif /* __DWMAC4_DMA_H__ */

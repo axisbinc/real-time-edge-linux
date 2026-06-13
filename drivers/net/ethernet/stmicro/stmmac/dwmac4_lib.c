@@ -35,6 +35,24 @@ void dwmac4_set_tx_tail_ptr(void __iomem *ioaddr, u32 tail_ptr, u32 chan)
 	writel(tail_ptr, ioaddr + DMA_CHAN_TX_END_ADDR(chan));
 }
 
+/*
+ * Report whether the TX DMA channel is parked in Transmit-Buffer-Unavailable
+ * (suspend). TBU is a write-1-to-clear status bit that does NOT self-clear when
+ * the channel resumes, so acknowledge it here; a later read then reflects a
+ * fresh suspend event. Intended for channels with no DMA IRQ enabled (the AVB
+ * CBS/PTP channels), where there is no IRQ handler to race the W1C ack.
+ */
+int dwmac4_tx_is_suspended(void __iomem *ioaddr, u32 chan)
+{
+	u32 status = readl(ioaddr + DMA_CHAN_STATUS(chan));
+
+	if (!(status & DMA_CHAN_STATUS_TBU))
+		return 0;
+
+	writel(DMA_CHAN_STATUS_TBU, ioaddr + DMA_CHAN_STATUS(chan));
+	return 1;
+}
+
 void dwmac4_dma_start_tx(void __iomem *ioaddr, u32 chan)
 {
 	u32 value = readl(ioaddr + DMA_CHAN_TX_CONTROL(chan));

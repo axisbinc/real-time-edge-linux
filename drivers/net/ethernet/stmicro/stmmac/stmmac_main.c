@@ -4123,6 +4123,7 @@ static int __stmmac_open(struct net_device *dev,
 		priv->avb_rx_alloc_fail = 0;
 		priv->avb_rx_dispatched = 0;
 		priv->avb_tx_ring_full = 0;
+		priv->avb_tx_rekick = 0;
 		priv->dma_avb_conf = stmmac_avb_init_dma_desc(priv);
 		if (IS_ERR(priv->dma_avb_conf)) {
 			netdev_err(priv->dev, "%s: AVB DMA descriptors allocation failed\n",
@@ -6606,6 +6607,7 @@ static int stmmac_avb_status_show(struct seq_file *seq, void *v)
 	seq_printf(seq, "\t  RX Alloc failures: %u\n", priv->avb_rx_alloc_fail);
 	seq_printf(seq, "\t  RX Dispatched:     %u\n", priv->avb_rx_dispatched);
 	seq_printf(seq, "\t  TX Ring full:      %u\n", priv->avb_tx_ring_full);
+	seq_printf(seq, "\t  TX DMA re-kicks:   %u\n", priv->avb_tx_rekick);
 	return 0;
 }
 DEFINE_SHOW_ATTRIBUTE(stmmac_avb_status);
@@ -8086,6 +8088,15 @@ EXPORT_SYMBOL_GPL(stmmac_resume);
 // #define DEFAULT_AVB_RX_DESC_CNT 32
 // #define DEFAULT_AVB_TX_DESC_CNT 32
 
+/*
+ * Number of consecutive AVB TX cleaner passes (hw_timer ticks) that find TX
+ * work outstanding but reclaim nothing, before we assume the DMA channel has
+ * parked (Transmit-Buffer-Unavailable) behind a lagging tail pointer and
+ * re-arm it. Kept small so recovery is sub-millisecond; >1 so a single tick of
+ * normal completion latency never triggers a spurious re-arm.
+ */
+#define STMMAC_AVB_TX_STALL_TICKS 2
+
 static int stmmac_avb_init_dma_engine(struct stmmac_priv *priv)
 {
 	u32 chan, i;
@@ -8676,6 +8687,39 @@ int stmmac_avb_xmit_avb_tx_desc(struct stmmac_priv *priv, int queue,
 	return 0;
 }
 
+/*
+ * Re-arm a wedged AVB TX DMA channel.
+ *
+ * The dwmac4 CBS/PTP TX DMA can park in TBU (Transmit-Buffer-Unavailable) after
+ * an upstream pause drains the ring, then fail to re-arm on refill. On dwmac4
+ * the only un-suspend is the set_tx_tail_ptr doorbell, and the AVB channels
+ * bypass the normal TX-IRQ/NAPI recovery path, so nothing else kicks it.
+ *
+ * Act only when work is still queued (dirty_tx != cur_tx) AND the HW reports
+ * TBU: re-issue the tail doorbell to cur_tx, which covers every armed
+ * descriptor, so the DMA leaves TBU. A drained-empty ring (dirty_tx == cur_tx)
+ * sits in TBU as its normal idle state and is left alone. Runs under eth->lock
+ * with the producer, so there is no concurrent writer of tx_tail_addr; not an
+ * SMP race. stmmac_tx_is_suspended() returns <0 on non-dwmac4 cores (no op),
+ * which the != 1 test treats as "not suspended".
+ */
+static void stmmac_avb_tx_rekick_if_tbu(struct stmmac_priv *priv,
+					struct stmmac_avb_tx_queue *tx_q)
+{
+	if (tx_q->dirty_tx == tx_q->cur_tx)
+		return;
+
+	if (stmmac_tx_is_suspended(priv, priv->ioaddr, tx_q->avb_chan) != 1)
+		return;
+
+	wmb();
+	tx_q->tx_tail_addr = tx_q->dma_tx_phy +
+		(tx_q->cur_tx * sizeof(struct dma_desc));
+	stmmac_set_tx_tail_ptr(priv, priv->ioaddr, tx_q->tx_tail_addr,
+			       tx_q->avb_chan);
+	priv->avb_tx_rekick++;
+}
+
 int stmmac_enet_start_xmit_avb(void *data, struct avb_tx_desc *avb_buff)
 {
 	struct stmmac_priv* priv = data;
@@ -8690,6 +8734,10 @@ int stmmac_enet_start_xmit_avb(void *data, struct avb_tx_desc *avb_buff)
 	// Check if there is space in the ring
 	if (next_entry == tx_q->dirty_tx) {
 		priv->avb_tx_ring_full++;
+		/* Earliest point we can spot a TBU-wedged channel: re-arm now
+		 * rather than waiting for the cleaner's stall counter.
+		 */
+		stmmac_avb_tx_rekick_if_tbu(priv, tx_q);
 		return -EAGAIN;
 	}
 
@@ -8769,7 +8817,7 @@ int stmmac_enet_tx_avb(void *data)
 			tx_desc = &tx_q->dma_tx[entry];
 			status = stmmac_tx_status(priv, &priv->dev->stats, &priv->xstats,
 					tx_desc, priv->ioaddr);
-			if (unlikely(status & dma_own))
+			if (unlikely(status & tx_dma_own))
 				break; /* no more packets to clean */
 
 			dma_rmb();
@@ -8810,6 +8858,23 @@ int stmmac_enet_tx_avb(void *data)
 
 			entry = STMMAC_GET_ENTRY(entry, priv->dma_avb_conf->dma_tx_size);
 		}
+
+		/*
+		 * Backstop for the AVB TX DMA wedge. start_xmit_avb already
+		 * re-arms at refill time; here we also re-arm if the cleaner
+		 * sees no forward progress (entry == dirty_tx) with frames still
+		 * queued (entry != cur_tx) for a couple of ticks. See
+		 * stmmac_avb_tx_rekick_if_tbu().
+		 */
+		if (entry == tx_q->dirty_tx && entry != tx_q->cur_tx) {
+			if (++tx_q->tx_stall >= STMMAC_AVB_TX_STALL_TICKS) {
+				stmmac_avb_tx_rekick_if_tbu(priv, tx_q);
+				tx_q->tx_stall = 0;
+			}
+		} else {
+			tx_q->tx_stall = 0;
+		}
+
 		tx_q->dirty_tx = entry;
 	}
 

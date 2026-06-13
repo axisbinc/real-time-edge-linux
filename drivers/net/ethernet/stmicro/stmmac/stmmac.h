@@ -236,6 +236,7 @@ struct stmmac_avb_tx_queue {
 	struct stmmac_avb_buffer *buf_pool;
 	dma_addr_t dma_tx_phy;
 	dma_addr_t tx_tail_addr;
+	u32 tx_stall;	/* consecutive cleaner passes: TX work pending, no completion */
 	u32 mss;
 };
 
@@ -302,6 +303,7 @@ struct stmmac_priv {
 	unsigned int avb_rx_alloc_fail;   /* Buffer alloc failures */
 	unsigned int avb_rx_dispatched;   /* Successfully dispatched to AVB module */
 	unsigned int avb_tx_ring_full;    /* TX ring full (EAGAIN) */
+	unsigned int avb_tx_rekick;       /* AVB TX DMA re-arms (TBU wedge recovery) */
 	//__ETHTOOL_DECLARE_LINK_MODE_MASK(phy_advertising);
 	struct stmmac_avb_dma_conf *dma_avb_conf;
 	raw_spinlock_t ptp_spinlock;
