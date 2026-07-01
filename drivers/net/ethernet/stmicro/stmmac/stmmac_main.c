@@ -8081,7 +8081,7 @@ EXPORT_SYMBOL_GPL(stmmac_resume);
 
 #define DEFAULT_AVB_BUFSIZE 2048
 #define DEFAULT_AVB_RX_DESC_CNT 256
-#define DEFAULT_AVB_TX_DESC_CNT 256
+#define DEFAULT_AVB_TX_DESC_CNT 512  /* Increased from 256 to handle burst traffic */
 // todo: remove, reduced for debugging
 // #define DEFAULT_AVB_RX_DESC_CNT 32
 // #define DEFAULT_AVB_TX_DESC_CNT 32
@@ -8686,10 +8686,37 @@ int stmmac_enet_start_xmit_avb(void *data, struct avb_tx_desc *avb_buff)
 	struct dma_desc *tx_desc;
 	void *pkt = (void *)avb_buff + avb_buff->common.offset;
 	size_t dump_len;
+	unsigned int tx_avail;
 
-	// Check if there is space in the ring
-	if (next_entry == tx_q->dirty_tx) {
+	/* Calculate available TX descriptors */
+	tx_avail = (tx_q->dirty_tx > tx_q->cur_tx) ?
+		   (tx_q->dirty_tx - tx_q->cur_tx - 1) :
+		   (priv->dma_avb_conf->dma_tx_size - tx_q->cur_tx + tx_q->dirty_tx - 1);
+
+	/* Aggressive cleanup: trigger when < 50% available (256 free out of 512).
+	 * AVB channels have DMA IRQs disabled (polled mode). The HW timer also
+	 * polls every 125µs, but userspace may burst-send between polls, so we
+	 * must proactively reclaim descriptors here to prevent ring overflow. */
+	if (tx_avail < (priv->dma_avb_conf->dma_tx_size >> 1)) {
+		stmmac_enet_tx_avb(data);
+		/* Recalculate after cleanup */
+		tx_avail = (tx_q->dirty_tx > tx_q->cur_tx) ?
+			   (tx_q->dirty_tx - tx_q->cur_tx - 1) :
+			   (priv->dma_avb_conf->dma_tx_size - tx_q->cur_tx + tx_q->dirty_tx - 1);
+	}
+
+	/* Final check: if no space after cleanup, return -EAGAIN */
+	if (tx_avail == 0) {
 		priv->avb_tx_ring_full++;
+		
+		/* Rate-limited diagnostic: log first 10 and every 10000th after that.
+		 * Includes queue ID to diagnose which queue (PRIORITY=0 or CBS=1) fills. */
+		if (priv->avb_tx_ring_full <= 10 || (priv->avb_tx_ring_full % 10000) == 0) {
+			netdev_warn(priv->dev, 
+				"AVB TX ring full on queue %u (total: %u, cur_tx=%u, dirty_tx=%u, size=%u)\n",
+				queue_id, priv->avb_tx_ring_full, 
+				tx_q->cur_tx, tx_q->dirty_tx, priv->dma_avb_conf->dma_tx_size);
+		}
 		return -EAGAIN;
 	}
 
@@ -8789,8 +8816,8 @@ int stmmac_enet_tx_avb(void *data)
 			/* get hw tstamp */
 			ns = __stmmac_get_tx_hwstamp(priv, tx_desc);
 
-			dma_unmap_single(priv->device, avb_buff->dma_addr, avb_buff->common.len,
-					DMA_TO_DEVICE);
+			dma_sync_single_for_cpu(priv->device, avb_buff->dma_addr, avb_buff->common.len,
+					DMA_BIDIRECTIONAL);
 			/* free or return the tx buffer */
 			if (ns && (avb_buff->common.flags & AVB_TX_FLAG_HW_TS)) {
 				if (stmmac_avb_verbose & STMMAC_AVB_VERBOSE_TX)
