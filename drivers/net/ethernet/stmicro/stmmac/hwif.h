@@ -212,11 +212,16 @@ struct stmmac_dma_ops {
 	void (*set_bfsize)(void __iomem *ioaddr, int bfsize, u32 chan);
 	void (*enable_sph)(void __iomem *ioaddr, bool en, u32 chan);
 	int (*enable_tbs)(void __iomem *ioaddr, bool en, u32 chan);
-	/* Return 1 (and ack the W1C status bit) if the TX DMA channel is
-	 * parked in Transmit-Buffer-Unavailable / suspend, else 0.
+	/* Return a mask of STMMAC_TX_CH_* halt/suspend states for the TX DMA
+	 * channel (acking the W1C status bits that were seen), 0 if none.
 	 */
 	int (*tx_is_suspended)(void __iomem *ioaddr, u32 chan);
 };
+
+/* tx_is_suspended() return flags */
+#define STMMAC_TX_CH_TBU	BIT(0)	/* suspended: Transmit Buffer Unavailable */
+#define STMMAC_TX_CH_TPS	BIT(1)	/* stopped: Transmit Process Stopped */
+#define STMMAC_TX_CH_FBE	BIT(2)	/* stopped: Fatal Bus Error */
 
 #define stmmac_dma_init(__priv, __args...) \
 	stmmac_do_void_callback(__priv, dma, init, __args)

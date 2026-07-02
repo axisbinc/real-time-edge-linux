@@ -304,6 +304,8 @@ struct stmmac_priv {
 	unsigned int avb_rx_dispatched;   /* Successfully dispatched to AVB module */
 	unsigned int avb_tx_ring_full;    /* TX ring full (EAGAIN) */
 	unsigned int avb_tx_rekick;       /* AVB TX DMA re-arms (TBU wedge recovery) */
+	unsigned int avb_tx_tps;          /* AVB TX halts seen with Transmit Process Stopped */
+	unsigned int avb_tx_fbe;          /* AVB TX halts seen with Fatal Bus Error */
 	//__ETHTOOL_DECLARE_LINK_MODE_MASK(phy_advertising);
 	struct stmmac_avb_dma_conf *dma_avb_conf;
 	raw_spinlock_t ptp_spinlock;

@@ -4124,6 +4124,8 @@ static int __stmmac_open(struct net_device *dev,
 		priv->avb_rx_dispatched = 0;
 		priv->avb_tx_ring_full = 0;
 		priv->avb_tx_rekick = 0;
+		priv->avb_tx_tps = 0;
+		priv->avb_tx_fbe = 0;
 		priv->dma_avb_conf = stmmac_avb_init_dma_desc(priv);
 		if (IS_ERR(priv->dma_avb_conf)) {
 			netdev_err(priv->dev, "%s: AVB DMA descriptors allocation failed\n",
@@ -6608,6 +6610,8 @@ static int stmmac_avb_status_show(struct seq_file *seq, void *v)
 	seq_printf(seq, "\t  RX Dispatched:     %u\n", priv->avb_rx_dispatched);
 	seq_printf(seq, "\t  TX Ring full:      %u\n", priv->avb_tx_ring_full);
 	seq_printf(seq, "\t  TX DMA re-kicks:   %u\n", priv->avb_tx_rekick);
+	seq_printf(seq, "\t  TX halts w/ TPS:   %u\n", priv->avb_tx_tps);
+	seq_printf(seq, "\t  TX halts w/ FBE:   %u\n", priv->avb_tx_fbe);
 	return 0;
 }
 DEFINE_SHOW_ATTRIBUTE(stmmac_avb_status);
@@ -8701,15 +8705,31 @@ int stmmac_avb_xmit_avb_tx_desc(struct stmmac_priv *priv, int queue,
  * sits in TBU as its normal idle state and is left alone. Runs under eth->lock
  * with the producer, so there is no concurrent writer of tx_tail_addr; not an
  * SMP race. stmmac_tx_is_suspended() returns <0 on non-dwmac4 cores (no op),
- * which the != 1 test treats as "not suspended".
+ * which the status <= 0 test treats as "not suspended".
+ *
+ * TPS (Transmit Process Stopped) and FBE (Fatal Bus Error) are only counted
+ * for diagnosis: a tail doorbell cannot restart a *stopped* channel (that
+ * needs a full stop/reset/start), so a wedge with these counters climbing
+ * and no rekick effect identifies the residual halt class.
  */
 static void stmmac_avb_tx_rekick_if_tbu(struct stmmac_priv *priv,
 					struct stmmac_avb_tx_queue *tx_q)
 {
+	int status;
+
 	if (tx_q->dirty_tx == tx_q->cur_tx)
 		return;
 
-	if (stmmac_tx_is_suspended(priv, priv->ioaddr, tx_q->avb_chan) != 1)
+	status = stmmac_tx_is_suspended(priv, priv->ioaddr, tx_q->avb_chan);
+	if (status <= 0)
+		return;
+
+	if (status & STMMAC_TX_CH_TPS)
+		priv->avb_tx_tps++;
+	if (status & STMMAC_TX_CH_FBE)
+		priv->avb_tx_fbe++;
+
+	if (!(status & STMMAC_TX_CH_TBU))
 		return;
 
 	wmb();
@@ -8837,8 +8857,14 @@ int stmmac_enet_tx_avb(void *data)
 			/* get hw tstamp */
 			ns = __stmmac_get_tx_hwstamp(priv, tx_desc);
 
-			dma_unmap_single(priv->device, avb_buff->dma_addr, avb_buff->common.len,
-					DMA_TO_DEVICE);
+			/* The buffer is a sub-range of the GenAVB pool, mapped once
+			 * with dma_map_single() in pool_dma.c. Never unmap it here
+			 * (per-buffer unmap of an address not returned by a map call
+			 * is DMA-API misuse); just sync it back to the CPU, symmetric
+			 * with the sync_for_device in stmmac_enet_start_xmit_avb().
+			 */
+			dma_sync_single_for_cpu(priv->device, avb_buff->dma_addr, avb_buff->common.len,
+					DMA_BIDIRECTIONAL);
 			/* free or return the tx buffer */
 			if (ns && (avb_buff->common.flags & AVB_TX_FLAG_HW_TS)) {
 				if (stmmac_avb_verbose & STMMAC_AVB_VERBOSE_TX)
