@@ -237,6 +237,7 @@ struct stmmac_avb_tx_queue {
 	dma_addr_t dma_tx_phy;
 	dma_addr_t tx_tail_addr;
 	u32 tx_stall;	/* consecutive cleaner passes: TX work pending, no completion */
+	u32 tx_stall_max;	/* watermark: longest tx_stall run since open */
 	u32 mss;
 };
 

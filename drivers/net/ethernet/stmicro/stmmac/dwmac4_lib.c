@@ -69,6 +69,42 @@ int dwmac4_tx_is_suspended(void __iomem *ioaddr, u32 chan)
 	return ret;
 }
 
+/*
+ * Read-only snapshot of a TX DMA channel's state for wedge forensics: raw
+ * channel status (NOT acked, so tx_is_suspended() semantics are unaffected),
+ * the DMA debug TX process state, the HW current descriptor pointer vs the
+ * programmed tail, and the MTL queue quantum-weight (CBS idle slope) and ETS
+ * control readbacks. Assumes the 1:1 DMA channel <-> MTL queue mapping used
+ * by the AVB channels.
+ */
+int dwmac4_get_tx_ch_dbg(void __iomem *ioaddr, u32 chan,
+			 struct stmmac_tx_ch_dbg *dbg)
+{
+	u32 reg;
+
+	dbg->chan_status = readl(ioaddr + DMA_CHAN_STATUS(chan));
+	dbg->cur_tx_desc = readl(ioaddr + DMA_CHAN_CUR_TX_DESC(chan));
+	dbg->tail_ptr = readl(ioaddr + DMA_CHAN_TX_END_ADDR(chan));
+	dbg->tx_ctrl = readl(ioaddr + DMA_CHAN_TX_CONTROL(chan));
+	dbg->quantum_weight = readl(ioaddr + MTL_TXQX_WEIGHT_BASE_ADDR(chan));
+	dbg->ets_ctrl = readl(ioaddr + MTL_ETSX_CTRL_BASE_ADDR(chan));
+
+	/* TX process state (TS): DEBUG_STATUS_0 holds ch0-2 (TS0 at [15:12],
+	 * one byte per channel), DEBUG_STATUS_1 holds ch3-6 (TS3 at [7:4]).
+	 */
+	if (chan < 3) {
+		reg = readl(ioaddr + DMA_DEBUG_STATUS_0);
+		dbg->tx_state = (reg >> (12 + 8 * chan)) &
+				DMA_DEBUG_STATUS_TS_MASK;
+	} else {
+		reg = readl(ioaddr + DMA_DEBUG_STATUS_1);
+		dbg->tx_state = (reg >> (4 + 8 * (chan - 3))) &
+				DMA_DEBUG_STATUS_TS_MASK;
+	}
+
+	return 0;
+}
+
 void dwmac4_dma_start_tx(void __iomem *ioaddr, u32 chan)
 {
 	u32 value = readl(ioaddr + DMA_CHAN_TX_CONTROL(chan));
