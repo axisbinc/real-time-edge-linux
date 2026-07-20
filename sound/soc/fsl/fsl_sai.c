@@ -168,6 +168,8 @@ out:
 static int fsl_sai_set_dai_tdm_slot(struct snd_soc_dai *cpu_dai, u32 tx_mask,
 				u32 rx_mask, int slots, int slot_width)
 {
+	dev_info(cpu_dai->dev, "SAI: fsl_sai_set_dai_tdm_slot() entered");
+
 	struct fsl_sai *sai = snd_soc_dai_get_drvdata(cpu_dai);
 
 	sai->slots = slots;
@@ -542,6 +544,13 @@ static int fsl_sai_hw_params(struct snd_pcm_substream *substream,
 	u32 watermark;
 	int ret, i;
 
+    dev_info(cpu_dai->dev,
+        "SAI hw_params: ch=%u rate=%u slots=%u slot_width=%u\n",
+        params_channels(params),
+        params_rate(params),
+        sai->slots,
+        sai->slot_width);
+
 	if (sai->slot_width)
 		slot_width = sai->slot_width;
 
@@ -760,6 +769,8 @@ static int fsl_sai_trigger(struct snd_pcm_substream *substream, int cmd,
 	int dir = tx ? TX : RX;
 	u32 xcsr;
 
+    dev_info(cpu_dai->dev, "SAI trigger: cmd=%d\n", cmd);
+
 	/*
 	 * Asynchronous mode: Clear SYNC for both Tx and Rx.
 	 * Rx sync with Tx clocks: Clear SYNC for Tx, set it for Rx.
@@ -844,6 +855,8 @@ static int fsl_sai_startup(struct snd_pcm_substream *substream,
 	int ret, i, j, k = 0;
 	u64 clk_rate[2];
 
+    dev_info(cpu_dai->dev, "SAI: startup for %s\n",
+        substream->stream == SNDRV_PCM_STREAM_PLAYBACK ? "playback" : "capture");
 	/*
 	 * EDMA controller needs period size to be a multiple of
 	 * tx/rx maxburst
@@ -1331,6 +1344,8 @@ static int fsl_sai_probe(struct platform_device *pdev)
 	int irq, ret, i;
 	int index;
 	u32 dmas[4];
+
+	printk(KERN_ERR "fsl_sai: >>> fsl_sai_probe() called for %s\n", dev_name(&pdev->dev));
 
 	sai = devm_kzalloc(dev, sizeof(*sai), GFP_KERNEL);
 	if (!sai)
