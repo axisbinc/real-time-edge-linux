@@ -238,6 +238,8 @@ struct stmmac_avb_tx_queue {
 	dma_addr_t tx_tail_addr;
 	u32 tx_stall;	/* consecutive cleaner passes: TX work pending, no completion */
 	u32 tx_stall_max;	/* watermark: longest tx_stall run since open */
+	u32 tx_rekick_streak;	/* consecutive TBU re-kicks without TX completion */
+	u32 tx_restart_attempted;	/* restart attempted during current continuous stall */
 	u32 mss;
 };
 
@@ -305,6 +307,8 @@ struct stmmac_priv {
 	unsigned int avb_rx_dispatched;   /* Successfully dispatched to AVB module */
 	unsigned int avb_tx_ring_full;    /* TX ring full (EAGAIN) */
 	unsigned int avb_tx_rekick;       /* AVB TX DMA re-arms (TBU wedge recovery) */
+	unsigned int avb_tx_restart;      /* AVB TX DMA channel restarts after stuck re-arms */
+	unsigned int avb_tx_stuck_drop;   /* AVB TX descriptors dropped after failed restart */
 	unsigned int avb_tx_tps;          /* AVB TX halts seen with Transmit Process Stopped */
 	unsigned int avb_tx_fbe;          /* AVB TX halts seen with Fatal Bus Error */
 	//__ETHTOOL_DECLARE_LINK_MODE_MASK(phy_advertising);

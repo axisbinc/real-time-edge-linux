@@ -4124,6 +4124,8 @@ static int __stmmac_open(struct net_device *dev,
 		priv->avb_rx_dispatched = 0;
 		priv->avb_tx_ring_full = 0;
 		priv->avb_tx_rekick = 0;
+		priv->avb_tx_restart = 0;
+		priv->avb_tx_stuck_drop = 0;
 		priv->avb_tx_tps = 0;
 		priv->avb_tx_fbe = 0;
 		priv->dma_avb_conf = stmmac_avb_init_dma_desc(priv);
@@ -6624,6 +6626,8 @@ static int stmmac_avb_status_show(struct seq_file *seq, void *v)
 	seq_printf(seq, "\t  RX Dispatched:     %u\n", priv->avb_rx_dispatched);
 	seq_printf(seq, "\t  TX Ring full:      %u\n", priv->avb_tx_ring_full);
 	seq_printf(seq, "\t  TX DMA re-kicks:   %u\n", priv->avb_tx_rekick);
+	seq_printf(seq, "\t  TX DMA restarts:   %u\n", priv->avb_tx_restart);
+	seq_printf(seq, "\t  TX stuck drops:    %u\n", priv->avb_tx_stuck_drop);
 	seq_printf(seq, "\t  TX halts w/ TPS:   %u\n", priv->avb_tx_tps);
 	seq_printf(seq, "\t  TX halts w/ FBE:   %u\n", priv->avb_tx_fbe);
 
@@ -8160,6 +8164,13 @@ EXPORT_SYMBOL_GPL(stmmac_resume);
 #define STMMAC_AVB_TX_WEDGE_TICKS 800
 #define STMMAC_AVB_TX_WEDGE_RELOG_TICKS (80 * STMMAC_AVB_TX_WEDGE_TICKS)
 
+/* Escalate from a tail-pointer doorbell to a channel stop/start after this
+ * many consecutive TBU re-kicks fail to produce TX completion. At 125 us per
+ * cleaner tick and STALL_TICKS=2 this is still sub-millisecond recovery, but
+ * avoids restarting on a single transient TBU observation.
+ */
+#define STMMAC_AVB_TX_REKICK_RESTART_STREAK 3
+
 /* One-line HW/SW state dump when a TX stall has lasted long enough to be a
  * wedge. Called from the 125 us cleaner (hardirq, under eth->lock) at wedge
  * onset and every ~8 s after, so it is self-ratelimited.
@@ -8178,6 +8189,75 @@ static void stmmac_avb_tx_warn_wedge(struct stmmac_priv *priv,
 		    stmmac_avb_tx_state_str(dbg.tx_state), dbg.cur_tx_desc,
 		    dbg.tail_ptr, dbg.tx_ctrl, dbg.quantum_weight, dbg.ets_ctrl,
 		    rc);
+}
+
+static void stmmac_avb_tx_restart_dma(struct stmmac_priv *priv,
+				      struct stmmac_avb_tx_queue *tx_q)
+{
+	u32 chan = tx_q->avb_chan;
+	u32 qmode = chan == STMMAC_AVB_CHANNEL_PRIORITY ?
+		MTL_QUEUE_DCB : MTL_QUEUE_AVB;
+
+	stmmac_stop_tx_dma(priv, chan);
+	stmmac_init_tx_chan(priv, priv->ioaddr, priv->plat->dma_cfg,
+			    tx_q->dma_tx_phy, chan);
+	stmmac_set_tx_ring_len(priv, priv->ioaddr,
+			       priv->dma_avb_conf->dma_tx_size - 1, chan);
+	stmmac_dma_tx_mode(priv, priv->ioaddr, 64, chan, 256 * 3, qmode);
+
+	wmb();
+	tx_q->tx_tail_addr = tx_q->dma_tx_phy +
+		(tx_q->cur_tx * sizeof(struct dma_desc));
+	stmmac_set_tx_tail_ptr(priv, priv->ioaddr, tx_q->tx_tail_addr, chan);
+	stmmac_start_tx_dma(priv, chan);
+
+	tx_q->tx_rekick_streak = 0;
+	tx_q->tx_restart_attempted = 1;
+	priv->avb_tx_restart++;
+	netdev_warn(priv->dev,
+		    "AVB TX chan %u DMA restarted after %u stuck ticks: cur/dirty %u/%u tail 0x%08x\n",
+		    chan, tx_q->tx_stall, tx_q->cur_tx, tx_q->dirty_tx,
+		    (u32)tx_q->tx_tail_addr);
+}
+
+static void stmmac_avb_tx_drop_stuck_desc(struct stmmac_priv *priv,
+					  struct stmmac_avb_tx_queue *tx_q)
+{
+	unsigned int entry = tx_q->dirty_tx;
+	struct dma_desc *tx_desc = &tx_q->dma_tx[entry];
+	struct avb_tx_desc *avb_buff = tx_q->buf_pool[entry].vaddr;
+	u32 chan = tx_q->avb_chan;
+
+	if (entry == tx_q->cur_tx)
+		return;
+
+	stmmac_stop_tx_dma(priv, chan);
+
+	if (avb_buff) {
+		dma_sync_single_for_cpu(priv->device, avb_buff->dma_addr,
+					avb_buff->common.len, DMA_BIDIRECTIONAL);
+		priv->avb->free(priv->avb_data, &avb_buff->common);
+	}
+
+	tx_q->buf_pool[entry].vaddr = NULL;
+	tx_q->buf_pool[entry].dma_addr = 0;
+	tx_q->buf_pool[entry].offset = 0;
+	stmmac_release_tx_desc(priv, tx_desc, priv->mode);
+	tx_q->dirty_tx = STMMAC_GET_ENTRY(entry, priv->dma_avb_conf->dma_tx_size);
+	tx_q->tx_stall = 0;
+	tx_q->tx_rekick_streak = 0;
+	tx_q->tx_restart_attempted = 0;
+	priv->avb_tx_stuck_drop++;
+
+	tx_q->tx_tail_addr = tx_q->dma_tx_phy +
+		(tx_q->cur_tx * sizeof(struct dma_desc));
+	stmmac_set_tx_tail_ptr(priv, priv->ioaddr, tx_q->tx_tail_addr, chan);
+	stmmac_start_tx_dma(priv, chan);
+
+	netdev_warn(priv->dev,
+		    "AVB TX chan %u dropped stuck desc %u after failed restart: cur/dirty %u/%u tail 0x%08x\n",
+		    chan, entry, tx_q->cur_tx, tx_q->dirty_tx,
+		    (u32)tx_q->tx_tail_addr);
 }
 
 static int stmmac_avb_init_dma_engine(struct stmmac_priv *priv)
@@ -8817,6 +8897,14 @@ static void stmmac_avb_tx_rekick_if_tbu(struct stmmac_priv *priv,
 	stmmac_set_tx_tail_ptr(priv, priv->ioaddr, tx_q->tx_tail_addr,
 			       tx_q->avb_chan);
 	priv->avb_tx_rekick++;
+
+	tx_q->tx_rekick_streak++;
+	if (!tx_q->tx_restart_attempted &&
+	    tx_q->tx_rekick_streak >= STMMAC_AVB_TX_REKICK_RESTART_STREAK)
+		stmmac_avb_tx_restart_dma(priv, tx_q);
+	else if (tx_q->tx_restart_attempted &&
+		 tx_q->tx_rekick_streak >= STMMAC_AVB_TX_REKICK_RESTART_STREAK)
+		stmmac_avb_tx_drop_stuck_desc(priv, tx_q);
 }
 
 int stmmac_enet_start_xmit_avb(void *data, struct avb_tx_desc *avb_buff)
@@ -8975,13 +9063,17 @@ int stmmac_enet_tx_avb(void *data)
 			tx_q->tx_stall++;
 			if (tx_q->tx_stall > tx_q->tx_stall_max)
 				tx_q->tx_stall_max = tx_q->tx_stall;
-			if (!(tx_q->tx_stall % STMMAC_AVB_TX_STALL_TICKS))
+			if (!(tx_q->tx_stall % STMMAC_AVB_TX_STALL_TICKS)) {
 				stmmac_avb_tx_rekick_if_tbu(priv, tx_q);
+				entry = tx_q->dirty_tx;
+			}
 			if (tx_q->tx_stall == STMMAC_AVB_TX_WEDGE_TICKS ||
 			    !(tx_q->tx_stall % STMMAC_AVB_TX_WEDGE_RELOG_TICKS))
 				stmmac_avb_tx_warn_wedge(priv, tx_q);
 		} else {
 			tx_q->tx_stall = 0;
+			tx_q->tx_rekick_streak = 0;
+			tx_q->tx_restart_attempted = 0;
 		}
 
 		tx_q->dirty_tx = entry;
