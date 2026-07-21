@@ -8171,6 +8171,8 @@ EXPORT_SYMBOL_GPL(stmmac_resume);
  */
 #define STMMAC_AVB_TX_REKICK_RESTART_STREAK 3
 
+#define STMMAC_AVB_TX_STATE_RUN_WAIT_STATUS 2
+
 /* One-line HW/SW state dump when a TX stall has lasted long enough to be a
  * wedge. Called from the 125 us cleaner (hardirq, under eth->lock) at wedge
  * onset and every ~8 s after, so it is self-ratelimited.
@@ -8258,6 +8260,15 @@ static void stmmac_avb_tx_drop_stuck_desc(struct stmmac_priv *priv,
 		    "AVB TX chan %u dropped stuck desc %u after failed restart: cur/dirty %u/%u tail 0x%08x\n",
 		    chan, entry, tx_q->cur_tx, tx_q->dirty_tx,
 		    (u32)tx_q->tx_tail_addr);
+}
+
+static void stmmac_avb_tx_escalate_stall(struct stmmac_priv *priv,
+						 struct stmmac_avb_tx_queue *tx_q)
+{
+	if (!tx_q->tx_restart_attempted)
+		stmmac_avb_tx_restart_dma(priv, tx_q);
+	else
+		stmmac_avb_tx_drop_stuck_desc(priv, tx_q);
 }
 
 static int stmmac_avb_init_dma_engine(struct stmmac_priv *priv)
@@ -8899,12 +8910,8 @@ static void stmmac_avb_tx_rekick_if_tbu(struct stmmac_priv *priv,
 	priv->avb_tx_rekick++;
 
 	tx_q->tx_rekick_streak++;
-	if (!tx_q->tx_restart_attempted &&
-	    tx_q->tx_rekick_streak >= STMMAC_AVB_TX_REKICK_RESTART_STREAK)
-		stmmac_avb_tx_restart_dma(priv, tx_q);
-	else if (tx_q->tx_restart_attempted &&
-		 tx_q->tx_rekick_streak >= STMMAC_AVB_TX_REKICK_RESTART_STREAK)
-		stmmac_avb_tx_drop_stuck_desc(priv, tx_q);
+	if (tx_q->tx_rekick_streak >= STMMAC_AVB_TX_REKICK_RESTART_STREAK)
+		stmmac_avb_tx_escalate_stall(priv, tx_q);
 }
 
 int stmmac_enet_start_xmit_avb(void *data, struct avb_tx_desc *avb_buff)
@@ -9066,6 +9073,17 @@ int stmmac_enet_tx_avb(void *data)
 			if (!(tx_q->tx_stall % STMMAC_AVB_TX_STALL_TICKS)) {
 				stmmac_avb_tx_rekick_if_tbu(priv, tx_q);
 				entry = tx_q->dirty_tx;
+			}
+			if (tx_q->tx_stall >= STMMAC_AVB_TX_WEDGE_TICKS &&
+			    !(tx_q->tx_stall % STMMAC_AVB_TX_WEDGE_TICKS)) {
+				struct stmmac_tx_ch_dbg dbg = {};
+
+				if (!stmmac_get_tx_ch_dbg(priv, priv->ioaddr,
+						       tx_q->avb_chan, &dbg) &&
+				    dbg.tx_state == STMMAC_AVB_TX_STATE_RUN_WAIT_STATUS) {
+					stmmac_avb_tx_escalate_stall(priv, tx_q);
+					entry = tx_q->dirty_tx;
+				}
 			}
 			if (tx_q->tx_stall == STMMAC_AVB_TX_WEDGE_TICKS ||
 			    !(tx_q->tx_stall % STMMAC_AVB_TX_WEDGE_RELOG_TICKS))
