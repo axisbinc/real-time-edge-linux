@@ -31,6 +31,7 @@
 #include <linux/slab.h>
 #include <linux/pm_runtime.h>
 #include <linux/prefetch.h>
+#include <linux/delay.h>
 #include <linux/pinctrl/consumer.h>
 #ifdef CONFIG_DEBUG_FS
 #include <linux/debugfs.h>
@@ -8171,6 +8172,9 @@ EXPORT_SYMBOL_GPL(stmmac_resume);
  */
 #define STMMAC_AVB_TX_REKICK_RESTART_STREAK 3
 
+#define STMMAC_AVB_TX_RESTART_STOP_WAIT_US 1000
+
+#define STMMAC_AVB_TX_STATE_STOPPED 0
 #define STMMAC_AVB_TX_STATE_RUN_WAIT_STATUS 2
 
 /* One-line HW/SW state dump when a TX stall has lasted long enough to be a
@@ -8193,6 +8197,45 @@ static void stmmac_avb_tx_warn_wedge(struct stmmac_priv *priv,
 		    rc);
 }
 
+static bool stmmac_avb_tx_wait_stopped(struct stmmac_priv *priv,
+					      struct stmmac_avb_tx_queue *tx_q)
+{
+	struct stmmac_tx_ch_dbg dbg = {};
+	u32 chan = tx_q->avb_chan;
+	u32 i;
+
+	for (i = 0; i < STMMAC_AVB_TX_RESTART_STOP_WAIT_US; i++) {
+		if (!stmmac_get_tx_ch_dbg(priv, priv->ioaddr, chan, &dbg) &&
+		    dbg.tx_state == STMMAC_AVB_TX_STATE_STOPPED)
+			return true;
+		udelay(1);
+	}
+
+	if (!stmmac_get_tx_ch_dbg(priv, priv->ioaddr, chan, &dbg) &&
+	    dbg.tx_state == STMMAC_AVB_TX_STATE_STOPPED)
+		return true;
+
+	netdev_warn(priv->dev,
+		    "AVB TX chan %u did not stop before restart: TS %u(%s) chstat 0x%08x curdesc 0x%08x tail 0x%08x txctrl 0x%08x\n",
+		    chan, dbg.tx_state, stmmac_avb_tx_state_str(dbg.tx_state),
+		    dbg.chan_status, dbg.cur_tx_desc, dbg.tail_ptr, dbg.tx_ctrl);
+	return false;
+}
+
+static void stmmac_avb_tx_restore_cbs(struct stmmac_priv *priv, u32 chan,
+					     u32 qmode)
+{
+	struct stmmac_txq_cfg *txq_cfg;
+
+	if (qmode != MTL_QUEUE_AVB || chan >= priv->plat->tx_queues_to_use)
+		return;
+
+	txq_cfg = &priv->plat->tx_queues_cfg[chan];
+	stmmac_config_cbs(priv, priv->hw, txq_cfg->send_slope,
+			  txq_cfg->idle_slope, txq_cfg->high_credit,
+			  txq_cfg->low_credit, chan);
+}
+
 static void stmmac_avb_tx_restart_dma(struct stmmac_priv *priv,
 				      struct stmmac_avb_tx_queue *tx_q)
 {
@@ -8201,11 +8244,13 @@ static void stmmac_avb_tx_restart_dma(struct stmmac_priv *priv,
 		MTL_QUEUE_DCB : MTL_QUEUE_AVB;
 
 	stmmac_stop_tx_dma(priv, chan);
+	stmmac_avb_tx_wait_stopped(priv, tx_q);
 	stmmac_init_tx_chan(priv, priv->ioaddr, priv->plat->dma_cfg,
 			    tx_q->dma_tx_phy, chan);
 	stmmac_set_tx_ring_len(priv, priv->ioaddr,
 			       priv->dma_avb_conf->dma_tx_size - 1, chan);
 	stmmac_dma_tx_mode(priv, priv->ioaddr, 64, chan, 256 * 3, qmode);
+	stmmac_avb_tx_restore_cbs(priv, chan, qmode);
 
 	wmb();
 	tx_q->tx_tail_addr = tx_q->dma_tx_phy +
@@ -8222,53 +8267,14 @@ static void stmmac_avb_tx_restart_dma(struct stmmac_priv *priv,
 		    (u32)tx_q->tx_tail_addr);
 }
 
-static void stmmac_avb_tx_drop_stuck_desc(struct stmmac_priv *priv,
-					  struct stmmac_avb_tx_queue *tx_q)
-{
-	unsigned int entry = tx_q->dirty_tx;
-	struct dma_desc *tx_desc = &tx_q->dma_tx[entry];
-	struct avb_tx_desc *avb_buff = tx_q->buf_pool[entry].vaddr;
-	u32 chan = tx_q->avb_chan;
-
-	if (entry == tx_q->cur_tx)
-		return;
-
-	stmmac_stop_tx_dma(priv, chan);
-
-	if (avb_buff) {
-		dma_sync_single_for_cpu(priv->device, avb_buff->dma_addr,
-					avb_buff->common.len, DMA_BIDIRECTIONAL);
-		priv->avb->free(priv->avb_data, &avb_buff->common);
-	}
-
-	tx_q->buf_pool[entry].vaddr = NULL;
-	tx_q->buf_pool[entry].dma_addr = 0;
-	tx_q->buf_pool[entry].offset = 0;
-	stmmac_release_tx_desc(priv, tx_desc, priv->mode);
-	tx_q->dirty_tx = STMMAC_GET_ENTRY(entry, priv->dma_avb_conf->dma_tx_size);
-	tx_q->tx_stall = 0;
-	tx_q->tx_rekick_streak = 0;
-	tx_q->tx_restart_attempted = 0;
-	priv->avb_tx_stuck_drop++;
-
-	tx_q->tx_tail_addr = tx_q->dma_tx_phy +
-		(tx_q->cur_tx * sizeof(struct dma_desc));
-	stmmac_set_tx_tail_ptr(priv, priv->ioaddr, tx_q->tx_tail_addr, chan);
-	stmmac_start_tx_dma(priv, chan);
-
-	netdev_warn(priv->dev,
-		    "AVB TX chan %u dropped stuck desc %u after failed restart: cur/dirty %u/%u tail 0x%08x\n",
-		    chan, entry, tx_q->cur_tx, tx_q->dirty_tx,
-		    (u32)tx_q->tx_tail_addr);
-}
-
 static void stmmac_avb_tx_escalate_stall(struct stmmac_priv *priv,
 						 struct stmmac_avb_tx_queue *tx_q)
 {
-	if (!tx_q->tx_restart_attempted)
-		stmmac_avb_tx_restart_dma(priv, tx_q);
-	else
-		stmmac_avb_tx_drop_stuck_desc(priv, tx_q);
+	stmmac_avb_tx_restart_dma(priv, tx_q);
+	/* Leave descriptors queued after a restart attempt. Forcing dirty_tx
+	 * forward can free a buffer that the DMA still owns or may later write
+	 * back, corrupting GenAVB's TX buffer accounting.
+	 */
 }
 
 static int stmmac_avb_init_dma_engine(struct stmmac_priv *priv)
@@ -9074,8 +9080,8 @@ int stmmac_enet_tx_avb(void *data)
 				stmmac_avb_tx_rekick_if_tbu(priv, tx_q);
 				entry = tx_q->dirty_tx;
 			}
-			if (tx_q->tx_stall >= STMMAC_AVB_TX_WEDGE_TICKS &&
-			    !(tx_q->tx_stall % STMMAC_AVB_TX_WEDGE_TICKS)) {
+			if (tx_q->tx_stall == STMMAC_AVB_TX_WEDGE_TICKS ||
+			    !(tx_q->tx_stall % STMMAC_AVB_TX_WEDGE_RELOG_TICKS)) {
 				struct stmmac_tx_ch_dbg dbg = {};
 
 				if (!stmmac_get_tx_ch_dbg(priv, priv->ioaddr,
