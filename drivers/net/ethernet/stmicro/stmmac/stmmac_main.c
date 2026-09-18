@@ -4124,6 +4124,8 @@ static int __stmmac_open(struct net_device *dev,
 		priv->avb_rx_dispatched = 0;
 		priv->avb_tx_ring_full = 0;
 		priv->avb_tx_rekick = 0;
+		priv->avb_tx_restart = 0;
+		priv->avb_tx_restart_desc = 0;
 		priv->avb_tx_tps = 0;
 		priv->avb_tx_fbe = 0;
 		priv->dma_avb_conf = stmmac_avb_init_dma_desc(priv);
@@ -6624,6 +6626,8 @@ static int stmmac_avb_status_show(struct seq_file *seq, void *v)
 	seq_printf(seq, "\t  RX Dispatched:     %u\n", priv->avb_rx_dispatched);
 	seq_printf(seq, "\t  TX Ring full:      %u\n", priv->avb_tx_ring_full);
 	seq_printf(seq, "\t  TX DMA re-kicks:   %u\n", priv->avb_tx_rekick);
+	seq_printf(seq, "\t  TX DMA restarts:   %u\n", priv->avb_tx_restart);
+	seq_printf(seq, "\t  TX restart descs:  %u\n", priv->avb_tx_restart_desc);
 	seq_printf(seq, "\t  TX halts w/ TPS:   %u\n", priv->avb_tx_tps);
 	seq_printf(seq, "\t  TX halts w/ FBE:   %u\n", priv->avb_tx_fbe);
 
@@ -8819,6 +8823,42 @@ static void stmmac_avb_tx_rekick_if_tbu(struct stmmac_priv *priv,
 	priv->avb_tx_rekick++;
 }
 
+/*
+ * Last-resort recovery for the non-TBU AVB wedge seen as TS=Run(wait_status).
+ * Preserve the ring and GenAVB buffers: descriptors may still be DMA-owned, so
+ * freeing them here can race the MAC. Re-start only this AVB TX DMA channel and
+ * re-doorbell the current producer tail so ownership/lifetime remains unchanged.
+ */
+static void stmmac_avb_tx_restart_channel(struct stmmac_priv *priv,
+					  struct stmmac_avb_tx_queue *tx_q)
+{
+	u32 queued;
+
+	if (tx_q->cur_tx >= tx_q->dirty_tx)
+		queued = tx_q->cur_tx - tx_q->dirty_tx;
+	else
+		queued = priv->dma_avb_conf->dma_tx_size - tx_q->dirty_tx +
+			tx_q->cur_tx;
+
+	wmb();
+	stmmac_stop_tx_dma(priv, tx_q->avb_chan);
+	tx_q->tx_tail_addr = tx_q->dma_tx_phy +
+		(tx_q->cur_tx * sizeof(struct dma_desc));
+	stmmac_set_tx_tail_ptr(priv, priv->ioaddr, tx_q->tx_tail_addr,
+			       tx_q->avb_chan);
+	stmmac_start_tx_dma(priv, tx_q->avb_chan);
+	stmmac_enable_dma_transmission(priv, priv->ioaddr);
+	stmmac_set_tx_tail_ptr(priv, priv->ioaddr, tx_q->tx_tail_addr,
+			       tx_q->avb_chan);
+
+	tx_q->tx_stall = 0;
+	priv->avb_tx_restart++;
+	priv->avb_tx_restart_desc += queued;
+	netdev_warn(priv->dev,
+		    "AVB TX chan %u DMA restart after wedge: preserved %u queued descriptors\n",
+		    tx_q->avb_chan, queued);
+}
+
 int stmmac_enet_start_xmit_avb(void *data, struct avb_tx_desc *avb_buff)
 {
 	struct stmmac_priv* priv = data;
@@ -8923,12 +8963,16 @@ int stmmac_enet_tx_avb(void *data)
 
 			priv->avb_tx_packets++;
 			avb_buff = tx_q->buf_pool[entry].vaddr;
+			if (unlikely(!avb_buff)) {
+				stmmac_release_tx_desc(priv, tx_desc, priv->mode);
+				entry = STMMAC_GET_ENTRY(entry, priv->dma_avb_conf->dma_tx_size);
+				continue;
+			}
 
 			/* VLAN-aware EtherType stats (expects Ethernet header at avb_buff+offset) */
-			if (avb_buff)
-				stmmac_avb_count_tx_packet(priv,
-							(void *)avb_buff + avb_buff->common.offset,
-							avb_buff->common.len);
+			stmmac_avb_count_tx_packet(priv,
+						(void *)avb_buff + avb_buff->common.offset,
+						avb_buff->common.len);
 			if (stmmac_avb_verbose & STMMAC_AVB_VERBOSE_TX)
 				pr_debug("stmmac_enet_tx_avb [%d] : buffer vaddr: 0x%p, dma_addr: 0x%lx, len: %d\n",
 						entry, avb_buff, avb_buff->dma_addr, avb_buff->common.len);
@@ -8978,8 +9022,11 @@ int stmmac_enet_tx_avb(void *data)
 			if (!(tx_q->tx_stall % STMMAC_AVB_TX_STALL_TICKS))
 				stmmac_avb_tx_rekick_if_tbu(priv, tx_q);
 			if (tx_q->tx_stall == STMMAC_AVB_TX_WEDGE_TICKS ||
-			    !(tx_q->tx_stall % STMMAC_AVB_TX_WEDGE_RELOG_TICKS))
+			    !(tx_q->tx_stall % STMMAC_AVB_TX_WEDGE_RELOG_TICKS)) {
 				stmmac_avb_tx_warn_wedge(priv, tx_q);
+				stmmac_avb_tx_restart_channel(priv, tx_q);
+				entry = tx_q->dirty_tx;
+			}
 		} else {
 			tx_q->tx_stall = 0;
 		}
