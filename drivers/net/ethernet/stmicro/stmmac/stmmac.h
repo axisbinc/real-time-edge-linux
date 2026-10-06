@@ -238,6 +238,8 @@ struct stmmac_avb_tx_queue {
 	dma_addr_t tx_tail_addr;
 	u32 tx_stall;	/* consecutive cleaner passes: TX work pending, no completion */
 	u32 tx_stall_max;	/* watermark: longest tx_stall run since open */
+	u32 tx_restart_streak;	/* consecutive wedge restarts without completion */
+	unsigned long tx_last_xmit_jiffies;	/* last accepted AVB TX enqueue */
 	u32 mss;
 };
 
@@ -299,6 +301,7 @@ struct stmmac_priv {
 	unsigned int avb_tx_mmrp;
 	unsigned int avb_tx_msrp;
 	unsigned int avb_tx_other;
+	unsigned long avb_tx_last_xmit_jiffies; /* Last accepted AVB TX enqueue */
 	/* AVB DMA debug counters */
 	unsigned int avb_rx_discard;      /* DMA discard frames (CRC/overflow) */
 	unsigned int avb_rx_alloc_fail;   /* Buffer alloc failures */
@@ -307,6 +310,7 @@ struct stmmac_priv {
 	unsigned int avb_tx_rekick;       /* AVB TX DMA re-arms (TBU wedge recovery) */
 	unsigned int avb_tx_restart;      /* AVB TX DMA restarts after hard wedges */
 	unsigned int avb_tx_restart_desc; /* AVB TX descriptors preserved by restart */
+	unsigned int avb_tx_global_reset; /* AVB TX wedges escalated to adapter reset */
 	unsigned int avb_tx_tps;          /* AVB TX halts seen with Transmit Process Stopped */
 	unsigned int avb_tx_fbe;          /* AVB TX halts seen with Fatal Bus Error */
 	//__ETHTOOL_DECLARE_LINK_MODE_MASK(phy_advertising);

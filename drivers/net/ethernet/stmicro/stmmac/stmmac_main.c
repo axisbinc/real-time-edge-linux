@@ -27,6 +27,7 @@
 #include <linux/mii.h>
 #include <linux/if.h>
 #include <linux/if_vlan.h>
+#include <linux/jiffies.h>
 #include <linux/dma-mapping.h>
 #include <linux/slab.h>
 #include <linux/pm_runtime.h>
@@ -4118,6 +4119,7 @@ static int __stmmac_open(struct net_device *dev,
 		priv->avb_tx_mmrp = 0;
 		priv->avb_tx_msrp = 0;
 		priv->avb_tx_other = 0;
+		priv->avb_tx_last_xmit_jiffies = 0;
 		/* DMA debug counters */
 		priv->avb_rx_discard = 0;
 		priv->avb_rx_alloc_fail = 0;
@@ -4135,6 +4137,7 @@ static int __stmmac_open(struct net_device *dev,
 			priv->dma_avb_conf = NULL;
 		} else {
 			stmmac_avb_init_dma_engine(priv);
+			stmmac_configure_cbs(priv);
 			priv->avb->open(priv->avb_data, priv, priv->speed);
 			stmmac_avb_filter(priv, true);
 		}
@@ -6618,6 +6621,11 @@ static int stmmac_avb_status_show(struct seq_file *seq, void *v)
 	seq_printf(seq, "\t  MMRP (0x88F6): %u\n", priv->avb_tx_mmrp);
 	seq_printf(seq, "\t  MSRP (0x22EA): %u\n", priv->avb_tx_msrp);
 	seq_printf(seq, "\t  Other:         %u\n", priv->avb_tx_other);
+	if (priv->avb_tx_last_xmit_jiffies)
+		seq_printf(seq, "\tLast accepted AVB TX age: %u ms\n",
+			   jiffies_to_msecs(jiffies - priv->avb_tx_last_xmit_jiffies));
+	else
+		seq_printf(seq, "\tLast accepted AVB TX age: never\n");
 	seq_printf(seq, "\tFRP Accept Count from priority channel: %d\n", priority_accept_count);
 	seq_printf(seq, "\tFRP Accept Count from cbs channel: %d\n", cbs_accept_count);
 	seq_printf(seq, "\n\tDMA Debug Counters:\n");
@@ -6628,6 +6636,7 @@ static int stmmac_avb_status_show(struct seq_file *seq, void *v)
 	seq_printf(seq, "\t  TX DMA re-kicks:   %u\n", priv->avb_tx_rekick);
 	seq_printf(seq, "\t  TX DMA restarts:   %u\n", priv->avb_tx_restart);
 	seq_printf(seq, "\t  TX restart descs:  %u\n", priv->avb_tx_restart_desc);
+	seq_printf(seq, "\t  TX global resets:  %u\n", priv->avb_tx_global_reset);
 	seq_printf(seq, "\t  TX halts w/ TPS:   %u\n", priv->avb_tx_tps);
 	seq_printf(seq, "\t  TX halts w/ FBE:   %u\n", priv->avb_tx_fbe);
 
@@ -6647,6 +6656,11 @@ static int stmmac_avb_status_show(struct seq_file *seq, void *v)
 				   tx_q->cur_tx, tx_q->dirty_tx);
 			seq_printf(seq, "\t  stall now/max:     %u/%u ticks\n",
 				   tx_q->tx_stall, tx_q->tx_stall_max);
+			if (tx_q->tx_last_xmit_jiffies)
+				seq_printf(seq, "\t  last accepted TX:  %u ms ago\n",
+					   jiffies_to_msecs(jiffies - tx_q->tx_last_xmit_jiffies));
+			else
+				seq_printf(seq, "\t  last accepted TX:  never\n");
 			seq_printf(seq, "\t  desc[dirty] des3:  0x%08x (OWN=%u)\n",
 				   le32_to_cpu(desc->des3),
 				   (le32_to_cpu(desc->des3) >> 31) & 1);
@@ -8164,6 +8178,17 @@ EXPORT_SYMBOL_GPL(stmmac_resume);
 #define STMMAC_AVB_TX_WEDGE_TICKS 800
 #define STMMAC_AVB_TX_WEDGE_RELOG_TICKS (80 * STMMAC_AVB_TX_WEDGE_TICKS)
 
+#define STMMAC_AVB_TX_RESET_RESTARTS 4
+
+static u32 stmmac_avb_tx_queued(struct stmmac_priv *priv,
+					struct stmmac_avb_tx_queue *tx_q)
+{
+	if (tx_q->cur_tx >= tx_q->dirty_tx)
+		return tx_q->cur_tx - tx_q->dirty_tx;
+
+	return priv->dma_avb_conf->dma_tx_size - tx_q->dirty_tx + tx_q->cur_tx;
+}
+
 /* One-line HW/SW state dump when a TX stall has lasted long enough to be a
  * wedge. Called from the 125 us cleaner (hardirq, under eth->lock) at wedge
  * onset and every ~8 s after, so it is self-ratelimited.
@@ -8407,6 +8432,10 @@ static int stmmac_avb_alloc_tx_desc(struct stmmac_priv *priv,
 
 		tx_q->cur_tx = 0;
 		tx_q->dirty_tx = 0;
+			tx_q->tx_stall = 0;
+			tx_q->tx_stall_max = 0;
+		tx_q->tx_restart_streak = 0;
+			tx_q->tx_last_xmit_jiffies = 0;
 		tx_q->mss = 0;
 	}
 
@@ -8832,13 +8861,7 @@ static void stmmac_avb_tx_rekick_if_tbu(struct stmmac_priv *priv,
 static void stmmac_avb_tx_restart_channel(struct stmmac_priv *priv,
 					  struct stmmac_avb_tx_queue *tx_q)
 {
-	u32 queued;
-
-	if (tx_q->cur_tx >= tx_q->dirty_tx)
-		queued = tx_q->cur_tx - tx_q->dirty_tx;
-	else
-		queued = priv->dma_avb_conf->dma_tx_size - tx_q->dirty_tx +
-			tx_q->cur_tx;
+	u32 queued = stmmac_avb_tx_queued(priv, tx_q);
 
 	wmb();
 	stmmac_stop_tx_dma(priv, tx_q->avb_chan);
@@ -8852,11 +8875,12 @@ static void stmmac_avb_tx_restart_channel(struct stmmac_priv *priv,
 			       tx_q->avb_chan);
 
 	tx_q->tx_stall = 0;
+	tx_q->tx_restart_streak++;
 	priv->avb_tx_restart++;
 	priv->avb_tx_restart_desc += queued;
 	netdev_warn(priv->dev,
-		    "AVB TX chan %u DMA restart after wedge: preserved %u queued descriptors\n",
-		    tx_q->avb_chan, queued);
+		    "AVB TX chan %u DMA restart after wedge: preserved %u queued descriptors (streak %u)\n",
+		    tx_q->avb_chan, queued, tx_q->tx_restart_streak);
 }
 
 int stmmac_enet_start_xmit_avb(void *data, struct avb_tx_desc *avb_buff)
@@ -8917,6 +8941,8 @@ int stmmac_enet_start_xmit_avb(void *data, struct avb_tx_desc *avb_buff)
 	tx_q->tx_count_frames++;
 	stmmac_enable_dma_transmission(priv, priv->ioaddr);
 	tx_q->cur_tx = entry = next_entry;
+	tx_q->tx_last_xmit_jiffies = jiffies;
+	priv->avb_tx_last_xmit_jiffies = tx_q->tx_last_xmit_jiffies;
 
 	wmb();
 
@@ -8945,6 +8971,8 @@ int stmmac_enet_tx_avb(void *data)
 	/* try to clean all TX complete frames */
 	for(queue_id = 0; queue_id < MTL_MAX_AVB_TX_QUEUES; queue_id++)
 	{
+		bool tx_done = false;
+
 		tx_q = &priv->dma_avb_conf->tx_queue[queue_id];
 		entry = tx_q->dirty_tx;
 		while (entry != tx_q->cur_tx) {
@@ -9005,8 +9033,11 @@ int stmmac_enet_tx_avb(void *data)
 			/* clean the descriptor */
 			stmmac_release_tx_desc(priv, tx_desc, priv->mode);
 
+			tx_done = true;
 			entry = STMMAC_GET_ENTRY(entry, priv->dma_avb_conf->dma_tx_size);
 		}
+		if (tx_done)
+			tx_q->tx_restart_streak = 0;
 
 		/*
 		 * Backstop for the AVB TX DMA wedge. start_xmit_avb already
@@ -9024,11 +9055,24 @@ int stmmac_enet_tx_avb(void *data)
 			if (tx_q->tx_stall == STMMAC_AVB_TX_WEDGE_TICKS ||
 			    !(tx_q->tx_stall % STMMAC_AVB_TX_WEDGE_RELOG_TICKS)) {
 				stmmac_avb_tx_warn_wedge(priv, tx_q);
+				if (tx_q->tx_restart_streak >= STMMAC_AVB_TX_RESET_RESTARTS) {
+					if (!test_bit(STMMAC_RESET_REQUESTED, &priv->state)) {
+						priv->avb_tx_global_reset++;
+						netdev_warn(priv->dev,
+							    "AVB TX chan %u restart streak %u reached; adapter reset requested\n",
+							    tx_q->avb_chan, tx_q->tx_restart_streak);
+					}
+					stmmac_global_err(priv);
+					entry = tx_q->dirty_tx;
+					continue;
+				}
 				stmmac_avb_tx_restart_channel(priv, tx_q);
 				entry = tx_q->dirty_tx;
 			}
 		} else {
 			tx_q->tx_stall = 0;
+			if (entry == tx_q->cur_tx)
+				tx_q->tx_restart_streak = 0;
 		}
 
 		tx_q->dirty_tx = entry;
