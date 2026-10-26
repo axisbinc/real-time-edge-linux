@@ -546,6 +546,8 @@ const struct stmmac_dma_ops dwmac4_dma_ops = {
 	.qmode = dwmac4_qmode,
 	.set_bfsize = dwmac4_set_bfsize,
 	.enable_sph = dwmac4_enable_sph,
+	.tx_is_suspended = dwmac4_tx_is_suspended,
+	.get_tx_ch_dbg = dwmac4_get_tx_ch_dbg,
 };
 
 const struct stmmac_dma_ops dwmac410_dma_ops = {
@@ -576,4 +578,6 @@ const struct stmmac_dma_ops dwmac410_dma_ops = {
 	.set_bfsize = dwmac4_set_bfsize,
 	.enable_sph = dwmac4_enable_sph,
 	.enable_tbs = dwmac4_enable_tbs,
+	.tx_is_suspended = dwmac4_tx_is_suspended,
+	.get_tx_ch_dbg = dwmac4_get_tx_ch_dbg,
 };

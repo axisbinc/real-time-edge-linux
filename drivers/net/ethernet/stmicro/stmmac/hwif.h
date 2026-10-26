@@ -162,6 +162,17 @@ struct stmmac_desc_ops {
 struct stmmac_dma_cfg;
 struct dma_features;
 
+/* Snapshot of a TX DMA channel's HW state, for AVB wedge forensics */
+struct stmmac_tx_ch_dbg {
+	u32 chan_status;	/* raw DMA_CH_STATUS (not acked) */
+	u32 tx_state;		/* DMA debug TX process state (TS field) */
+	u32 cur_tx_desc;	/* DMA_CH_CUR_TX_DESC (HW descriptor pointer) */
+	u32 tail_ptr;		/* DMA_CH_TX_END_ADDR readback */
+	u32 tx_ctrl;		/* DMA_CH_TX_CONTROL (ST bit etc.) */
+	u32 quantum_weight;	/* MTL TxQ quantum weight (= CBS idle slope) */
+	u32 ets_ctrl;		/* MTL ETS control (AV alg / credit control) */
+};
+
 /* Specific DMA helpers */
 struct stmmac_dma_ops {
 	/* DMA core initialization */
@@ -212,7 +223,19 @@ struct stmmac_dma_ops {
 	void (*set_bfsize)(void __iomem *ioaddr, int bfsize, u32 chan);
 	void (*enable_sph)(void __iomem *ioaddr, bool en, u32 chan);
 	int (*enable_tbs)(void __iomem *ioaddr, bool en, u32 chan);
+	/* Return a mask of STMMAC_TX_CH_* halt/suspend states for the TX DMA
+	 * channel (acking the W1C status bits that were seen), 0 if none.
+	 */
+	int (*tx_is_suspended)(void __iomem *ioaddr, u32 chan);
+	/* Fill a read-only HW state snapshot of the TX DMA channel */
+	int (*get_tx_ch_dbg)(void __iomem *ioaddr, u32 chan,
+			     struct stmmac_tx_ch_dbg *dbg);
 };
+
+/* tx_is_suspended() return flags */
+#define STMMAC_TX_CH_TBU	BIT(0)	/* suspended: Transmit Buffer Unavailable */
+#define STMMAC_TX_CH_TPS	BIT(1)	/* stopped: Transmit Process Stopped */
+#define STMMAC_TX_CH_FBE	BIT(2)	/* stopped: Fatal Bus Error */
 
 #define stmmac_dma_init(__priv, __args...) \
 	stmmac_do_void_callback(__priv, dma, init, __args)
@@ -270,6 +293,10 @@ struct stmmac_dma_ops {
 	stmmac_do_void_callback(__priv, dma, enable_sph, __args)
 #define stmmac_enable_tbs(__priv, __args...) \
 	stmmac_do_callback(__priv, dma, enable_tbs, __args)
+#define stmmac_tx_is_suspended(__priv, __args...) \
+	stmmac_do_callback(__priv, dma, tx_is_suspended, __args)
+#define stmmac_get_tx_ch_dbg(__priv, __args...) \
+	stmmac_do_callback(__priv, dma, get_tx_ch_dbg, __args)
 
 struct mac_device_info;
 struct net_device;

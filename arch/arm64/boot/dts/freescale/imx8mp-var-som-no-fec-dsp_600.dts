@@ -1,0 +1,491 @@
+/*
+* Copyright AxisB Inc 2024 - 2025 All rights reserved
+*
+* Device tree for 16-channel TAS5825M amplifier array
+* - 8 TAS5825M amplifiers on SAI2-TX_DATA0 (channels 0-15)
+* - 8 TAS5825M amplifiers on SAI2-TX_DATA1 (channels 16-31)
+* - Each amplifier handles 2 channels (stereo pair) from TDM16 stream
+*/
+
+#include "imx8mp-var-som-symphony.dts"
+
+/* Enable easrc */
+&easrc {
+	fsl,asrc-rate  = <48000>;
+	status = "okay";
+};
+
+/* Throttle HiFi4 DSP core to 600 MHz.
+ * The HiFi4 core clock derives from audio_axi (gated as DSP_ROOT), which
+ * defaults to sys_pll1_800m = 800 MHz. Reparent AUDIO_AXI_SRC onto
+ * SYS_PLL3_OUT and program it to 600 MHz to cap the DSP at 600 MHz.
+ *
+ * IMPORTANT: Re-declaring assigned-clocks on &clk REPLACES the entire base
+ * imx8mp.dtsi list (DT properties do not merge). The base node assigns ten
+ * clocks (A53, NOC, NOC_IO, GIC, AUDIO_AHB, AUDIO_AXI_SRC, AUDIO_PLL1/2,
+ * VIDEO_PLL1). If we only list AUDIO_AXI_SRC here, all the others revert to
+ * power-on defaults -- notably AUDIO_AHB drops to 24 MHz (starves the SAI
+ * IPG/audio fabric -> broken audio + media-clock recovery cannot lock) and
+ * AUDIO_PLL1 jumps to 650 MHz (breaks MCR divider). So we must mirror the
+ * full base list verbatim and change ONLY AUDIO_AXI_SRC (parent -> SYS_PLL3,
+ * rate -> 600 MHz) to apply the DSP throttle without collateral damage.
+ */
+&clk {
+	assigned-clocks = <&clk IMX8MP_CLK_A53_SRC>,
+			  <&clk IMX8MP_CLK_A53_CORE>,
+			  <&clk IMX8MP_CLK_NOC>,
+			  <&clk IMX8MP_CLK_NOC_IO>,
+			  <&clk IMX8MP_CLK_GIC>,
+			  <&clk IMX8MP_CLK_AUDIO_AHB>,
+			  <&clk IMX8MP_CLK_AUDIO_AXI_SRC>,
+			  <&clk IMX8MP_AUDIO_PLL1>,
+			  <&clk IMX8MP_AUDIO_PLL2>,
+			  <&clk IMX8MP_VIDEO_PLL1>;
+	assigned-clock-parents = <&clk IMX8MP_SYS_PLL1_800M>,
+				 <&clk IMX8MP_ARM_PLL_OUT>,
+				 <&clk IMX8MP_SYS_PLL2_1000M>,
+				 <&clk IMX8MP_SYS_PLL1_800M>,
+				 <&clk IMX8MP_SYS_PLL2_500M>,
+				 <&clk IMX8MP_SYS_PLL1_800M>,
+				 <&clk IMX8MP_SYS_PLL3_OUT>;
+	assigned-clock-rates = <0>, <0>,
+			       <1000000000>,
+			       <800000000>,
+			       <500000000>,
+			       <400000000>,
+			       <600000000>,
+			       <393216000>,
+			       <361267200>,
+			       <1039500000>;
+};
+
+/* AVB HW timer */
+&gpt1 {
+	compatible = "fsl,avb-gpt";
+	timer-channel = <1>; /* Use output compare channel 1*/
+	sw-recovery = <0>; /* Use SW recovery mode for STMMAC (eth port 0) */
+	prescale = <1>;
+	domain = <0>;
+
+	clocks = <&clk IMX8MP_CLK_GPT1_ROOT>,
+		 <&clk IMX8MP_CLK_GPT1_ROOT>,
+		 <&clk IMX8MP_AUDIO_PLL1>;
+	clock-names = "ipg", "per", "audio_pll";
+
+	/* Make the GPT clk root derive from the audio PLL*/
+	assigned-clocks = <&clk IMX8MP_CLK_GPT1>;
+	assigned-clock-parents = <&clk IMX8MP_AUDIO_PLL1_OUT>;
+	assigned-clock-rates = <0>;
+
+	gpt1_capin1_sel = <&gpr 0x4 2>;
+
+	status = "okay";
+};
+
+&iomuxc {
+	pinctrl_i2c5: i2c5grp {
+		fsl,pins = <
+			MX8MP_IOMUXC_HDMI_DDC_SCL__I2C5_SCL				0x400001c2
+			MX8MP_IOMUXC_HDMI_DDC_SDA__I2C5_SDA				0x400001c2
+		>;
+	};
+
+	pinctrl_sai1: sai1grp {
+		fsl,pins = <
+			/* MX8MP_IOMUXC_SAI1_MCLK__AUDIOMIX_SAI1_MCLK			    0xd6 */
+			MX8MP_IOMUXC_SAI1_TXFS__AUDIOMIX_SAI1_TX_SYNC			0xd6
+			MX8MP_IOMUXC_SAI1_TXC__AUDIOMIX_SAI1_TX_BCLK			0xd6
+			MX8MP_IOMUXC_SAI1_TXD0__AUDIOMIX_SAI1_TX_DATA00			0xd6
+			MX8MP_IOMUXC_SAI1_TXD1__AUDIOMIX_SAI1_TX_DATA01			0xd6
+			MX8MP_IOMUXC_SAI1_TXD2__AUDIOMIX_SAI1_TX_DATA02			0xd6
+			MX8MP_IOMUXC_SAI1_TXD3__AUDIOMIX_SAI1_TX_DATA03			0xd6
+			MX8MP_IOMUXC_SAI1_TXD4__AUDIOMIX_SAI1_TX_DATA04			0xd6
+			MX8MP_IOMUXC_SAI1_TXD5__AUDIOMIX_SAI1_TX_DATA05			0xd6
+		>;
+	};
+	
+	pinctrl_sai2: sai2grp {
+		fsl,pins = <
+			/* MX8MP_IOMUXC_SAI2_MCLK__AUDIOMIX_SAI2_MCLK			    0xd6 */
+			MX8MP_IOMUXC_SAI2_TXFS__AUDIOMIX_SAI2_TX_SYNC			0xd6
+			MX8MP_IOMUXC_SAI2_TXC__AUDIOMIX_SAI2_TX_BCLK			0xd6
+			MX8MP_IOMUXC_SAI2_TXD0__AUDIOMIX_SAI2_TX_DATA00			0xd6
+			MX8MP_IOMUXC_SAI2_RXD0__AUDIOMIX_SAI2_TX_DATA01			0xd6
+		>;
+	};
+
+	pinctrl_usdhc2_gpio: usdhc2grp-gpio {
+		fsl,pins = <
+			MX8MP_IOMUXC_GPIO1_IO14__GPIO1_IO14				0x1c4
+			MX8MP_IOMUXC_GPIO1_IO09__GPIO1_IO09				0x10  /* SD card power control */
+			/* GPIO4_IO22 (SAI2_RXC) now used for audio, not SD card regulator */
+			/* MX8MP_IOMUXC_SAI2_RXC__GPIO4_IO22				0x10 */
+			MX8MP_IOMUXC_SD2_CD_B__GPIO2_IO12				0xc0
+		>;
+	};
+};
+
+/*   Enable SAI2 with TDM16 on both TX_DATA0 and TX_DATA1                  */
+&sai2 {
+	status = "okay";
+	#sound-dai-cells = <0>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_sai2>;
+
+	/* Audio clock for BCLK/FS generation - standard rate for TDM16 */
+	assigned-clocks = <&clk IMX8MP_CLK_SAI2>;
+	assigned-clock-parents = <&clk IMX8MP_AUDIO_PLL1_OUT>;
+	assigned-clock-rates = <24576000>; /* Standard 24.576 MHz */
+	clocks = <&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_SAI2_IPG>, <&clk IMX8MP_CLK_DUMMY>,
+		<&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_SAI2_MCLK1>, <&clk IMX8MP_CLK_DUMMY>,
+		<&clk IMX8MP_CLK_DUMMY>;
+	clock-names = "bus", "mclk0", "mclk1", "mclk2", "mclk3";
+	fsl,sai-mclk-direction-output;
+
+	/* TX-only, 2 data lanes (TX_DATA0 + TX_DATA1) */
+	fsl,dataline = <1 0x0 0x3>;
+
+	/* Use MULTI-FIFO DMA for 2-lane operation */
+	dmas = <&sdma2 3 25 0>; /* 25 = IMX_DMATYPE_MULTI_SAI */
+	dma-names = "tx";
+
+	/* Synchronous mode: TX is master, RX uses TX clocks (shared BCLK/FSYNC)
+	* i.MX8MP is GLOBAL MASTER - generates clocks for both directions
+	*/
+};
+
+&sai1 {
+	status = "okay";
+	#sound-dai-cells = <0>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_sai1>;
+
+	/* Audio clock for BCLK/FS generation - standard rate for TDM16 */
+	assigned-clocks = <&clk IMX8MP_CLK_SAI1>;
+	assigned-clock-parents = <&clk IMX8MP_AUDIO_PLL1_OUT>;
+	assigned-clock-rates = <24576000>; /* Standard 24.576 MHz */
+	clocks = <&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_SAI1_IPG>, <&clk IMX8MP_CLK_DUMMY>,
+		<&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_SAI1_MCLK1>, <&clk IMX8MP_CLK_DUMMY>,
+		<&clk IMX8MP_CLK_DUMMY>;
+	clock-names = "bus", "mclk0", "mclk1", "mclk2", "mclk3";
+	fsl,sai-mclk-direction-output;
+
+	/* TX-only, 6 data lanes (TX_DATA0-5) */
+	fsl,dataline = <1 0x1 0x3f>;
+
+	/* Use MULTI-FIFO DMA for 32-channel operation (2x TDM16) */
+	dmas = <&sdma2 1 25 0>; /* 25 = IMX_DMATYPE_MULTI_SAI */
+	dma-names = "tx";
+
+	/* Synchronous mode: TX is master, RX uses TX clocks (shared BCLK/FSYNC)
+	* i.MX8MP is GLOBAL MASTER - generates clocks for both directions
+	*/
+};
+
+/* ------------------------------------------------------------------------ */
+// Dummy sound codec for TAS5825M amplifiers
+/ {
+
+	dummy_codec_0: dummy-codec-0 {
+		compatible = "linux,dummy-codec";
+		#sound-dai-cells = <0>;
+	};
+
+	dummy_codec_1: dummy-codec-1 {
+		compatible = "linux,dummy-codec";
+		#sound-dai-cells = <0>;
+	};
+
+	/* Override SD card regulator to use GPIO1_IO09 instead of GPIO4_IO22
+	 * (GPIO4_IO22/SAI2_RXC is now used for audio)
+	 */
+	reg_usdhc2_vmmc: regulator-usdhc2-vmmc {
+		compatible = "regulator-fixed";
+		regulator-name = "VSD_3V3";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		gpio = <&gpio1 9 GPIO_ACTIVE_HIGH>;  /* Changed from GPIO4_IO22 */
+		enable-active-high;
+		startup-delay-us = <100>;
+		off-on-delay-us = <12000>;
+	};
+
+	/* TAS5825M #0: Channels 0-1 (TDM slots 0-1 on TX_DATA0) - BIDIRECTIONAL */
+	sound-amp-0 {
+		compatible = "simple-audio-card";
+		simple-audio-card,name = "tas5825m-ch0-1";
+		simple-audio-card,format = "dsp_a";
+		simple-audio-card,bitclock-master = <&cpu_amp_0>;
+		simple-audio-card,frame-master = <&cpu_amp_0>;
+		status = "okay";
+
+		cpu_amp_0: simple-audio-card,cpu {
+			sound-dai = <&sai2>;
+			dai-tdm-slot-num = <16>;         // 16 slots per TDM frame 
+			dai-tdm-slot-width = <32>;       // 32 bits per slot 
+			dai-tdm-slot-tx-mask = <0xffff>; // Slots 0-1: bits 0-1 set
+		};
+
+		simple-audio-card,codec {
+			sound-dai = <&dummy_codec_0>;
+		};
+	};
+
+	sound-amp-1 {
+		compatible = "simple-audio-card";
+		simple-audio-card,name = "second-dummy-amp";
+		simple-audio-card,format = "dsp_a";
+		simple-audio-card,bitclock-master = <&cpu_amp_1>;
+		simple-audio-card,frame-master = <&cpu_amp_1>;
+		status = "okay";
+
+		cpu_amp_1: simple-audio-card,cpu {
+			sound-dai = <&sai1>;
+			dai-tdm-slot-num = <16>;         // 16 slots per TDM frame 
+			dai-tdm-slot-width = <32>;       // 32 bits per slot 
+			dai-tdm-slot-tx-mask = <0xffff>; // Slots 0-1: bits 0-1 set
+			dai-tdm-slot-rx-mask = <0xffff>;
+		};
+
+		simple-audio-card,codec {
+			sound-dai = <&dummy_codec_1>;
+		};
+	};
+
+};
+
+&reg_fec_phy_vsel {
+	/delete-property/ enable-active-high;
+	enable-active-low;
+};
+
+&i2c3{
+	/* GPIO expander */
+	pca9534: gpio@20 {
+		compatible = "nxp,pca9534";
+		reg = <0x20>;
+		gpio-controller;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_pca9534>;
+		interrupt-parent = <&gpio1>;
+		interrupts = <15 IRQ_TYPE_EDGE_FALLING>;
+		#gpio-cells = <2>;
+		wakeup-source;
+		status = "okay";
+
+		usb3_sel_hog {
+			gpio-hog;
+			gpios = <4 0>;
+			output-low;
+			line-name = "usb3_sel";
+		};
+
+		enet1_reset_hog {
+			gpio-hog;
+			gpios = <5 0>;
+			output-low;   // keep in reset
+			line-name = "enet1_reset_b";
+		};
+	};
+};
+
+/* ------------------------------------------------------------------------ */
+/*   Enable I2C5 for TAS5825M amplifiers via PCA9548 I2C Multiplexer      */
+
+&i2c3 {
+	i2c-mux@70 {
+		compatible = "nxp,pca9548";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0x70>;
+	};
+};
+
+&i2c4 {
+	i2c-mux@70 {
+		compatible = "nxp,pca9548";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0x70>;
+	};
+};
+
+&i2c5 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_i2c5>;
+	clock-frequency = <100000>;  /* 100kHz for reliability */
+	scl-gpios = <&gpio3 26 GPIO_ACTIVE_HIGH>;
+	sda-gpios = <&gpio3 27 GPIO_ACTIVE_HIGH>;
+
+	/* -------------------------------------------------------------------- */
+	/* PCA9548 I2C Multiplexer - 8 channels, 2 TAS5825M per channel        */
+	/* -------------------------------------------------------------------- */
+	i2c-mux@70 {
+		compatible = "nxp,pca9548";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0x70>;
+	};
+};
+
+&dsp {
+	compatible = "fsl,imx8mp-hifi4";
+	reg = <0x0 0x3B6E8000 0x0 0x88000>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_uart4>;
+	clocks = <&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_OCRAMA_IPG>,
+			<&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_DSP_ROOT>,
+			<&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_DSPDBG_ROOT>,
+			<&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_SDMA3_ROOT>,
+			<&audio_blk_ctrl IMX8MP_CLK_AUDIO_BLK_CTRL_ASRC_IPG>,
+			<&clk IMX8MP_CLK_UART4_ROOT>;
+	clock-names = "ocram", "core", "debug",
+			"per_clk1", "per_clk2", "per_clk3",
+			"per_clk5", "per_clk7";
+	firmware-name = "imx/dsp/hifi4.bin";
+	power-domains = <&audiomix_pd>;
+	mbox-names = "tx0", "rx0", "rxdb0";
+	mboxes = <&mu2 0 0>,
+			<&mu2 1 0>,
+			<&mu2 3 0>;
+	memory-region = <&dsp_vdev0buffer>, <&dsp_vdev0vring0>,
+				<&dsp_vdev0vring1>, <&dsp_reserved>;
+	syscon = <&audio_blk_ctrl>;
+	status = "okay";
+};
+
+&uart4 {
+	status = "disabled";
+};
+
+&wm8904 {
+	status = "disabled";
+};
+
+&pcie {
+	status = "disabled";
+};
+
+&pcie_ep {
+	status = "disabled";
+};
+
+&sound_hdmi {
+	status = "disabled";
+};
+
+&aud2htx {
+	status = "disabled";
+};
+
+&flexcan2 {
+	status = "disabled";
+};
+
+&irqsteer_hdmi {
+	status = "disabled";
+};
+
+&hdmi_blk_ctrl {
+	status = "disabled";
+};
+
+&hdmi_pavi {
+	status = "disabled";
+};
+
+&hdmi {
+	status = "disabled";
+};
+
+&hdmiphy {
+	status = "disabled";
+};
+
+/* MIPI-DSI */
+&lcdif1 {
+	status = "disabled";
+};
+
+/* LVDS */
+&lcdif2 {
+	status = "disabled";
+};
+
+/* HDMI */
+&lcdif3 {
+	status = "disabled";
+};
+
+&ldb {
+	status = "disabled";
+};
+
+&ldb_phy {
+	status = "disabled";
+};
+
+&mipi_dsi {
+	status = "disabled";
+};
+
+/* configure eqos for priority queueing and DMA channel mapping */
+&eqos {
+	snps,force_thresh_dma_mode;
+	snps,mtl-tx-config = <&mtl_tx_setup>;
+	snps,mtl-rx-config = <&mtl_rx_setup>;
+
+	mtl_tx_setup: tx-queues-config {
+		snps,tx-queues-to-use = <3>;
+		snps,tx-sched-sp;
+
+		queue0 {
+			snps,dcb-algorithm;
+			snps,priority = <0x1>;
+		};
+
+		queue1 {
+			snps,dcb-algorithm;
+			snps,priority = <0x2>;
+		};
+
+		queue2 {
+			snps,dcb-algorithm;
+			snps,priority = <0xFC>;
+		};
+	};
+
+	mtl_rx_setup: rx-queues-config {
+		snps,rx-queues-to-use = <3>;
+		snps,rx-sched-sp;
+
+		queue0 {
+			snps,dcb-algorithm;
+			snps,priority = <0x1>;
+			snps,map-to-dma-channel = <0>;
+		};
+
+		queue1 {
+			snps,dcb-algorithm;
+			snps,priority = <0x2>;
+			snps,map-to-dma-channel = <1>;
+		};
+
+		queue2 {
+			snps,dcb-algorithm;
+			snps,priority = <0xFC>;
+			snps,map-to-dma-channel = <2>;
+		};
+	};
+};
+
+/* Force FEC ethernet to 100 Mbps */
+&fec {
+	status = "disabled";
+};
+
+/* Also limit the PHY to 100 Mbps */
+&ethphy1 {
+	max-speed = <100>;
+};

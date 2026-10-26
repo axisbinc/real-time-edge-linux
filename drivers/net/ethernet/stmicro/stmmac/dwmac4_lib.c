@@ -35,6 +35,76 @@ void dwmac4_set_tx_tail_ptr(void __iomem *ioaddr, u32 tail_ptr, u32 chan)
 	writel(tail_ptr, ioaddr + DMA_CHAN_TX_END_ADDR(chan));
 }
 
+/*
+ * Report the TX DMA channel halt/suspend state as a mask of STMMAC_TX_CH_*
+ * flags: TBU (suspended, tail doorbell resumes it), TPS (transmit process
+ * stopped, needs a channel restart) and FBE (fatal bus error, needs a channel
+ * restart). These are write-1-to-clear status bits that do NOT self-clear when
+ * the channel recovers, so acknowledge the ones seen here; a later read then
+ * reflects a fresh event. Intended for channels with no DMA IRQ enabled (the
+ * AVB CBS/PTP channels), where there is no IRQ handler to race the W1C ack.
+ */
+int dwmac4_tx_is_suspended(void __iomem *ioaddr, u32 chan)
+{
+	u32 status = readl(ioaddr + DMA_CHAN_STATUS(chan));
+	u32 ack = 0;
+	int ret = 0;
+
+	if (status & DMA_CHAN_STATUS_TBU) {
+		ret |= STMMAC_TX_CH_TBU;
+		ack |= DMA_CHAN_STATUS_TBU;
+	}
+	if (status & DMA_CHAN_STATUS_TPS) {
+		ret |= STMMAC_TX_CH_TPS;
+		ack |= DMA_CHAN_STATUS_TPS;
+	}
+	if (status & DMA_CHAN_STATUS_FBE) {
+		ret |= STMMAC_TX_CH_FBE;
+		ack |= DMA_CHAN_STATUS_FBE;
+	}
+
+	if (ack)
+		writel(ack, ioaddr + DMA_CHAN_STATUS(chan));
+
+	return ret;
+}
+
+/*
+ * Read-only snapshot of a TX DMA channel's state for wedge forensics: raw
+ * channel status (NOT acked, so tx_is_suspended() semantics are unaffected),
+ * the DMA debug TX process state, the HW current descriptor pointer vs the
+ * programmed tail, and the MTL queue quantum-weight (CBS idle slope) and ETS
+ * control readbacks. Assumes the 1:1 DMA channel <-> MTL queue mapping used
+ * by the AVB channels.
+ */
+int dwmac4_get_tx_ch_dbg(void __iomem *ioaddr, u32 chan,
+			 struct stmmac_tx_ch_dbg *dbg)
+{
+	u32 reg;
+
+	dbg->chan_status = readl(ioaddr + DMA_CHAN_STATUS(chan));
+	dbg->cur_tx_desc = readl(ioaddr + DMA_CHAN_CUR_TX_DESC(chan));
+	dbg->tail_ptr = readl(ioaddr + DMA_CHAN_TX_END_ADDR(chan));
+	dbg->tx_ctrl = readl(ioaddr + DMA_CHAN_TX_CONTROL(chan));
+	dbg->quantum_weight = readl(ioaddr + MTL_TXQX_WEIGHT_BASE_ADDR(chan));
+	dbg->ets_ctrl = readl(ioaddr + MTL_ETSX_CTRL_BASE_ADDR(chan));
+
+	/* TX process state (TS): DEBUG_STATUS_0 holds ch0-2 (TS0 at [15:12],
+	 * one byte per channel), DEBUG_STATUS_1 holds ch3-6 (TS3 at [7:4]).
+	 */
+	if (chan < 3) {
+		reg = readl(ioaddr + DMA_DEBUG_STATUS_0);
+		dbg->tx_state = (reg >> (12 + 8 * chan)) &
+				DMA_DEBUG_STATUS_TS_MASK;
+	} else {
+		reg = readl(ioaddr + DMA_DEBUG_STATUS_1);
+		dbg->tx_state = (reg >> (4 + 8 * (chan - 3))) &
+				DMA_DEBUG_STATUS_TS_MASK;
+	}
+
+	return 0;
+}
+
 void dwmac4_dma_start_tx(void __iomem *ioaddr, u32 chan)
 {
 	u32 value = readl(ioaddr + DMA_CHAN_TX_CONTROL(chan));
